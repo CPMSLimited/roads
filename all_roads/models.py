@@ -13,6 +13,12 @@ class Route(models.Model):
 
     def __str__(self):
         return self.route
+    
+class State(models.Model):
+    state = models.CharField(max_length=32, unique=True)
+
+    def __str__(self):
+        return self.state
 
 class Address(models.Model):
     id = models.AutoField(primary_key=True)
@@ -30,6 +36,10 @@ class Segment(models.Model):
     name = models.CharField(max_length=64, blank=True)
     state = models.CharField(max_length=30, blank=True)
     code = models.CharField(max_length=10, unique=True)
+    start_lat = models.DecimalField(max_digits=32, decimal_places=16, default=0.00)
+    start_lon = models.DecimalField(max_digits=32, decimal_places=16, default=0.00)
+    end_lat = models.DecimalField(max_digits=32, decimal_places=16, default=0.00)
+    end_lon = models.DecimalField(max_digits=32, decimal_places=16, default=0.00)
     # start_point = models.ForeignKey(Address, related_name='start_point', on_delete=models.PROTECT, default=1) # id 1330 is No address
     # end_point = models.ForeignKey(Address, related_name='end_point', on_delete=models.PROTECT, default=1)
     map = models.ImageField(upload_to='images', blank=True)
