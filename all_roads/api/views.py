@@ -1,61 +1,88 @@
-# views.py
 import requests
 from django.conf import settings
 from django.http import JsonResponse
-from all_roads.models import Segment
+from all_roads.models import Segment, Address
 from decouple import config
+
+
+SPEED_COLOR_CODES = [
+    (1, '666699'),   # No response / very slow
+    (40, 'FF0000'),  # Werser
+    (50, 'FF5050'),  # Bad
+    (60, 'FF9966'),  # Poor
+    (70, 'FFFFCC'),  # Manage
+    (80, '00CC00'),  # Ok
+    (90, '339933'),  # Good
+    (float('inf'), '006600'),  # Better
+]
+
+def get_status_color(speed):
+    for threshold, color in SPEED_COLOR_CODES:
+        if speed < threshold:
+            return color
+    return '666699'
+
+def get_or_create_address(address_str, lat, lng):
+    return Address.objects.get_or_create(
+        address=address_str,
+        defaults={'lat': lat, 'lng': lng}
+    )[0]
 
 def update_segment_distances(request):
     api_key = config('GOOGLE_ROUTES_API_KEY')
-
     segments = Segment.objects.all()
-    updated = 0
-    failed = 0
+
+    updated, failed = 0, 0
 
     for segment in segments:
-        origin = f"{segment.start_lat},{segment.start_lon}"
-        destination = f"{segment.end_lat},{segment.end_lon}"
-
-        url = (
-            "https://maps.googleapis.com/maps/api/distancematrix/json"
-            f"?origins={origin}&destinations={destination}"
-            f"&mode=driving&units=metric&key={api_key}"
-        )
-
         try:
-            response = requests.get(url)
+            origin = f"{segment.start_lat},{segment.start_lon}"
+            destination = f"{segment.end_lat},{segment.end_lon}"
+
+            url = (
+                "https://maps.googleapis.com/maps/api/distancematrix/json"
+                f"?origins={origin}&destinations={destination}"
+                f"&mode=driving&units=metric&key={api_key}"
+            )
+
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
             data = response.json()
 
-            if data['status'] == 'OK':
-                element = data['rows'][0]['elements'][0]
+            if data['status'] != 'OK':
+                raise ValueError(f"Bad API status: {data['status']}")
 
-                if element['status'] == 'OK':
-                    distance_meters = element['distance']['value']
-                    duration_seconds = element['duration']['value']
+            element = data['rows'][0]['elements'][0]
+            if element['status'] != 'OK':
+                raise ValueError(f"Element status not OK: {element['status']}")
 
-                    segment.distance = round(distance_meters / 1000, 2)  # in km
-                    segment.travel_time = duration_seconds  # in seconds
+            # Extract values
+            distance_km = round(element['distance']['value'] / 1000, 2)
+            duration_sec = element['duration']['value']
+            speed = (distance_km / (duration_sec / 3600)) if duration_sec > 0 else 0.0
 
-                    # Avoid division by zero
-                    if duration_seconds > 0:
-                        hours = duration_seconds / 3600
-                        speed = distance_meters / 1000 / hours
-                        segment.avg_speed = round(speed, 1)
-                    else:
-                        segment.avg_speed = 0.0
+            # Update Segment
+            segment.distance = distance_km
+            segment.travel_time = duration_sec
+            segment.avg_speed = round(speed, 1)
+            segment.status = get_status_color(speed)
+            segment.error_processing = False
 
-                    segment.save()
-                    updated += 1
-                else:
-                    failed += 1
-                    print(f"Element error: {element['status']} for segment {segment.code}")
-            else:
-                failed += 1
-                print(f"API error: {data['status']}")
+            # Update Address references
+            origin_address_str = data['origin_addresses'][0]
+            destination_address_str = data['destination_addresses'][0]
 
-        except Exception as e:
+            segment.start_point = get_or_create_address(origin_address_str, segment.start_lat, segment.start_lon)
+            segment.end_point = get_or_create_address(destination_address_str, segment.end_lat, segment.end_lon)
+
+            segment.save()
+            updated += 1
+
+        except (requests.RequestException, KeyError, IndexError, ValueError) as e:
+            segment.error_processing = True
+            segment.save(update_fields=['error_processing'])
             failed += 1
-            print(f"Error processing segment {segment.code}: {e}")
+            print(f"[ERROR] Segment {segment.code}: {e}")
 
     return JsonResponse({
         'updated': updated,
