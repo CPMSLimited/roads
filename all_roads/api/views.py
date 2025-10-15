@@ -1,8 +1,10 @@
 import requests
-from django.conf import settings
 from django.http import JsonResponse
-from all_roads.models import Segment, Address
+from all_roads.models import Segment, Address, Route, Road
+from .serializers import SegmentSerializer
 from decouple import config
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
 
 
 SPEED_COLOR_CODES = [
@@ -89,3 +91,11 @@ def update_segment_distances(request):
         'failed': failed,
         'total': segments.count()
     })
+
+@api_view(['GET'])
+def all_segments_view(request):
+    segments = Segment.objects.all()
+    serializer = SegmentSerializer(segments, many=True)
+    return Response(serializer.data)
+    
+# ['Lagos','Bayelsa','Akwa ibom','Imo','Abia','Cross River','Anambra','Imo','Ebonyi','Cross River','Osun','Ekiti','Ondo','Nasarawa','Kwara','Niger','Kebbi','Ogun','Anambra','Rivers','Imo','Taraba','Kaduna','Borno','Kogi','Jigawa','Bauchi','Kano','Sokoto','Zamfara','Katsina','Benue','Delta','Edo','Imo','Oyo','Plateau','Gombe','Adamawa','Yobe']

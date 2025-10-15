@@ -30,12 +30,19 @@ INSTALLED_APPS = [
     'rest_framework',
 ]
 
+
+# CORS_ALLOW_CREDENTIALS = True
+# CORS_ORIGIN_WHITELIST = [
+#     'http://127.0.0.1:8080',
+# ]
+
 CORS_ALLOW_ALL_ORIGINS: True
 CORS_ALLOWED_ORIGINS = [
     'http://127.0.0.1:8080',
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
