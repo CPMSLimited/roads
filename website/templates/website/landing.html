@@ -1,0 +1,10 @@
+{% extends "website/base.html" %}
+{% block content %}
+<section class="landing">
+    <h1>Welcome to FERMA</h1>
+    <div class="buttons">
+        <a href="{% url 'road_analysis' %}" class="btn">Road Analysis</a>
+        <a href="{% url 'uploads' %}" class="btn">Uploads</a>
+    </div>
+</section>
+{% endblock %}

@@ -8,4 +8,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
 
     path("", include("all_roads.api.urls")),
+    path("website", include("website.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
