@@ -1,0 +1,159 @@
+{# templates/website/road_analysis.html #}
+{% extends "website/base.html" %}
+
+{% block content %}
+<section class="page road-analysis">
+
+  <div class="top">
+    <!-- Left: filters -->
+    <div class="controls">
+      <form id="filtersForm" method="get" class="filters">
+        <!-- Show all resets everything -->
+        <a href="{% url 'road_analysis' %}?show=all" class="btn">Show all</a>
+
+        <label for="route_select">Select route</label>
+        <select id="route_select" name="route">
+          <option value="">-- All routes --</option>
+          {% for r in routes %}
+            <option value="{{ r.route }}" {% if r.route == selected_route %}selected{% endif %}>
+              {{ r.route }}
+            </option>
+          {% endfor %}
+        </select>
+
+        <label for="state_select">Select state</label>
+        <select id="state_select" name="state">
+          <option value="">-- All states --</option>
+          {% for s in states %}
+            <option value="{{ s }}" {% if s == selected_state %}selected{% endif %}>
+              {{ s }}
+            </option>
+          {% endfor %}
+        </select>
+
+        {# Apply button removed (instant filtering) #}
+      </form>
+    </div>
+
+    <!-- Right: metrics -->
+    <div class="metrics">
+      <div class="metric"><div class="label">Total length (km)</div><div class="value">{{ total_length|default:"0.00" }}</div></div>
+      <div class="metric"><div class="label">Number of segments</div><div class="value">{{ total_segments|default:"0" }}</div></div>
+      <div class="metric"><div class="label">Good</div><div class="value">{{ counts.good|default:"0" }}</div></div>
+      <div class="metric"><div class="label">Tolerable</div><div class="value">{{ counts.tolerable|default:"0" }}</div></div>
+      <div class="metric"><div class="label">Intolerable</div><div class="value">{{ counts.intolerable|default:"0" }}</div></div>
+      <div class="metric"><div class="label">Failed</div><div class="value">{{ counts.failed|default:"0" }}</div></div>
+    </div>
+  </div>
+
+  <!-- Bottom: table -->
+  <div class="bottom">
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>SN</th>
+            <th>Route</th>
+            <th>Code</th>
+            <th>Name</th>
+            <th>State</th>
+            <th>Start name</th>
+            <th>Northings</th>
+            <th>Eastings</th>
+            <th>End name</th>
+            <th>Northings 2</th>
+            <th>Eastings 2</th>
+            <th>Distance</th>
+            <th>Travel time</th>
+            <th>Average speed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for seg in segments %}
+          <tr>
+            <td>{{ sn_start|add:forloop.counter }}</td>
+            <td>{{ seg.route.route }}</td>
+            <td>{{ seg.code }}</td>
+            <td>{{ seg.name }}</td>
+            <td>{{ seg.state }}</td>
+            <td>{{ seg.start_point.name }}</td>
+            <td>{{ seg.start_lat }}</td>
+            <td>{{ seg.start_lon }}</td>
+            <td>{{ seg.end_point.name }}</td>
+            <td>{{ seg.end_lat }}</td>
+            <td>{{ seg.end_lon }}</td>
+            <td>{{ seg.distance }}</td>
+            <td>{{ seg.travel_time }}</td>
+            <td style="background-color:#{{ seg.status }}; text-align:center; color:white;">
+              {{ seg.avg_speed }}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="14" style="text-align:center;">No segments found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <nav class="pagination" aria-label="Pagination">
+      {% if page_obj.has_previous %}
+        <a class="page-link" href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page=1">First</a>
+        <a class="page-link" href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
+      {% else %}
+        <span class="page-link disabled">First</span>
+        <span class="page-link disabled">Previous</span>
+      {% endif %}
+
+      <span class="current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+      {% if page_obj.has_next %}
+        <a class="page-link" href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+        <a class="page-link" href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.paginator.num_pages }}">Last</a>
+      {% else %}
+        <span class="page-link disabled">Next</span>
+        <span class="page-link disabled">Last</span>
+      {% endif %}
+    </nav>
+    {% endif %}
+  </div>
+
+</section>
+
+<script>
+  (function() {
+    const form = document.getElementById('filtersForm');
+    const routeSel = document.getElementById('route_select');
+    const stateSel = document.getElementById('state_select');
+
+    function applySingleFilter(changed) {
+      if (changed === routeSel) {
+        // If route chosen, clear & disable state
+        if (routeSel.value) {
+          stateSel.value = "";
+          stateSel.disabled = true;
+        } else {
+          stateSel.disabled = false;
+        }
+      } else if (changed === stateSel) {
+        // If state chosen, clear & disable route
+        if (stateSel.value) {
+          routeSel.value = "";
+          routeSel.disabled = true;
+        } else {
+          routeSel.disabled = false;
+        }
+      }
+      form.submit(); // instant filtering
+    }
+
+    // Initial disable on page load (reflect current selection)
+    if (routeSel.value) stateSel.disabled = true;
+    if (stateSel.value) routeSel.disabled = true;
+
+    routeSel.addEventListener('change', function() { applySingleFilter(routeSel); });
+    stateSel.addEventListener('change', function() { applySingleFilter(stateSel); });
+  })();
+</script>
+{% endblock %}

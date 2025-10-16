@@ -7,6 +7,6 @@ from all_roads import views
 urlpatterns = [
     path('admin/', admin.site.urls),
 
-    path("", include("all_roads.api.urls")),
-    path("website", include("website.urls")),
+    path("", include("website.urls")),
+    path("api/", include("all_roads.api.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

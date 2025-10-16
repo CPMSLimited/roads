@@ -13,7 +13,7 @@ SECRET_KEY = config('SECRET_KEY')
 
 DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '165.232.36.205',]
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '165.232.36.205', 'https://www.cpmsferma.com', 'https://cpmsferma.com']
 
 
 # Application definition
