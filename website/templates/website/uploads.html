@@ -5,22 +5,36 @@
 
   <form method="post" enctype="multipart/form-data" class="upload-form">
     {% csrf_token %}
+    {{ form.non_field_errors }}
 
     <div class="field">
-      <label for="segment_file">Attach file</label>
-      <input
-        type="file"
-        id="segment_file"
-        name="segment_file"
-        aria-label="Attach a segments file"
-        required
-        />
-      <!-- If you want to constrain types later, add: accept=".csv,.xlsx,.json" -->
+      {{ form.segment_file.label_tag }} {{ form.segment_file }}
+      <small>Accepted: .csv, .xlsx, .xls</small>
+    </div>
+
+    <div class="field">
+      <label>
+        {{ form.auto_index }} Auto-calculate index per route (if blank)
+      </label>
     </div>
 
     <button type="submit" class="btn primary">Upload new segments</button>
   </form>
 
-  <p class="hint">One file at a time. We’ll define what happens on submit later.</p>
+  {% if result %}
+    <div class="result">
+      <p>Created: {{ result.created }} | Updated: {{ result.updated }} | Skipped: {{ result.skipped }} | Errors: {{ result.errors|length }}</p>
+      {% if result.errors %}
+      <details>
+        <summary>View errors</summary>
+        <ul>
+          {% for e in result.errors %}
+            <li>{{ e }}</li>
+          {% endfor %}
+        </ul>
+      </details>
+      {% endif %}
+    </div>
+  {% endif %}
 </section>
 {% endblock %}
