@@ -5,6 +5,7 @@ from .serializers import SegmentSerializer
 from decouple import config
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+import time
 
 
 SPEED_COLOR_CODES = [
@@ -37,6 +38,7 @@ def update_segment_distances(request):
     updated, failed = 0, 0
 
     for segment in segments:
+        time.sleep(1.0)
         try:
             origin = f"{segment.start_lat},{segment.start_lon}"
             destination = f"{segment.end_lat},{segment.end_lon}"
