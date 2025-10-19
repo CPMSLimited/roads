@@ -13,7 +13,7 @@ SECRET_KEY = config('SECRET_KEY')
 
 DEBUG = config('DEBUG')
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '165.232.36.205', 'cpmsferma.com']
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '165.232.36.205', 'cpmsferma.com', 'www.cpmsferma.com']
 
 
 # Application definition
@@ -41,6 +41,12 @@ CORS_ALLOW_ALL_ORIGINS: True
 CORS_ALLOWED_ORIGINS = [
     'http://127.0.0.1:8080',
 ]
+
+CSRF_TRUSTED_ORIGINS = ["https://your.domain", "https://www.your.domain"]
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
+
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
