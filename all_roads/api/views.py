@@ -9,6 +9,7 @@ import time
 from celery.result import AsyncResult
 from all_roads.tasks import refresh_segments_task
 from all_roads.utils import get_status_color
+from django.views.decorators.csrf import ensure_csrf_cookie
 
 def get_or_create_address(address_str, lat, lng):
     return Address.objects.get_or_create(
@@ -39,6 +40,7 @@ def task_status(request, task_id: str):
         payload["error"] = str(res.result)
     return Response(payload)
 
+@ensure_csrf_cookie
 def update_segment_distances(request):
     api_key = config('GOOGLE_ROUTES_API_KEY')
     segments = Segment.objects.all()
