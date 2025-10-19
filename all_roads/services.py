@@ -3,7 +3,7 @@ from decimal import Decimal
 import requests
 from decouple import config
 from all_roads.models import Segment, Address
-from .views import get_status_color  # reuse your existing helper
+from all_roads.utils import get_status_color
 
 def get_or_create_address(address_str, lat, lng):
     return Address.objects.get_or_create(

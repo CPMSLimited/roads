@@ -9,24 +9,6 @@ import time
 from celery.result import AsyncResult
 from all_roads.tasks import refresh_segments_task
 
-
-SPEED_COLOR_CODES = [
-    (1, '666699'),   # No response / very slow
-    (40, 'FF0000'),  # Werser
-    (50, 'FF5050'),  # Bad
-    (60, 'FF9966'),  # Poor
-    (70, 'FFFFCC'),  # Manage
-    (80, '00CC00'),  # Ok
-    (90, '339933'),  # Good
-    (float('inf'), '006600'),  # Better
-]
-
-def get_status_color(speed):
-    for threshold, color in SPEED_COLOR_CODES:
-        if speed < threshold:
-            return color
-    return '666699'
-
 def get_or_create_address(address_str, lat, lng):
     return Address.objects.get_or_create(
         address=address_str,
