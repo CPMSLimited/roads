@@ -2,13 +2,6 @@ from pathlib import Path
 import os
 from decouple import config
 
-
-# Allow any comma-separated variation temporarily (safety net)
-from django.utils.regex_helper import _lazy_re_compile
-import re
-
-USE_X_FORWARDED_HOST = True
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -21,12 +14,11 @@ SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG')
 
 ALLOWED_HOSTS = [
-  "*"
-    # "cpmsferma.com",
-    # "www.cpmsferma.com",
-    # "165.232.36.205",
-    # "localhost",
-    # "127.0.0.1",
+    "cpmsferma.com",
+    "www.cpmsferma.com",
+    "165.232.36.205",
+    "localhost",
+    "127.0.0.1",
 ]
 
 # Application definition
