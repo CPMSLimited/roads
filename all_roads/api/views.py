@@ -46,7 +46,7 @@ def task_status(request, task_id: str):
     return Response(payload)
 
 @api_view(["POST"])
-@permission_classes([IsAdminUser])  # tighten as you like
+@permission_classes([AllowAny])  # tighten as you like
 def queue_refresh(request):
     """
     Body (JSON): { "codes": ["F100LAS1", "F102RIV2", ...] } (optional)
