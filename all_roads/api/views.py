@@ -8,6 +8,7 @@ from rest_framework.response import Response
 import time
 from celery.result import AsyncResult
 from all_roads.tasks import refresh_segments_task
+from all_roads.utils import get_status_color
 
 def get_or_create_address(address_str, lat, lng):
     return Address.objects.get_or_create(
