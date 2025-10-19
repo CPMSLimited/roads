@@ -6,6 +6,8 @@ from decouple import config
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 import time
+from celery.result import AsyncResult
+from all_roads.tasks import refresh_segments_task
 
 
 SPEED_COLOR_CODES = [
@@ -30,6 +32,29 @@ def get_or_create_address(address_str, lat, lng):
         address=address_str,
         defaults={'lat': lat, 'lng': lng}
     )[0]
+
+@api_view(["POST"])
+def queue_update_segments(request):
+    """
+    Body (JSON): { "codes": ["F100LAS1", "F102RIV2", ...] }  (optional)
+    Returns: { "task_id": "..." }
+    """
+    codes = request.data.get("codes")
+    async_result = refresh_segments_task.delay(codes)
+    return Response({"task_id": async_result.id})
+
+@api_view(["GET"])
+def task_status(request, task_id: str):
+    """
+    Returns Celery task status, and result if finished.
+    """
+    res = AsyncResult(task_id)
+    payload = {"task_id": task_id, "state": res.state}
+    if res.successful():
+        payload["result"] = res.result
+    elif res.failed():
+        payload["error"] = str(res.result)
+    return Response(payload)
 
 def update_segment_distances(request):
     api_key = config('GOOGLE_ROUTES_API_KEY')

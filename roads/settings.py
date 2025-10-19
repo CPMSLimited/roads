@@ -146,3 +146,13 @@ MEDIA_URL = 'media/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# --- Celery / Redis ---
+CELERY_BROKER_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+CELERY_RESULT_BACKEND = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+
+# Optional niceties
+CELERY_TASK_ALWAYS_EAGER = False  # make True only for local debugging
+CELERY_TASK_TIME_LIMIT = 60 * 5   # hard limit per task (seconds)
+CELERY_TASK_SOFT_TIME_LIMIT = 60 * 4
+CELERY_WORKER_CONCURRENCY = int(os.getenv("CELERY_WORKER_CONCURRENCY", "2"))
+CELERY_TASK_DEFAULT_QUEUE = "default"
