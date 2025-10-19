@@ -1,15 +1,20 @@
-import requests
+import requests, time
 from django.http import JsonResponse
-from all_roads.models import Segment, Address, Route, Road
-from .serializers import SegmentSerializer
+from django.views.decorators.csrf import ensure_csrf_cookie
+from django.conf import settings
+
 from decouple import config
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-import time
 from celery.result import AsyncResult
+
+from all_roads.models import Segment, Address, Route, Road
 from all_roads.tasks import refresh_segments_task
 from all_roads.utils import get_status_color
-from django.views.decorators.csrf import ensure_csrf_cookie
+from .serializers import SegmentSerializer
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
+from rest_framework.permissions import AllowAny
+from rest_framework import status
 
 def get_or_create_address(address_str, lat, lng):
     return Address.objects.get_or_create(
@@ -40,7 +45,33 @@ def task_status(request, task_id: str):
         payload["error"] = str(res.result)
     return Response(payload)
 
-@ensure_csrf_cookie
+@api_view(["POST"])
+@permission_classes([IsAdminUser])  # tighten as you like
+def queue_refresh(request):
+    """
+    Body (JSON): { "codes": ["F100LAS1", "F102RIV2", ...] } (optional)
+    Returns:     { "task_id": "..." }
+    """
+    codes = request.data.get("codes", None)
+
+    # Validate if provided
+    if codes is not None:
+        if not isinstance(codes, list) or not all(isinstance(c, str) for c in codes):
+            return Response(
+                {"detail": "codes must be a list of strings"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    # Enqueue
+    async_result = refresh_segments_task.apply_async(kwargs={"codes": codes})
+    return Response({"task_id": async_result.id}, status=status.HTTP_200_OK)
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def task_status(request, task_id):
+    r = AsyncResult(task_id)
+    return Response({"id": task_id, "state": r.state, "result": r.result if r.successful() else None})
+
 def update_segment_distances(request):
     api_key = config('GOOGLE_ROUTES_API_KEY')
     segments = Segment.objects.all()
