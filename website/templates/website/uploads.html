@@ -36,5 +36,11 @@
       {% endif %}
     </div>
   {% endif %}
+  <h1>Run updates</h1>
+  <form method="post" action="/api/update-segments/queue/">
+    {% csrf_token %}
+    <button type="submit">Run updates</button>
+  </form>
+
 </section>
 {% endblock %}
