@@ -37,7 +37,7 @@
     </div>
   {% endif %}
   <h1>Run updates</h1>
-  <form method="post" action="{% url 'queue_update_segments' %}">
+  <form method="post" action="{% url 'queue_refresh' %}">
     {% csrf_token %}
     <button type="submit">Run updates</button>
   </form>
