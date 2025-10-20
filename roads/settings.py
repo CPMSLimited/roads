@@ -134,9 +134,12 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+STATIC_ROOT = BASE_DIR / "staticfiles"  # where collectstatic dumps files
+STATICFILES_DIRS = [BASE_DIR / "static"]  # where your app/site assets live (optional)
+
 # This is where uploaded files are saved:
-MEDIA_ROOT = os.path.join(BASE_DIR, 'roads/media')
-STATIC_ROOT = os.path.join(BASE_DIR, 'static/')
+# MEDIA_ROOT = os.path.join(BASE_DIR, 'roads/media')
+# STATIC_ROOT = os.path.join(BASE_DIR, 'static/')
 
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
