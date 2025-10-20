@@ -63,7 +63,10 @@ def queue_refresh(request):
             )
 
     # Enqueue
-    async_result = refresh_segments_task.apply_async(kwargs={"codes": codes})
+    async_result = refresh_segments_task.delay(codes=codes)
+    # or: refresh_segments_task.apply_async(kwargs={"codes": codes})
+    
+    # async_result = refresh_segments_task.apply_async(kwargs={"codes": codes})
     return Response({"task_id": async_result.id}, status=status.HTTP_200_OK)
 
 @api_view(["GET"])
