@@ -69,12 +69,6 @@ def queue_refresh(request):
     # async_result = refresh_segments_task.apply_async(kwargs={"codes": codes})
     return Response({"task_id": async_result.id}, status=status.HTTP_200_OK)
 
-@api_view(["GET"])
-@permission_classes([AllowAny])
-def task_status(request, task_id):
-    r = AsyncResult(task_id)
-    return Response({"id": task_id, "state": r.state, "result": r.result if r.successful() else None})
-
 def update_segment_distances(request):
     api_key = config('GOOGLE_ROUTES_API_KEY')
     segments = Segment.objects.all()

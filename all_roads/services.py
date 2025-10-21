@@ -11,6 +11,12 @@ def get_or_create_address(address_str, lat, lng):
         defaults={"lat": lat, "lng": lng}
     )[0]
 
+def refresh_segments(codes=None, sleep_between=0.0):
+    qs = Segment.objects.all()
+    if codes:
+        qs = qs.filter(code__in=codes)
+    return refresh_segments_from_google(qs, sleep_between=sleep_between)
+
 def refresh_segments_from_google(queryset, sleep_between=0.0):
     """
     Core updater: iterates queryset of Segment, calls Google Distance Matrix,
@@ -65,3 +71,4 @@ def refresh_segments_from_google(queryset, sleep_between=0.0):
             failed += 1
 
     return {"updated": updated, "failed": failed, "total": queryset.count()}
+

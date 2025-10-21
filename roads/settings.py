@@ -41,14 +41,23 @@ CSRF_TRUSTED_ORIGINS = [
     "https://www.cpmsferma.com",
 ]
 
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
     'http://127.0.0.1:8080',
+    "https://cpmsferma.com",
+    "https://www.cpmsferma.com",
 ]
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = True
 
+SECURE_SSL_REDIRECT = True
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+SECURE_HSTS_SECONDS = 31536000  # 1 year
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
+X_FRAME_OPTIONS = "DENY"
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
@@ -145,6 +154,7 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # This is where uploaded files are served from:
 MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / "media"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.0/ref/settings/#default-auto-field
@@ -161,3 +171,6 @@ CELERY_TASK_TIME_LIMIT = 60 * 5   # hard limit per task (seconds)
 CELERY_TASK_SOFT_TIME_LIMIT = 60 * 4
 CELERY_WORKER_CONCURRENCY = int(os.getenv("CELERY_WORKER_CONCURRENCY", "2"))
 CELERY_TASK_DEFAULT_QUEUE = "default"
+
+CELERY_TASK_TRACK_STARTED = True
+CELERY_RESULT_EXPIRES = 60 * 60 * 6       # 6 hours

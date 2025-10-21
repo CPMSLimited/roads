@@ -17,16 +17,14 @@ from .services import refresh_segments_from_google
 #     # Optional: throttle a bit to be gentle on the API (set to 0.2 → ~5 req/s)
 #     return refresh_segments_from_google(qs, sleep_between=0.0)
 
-
 @shared_task(name="all_roads.tasks.refresh_segments_task")
 def refresh_segments_task(codes=None):
-    """
-    Optionally restrict the refresh to a list of segment codes.
-    Pass None/[] to refresh all.
-    """
-    if not codes:
-        codes = None
-    # whatever your service layer is:
-    # e.g. return refresh_segments(codes=codes)
     from .services import refresh_segments
     return refresh_segments(codes=codes)
+
+"""
+curl -X POST https://cpmsferma.com/api/update-segments/queue/ \
+  -H 'Content-Type: application/json' \
+  -d '{"codes":["F100LAS1","F102RIV2"]}'
+
+"""
