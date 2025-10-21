@@ -1,4 +1,4 @@
-import requests, time
+import requests, time, uuid
 from django.http import JsonResponse
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.conf import settings
@@ -14,7 +14,8 @@ from .serializers import SegmentSerializer
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
-from rest_framework import status
+from rest_framework import status, drf_status
+
 
 def get_or_create_address(address_str, lat, lng):
     return Address.objects.get_or_create(
@@ -32,18 +33,28 @@ def queue_update_segments(request):
     async_result = refresh_segments_task.delay(codes)
     return Response({"task_id": async_result.id})
 
+
 @api_view(["GET"])
-def task_status(request, task_id: str):
+@permission_classes([AllowAny])  # tighten later
+def task_status(request, task_id: uuid.UUID):
     """
-    Returns Celery task status, and result if finished.
+    Returns Celery task status (and result/error if available).
+    Handles UUID vs str issues and avoids 500 HTML pages.
     """
-    res = AsyncResult(task_id)
-    payload = {"task_id": task_id, "state": res.state}
-    if res.successful():
-        payload["result"] = res.result
-    elif res.failed():
-        payload["error"] = str(res.result)
-    return Response(payload)
+    try:
+        tid = str(task_id)  # ensure string for Celery
+        res = AsyncResult(tid)
+        payload = {"task_id": tid, "state": res.state}
+        if res.successful():
+            payload["result"] = res.result
+        elif res.failed():
+            payload["error"] = str(res.result)
+        return Response(payload)
+    except Exception as e:
+        return Response(
+            {"task_id": str(task_id), "state": "UNKNOWN", "error": str(e)},
+            status=drf_status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 @api_view(["POST"])
 @permission_classes([AllowAny])  # tighten as you like
