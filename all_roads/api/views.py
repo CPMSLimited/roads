@@ -14,7 +14,7 @@ from .serializers import SegmentSerializer
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
-from rest_framework import status, drf_status
+from rest_framework import status
 
 
 def get_or_create_address(address_str, lat, lng):
@@ -53,7 +53,7 @@ def task_status(request, task_id: uuid.UUID):
     except Exception as e:
         return Response(
             {"task_id": str(task_id), "state": "UNKNOWN", "error": str(e)},
-            status=drf_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
 @api_view(["POST"])
