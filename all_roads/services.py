@@ -12,6 +12,10 @@ def get_or_create_address(address_str, lat, lng):
     )[0]
 
 def refresh_segments(codes=None, sleep_between=0.0):
+    """
+    Wrapper used by Celery: optionally restrict to a list of codes,
+    then call the core updater.
+    """
     qs = Segment.objects.all()
     if codes:
         qs = qs.filter(code__in=codes)
