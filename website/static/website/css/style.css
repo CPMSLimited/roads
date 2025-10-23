@@ -55,9 +55,6 @@ body {
 
 .controls .filters { display: grid; gap: 12px; }
 .controls select, .controls button { padding: 10px; }
-.btn { padding: 10px 14px; border: 1px solid #ccc; background: #f7f7f7; cursor: pointer; border-radius: 4px; }
-.btn.primary { background: #004d99; color: #fff; border: 0; }
-.btn.primary:hover { background: #0073e6; }
 
 .metrics {
   display: grid;
