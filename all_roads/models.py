@@ -24,8 +24,8 @@ class Address(models.Model):
     id = models.AutoField(primary_key=True)
     address = models.CharField(max_length=256, unique=True)
     name = models.CharField(max_length=30, blank=True)
-    lat = models.DecimalField(max_digits=30, decimal_places=15, default=0.0)
-    lng = models.DecimalField(max_digits=30, decimal_places=15, default=0.0)
+    lat = models.DecimalField(max_digits=9, decimal_places=5, default=0.0)
+    lng = models.DecimalField(max_digits=9, decimal_places=5, default=0.0)
 
     def __str__(self):
         return self.name
