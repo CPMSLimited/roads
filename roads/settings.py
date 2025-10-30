@@ -145,7 +145,7 @@ STATICFILES_FINDERS = [
     'django.contrib.staticfiles.finders.AppDirectoriesFinder',
 ]
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 
 STATIC_ROOT = BASE_DIR / "staticfiles"  # where collectstatic dumps files
 STATICFILES_DIRS = [BASE_DIR / "static"]  # where your app/site assets live (optional)
