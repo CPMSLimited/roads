@@ -62,7 +62,7 @@ X_FRAME_OPTIONS = "DENY"
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
+    # 'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -154,7 +154,7 @@ STATICFILES_DIRS = [BASE_DIR / "static"]  # where your app/site assets live (opt
 # MEDIA_ROOT = os.path.join(BASE_DIR, 'roads/media')
 # STATIC_ROOT = os.path.join(BASE_DIR, 'static/')
 
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+# STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # This is where uploaded files are served from:
 MEDIA_URL = 'media/'
