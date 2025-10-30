@@ -52,7 +52,6 @@
       <table class="table">
         <thead>
           <tr>
-            <th>SN</th>
             <th>Route</th>
             <th>Code</th>
             <th>Name</th>
@@ -71,7 +70,6 @@
         <tbody>
           {% for seg in segments %}
           <tr>
-            <td>{{ sn_start|add:forloop.counter }}</td>
             <td>{{ seg.route.route }}</td>
             <td>{{ seg.code }}</td>
             <td>{{ seg.name }}</td>
