@@ -66,6 +66,6 @@ body {
 .metric .value { font-size: 1.4rem; font-weight: 600; margin-top: 6px; }
 
 .table-wrap { overflow-x: auto; }
-.table { width: 100%; border-collapse: collapse; }
-.table th, .table td { border: 1px solid #e5e7eb; padding: 8px 10px; white-space: nowrap; }
+.table { width: 100%; border-collapse: collapse; font-size: 14px }
+.table th, .table td { border: 1px solid #e5e7eb; padding: 8px 0px; white-space: nowrap; }
 .table thead th { background: #f0f2f5; text-align: left; }
