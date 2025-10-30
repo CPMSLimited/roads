@@ -175,3 +175,25 @@ CELERY_TASK_DEFAULT_QUEUE = "default"
 
 CELERY_TASK_TRACK_STARTED = True
 CELERY_RESULT_EXPIRES = 60 * 60 * 6       # 6 hours
+
+
+import logging
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'file': {
+            'level': 'ERROR',
+            'class': 'logging.FileHandler',
+            'filename': BASE_DIR / 'django-error.log',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['file'],
+            'level': 'ERROR',
+            'propagate': True,
+        },
+    },
+}
