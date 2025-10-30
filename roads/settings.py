@@ -150,7 +150,8 @@ STATICFILES_DIRS = [BASE_DIR / "static"]  # where your app/site assets live (opt
 # MEDIA_ROOT = os.path.join(BASE_DIR, 'roads/media')
 # STATIC_ROOT = os.path.join(BASE_DIR, 'static/')
 
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+# STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
 
 # This is where uploaded files are served from:
 MEDIA_URL = 'media/'
