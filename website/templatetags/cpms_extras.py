@@ -3,34 +3,39 @@ from django import template
 register = template.Library()
 
 @register.filter
-def seconds_to_hhmm(value):
-    """Convert seconds -> HH:MM (e.g., 3725 -> 01:02)."""
-    try:
-        total = int(value or 0)
-        h = total // 3600
-        m = (total % 3600) // 60
-        return f"{h:02d}:{m:02d}"
-    except Exception:
-        return "00:00"
+def norm_hex(value):
+    """
+    Normalise a hex string to 'rrggbb' (no leading '#').
+    Returns '' if not usable.
+    """
+    if not value:
+        return ""
+    s = str(value).strip().lstrip("#")
+    # Accept 3-char shorthand too (e.g., '0f3' -> '00ff33')
+    if len(s) == 3 and all(c in "0123456789abcdefABCDEF" for c in s):
+        s = "".join(c*2 for c in s)
+    if len(s) == 6 and all(c in "0123456789abcdefABCDEF" for c in s):
+        return s.lower()
+    return ""
 
-# If your backend stores status as a HEX colour, map it to a label.
-# Update the hex keys below to match your get_status_color mapping.
-STATUS_MAP = {
-    "00aa00": ("Good", "badge-good"),
-    "f0c000": ("Tolerable", "badge-tolerable"),
-    "e67e22": ("Intolerable", "badge-intolerable"),
-    "d9534f": ("Failed", "badge-failed"),
-}
-# Accept 'abc123' or '#abc123'
-def _norm_hex(h):
-    if not h: return ""
-    h = str(h).lower().strip()
-    return h.lstrip("#")
-
-@register.filter
-def status_label(hex_colour):
-    return STATUS_MAP.get(_norm_hex(hex_colour), ("Unknown", "badge-unknown"))[0]
+def _yiq_contrast(hex6: str) -> str:
+    """
+    Return 'black' or 'white' for best contrast on the given background.
+    Uses YIQ formula (good heuristic for legibility).
+    """
+    r = int(hex6[0:2], 16)
+    g = int(hex6[2:4], 16)
+    b = int(hex6[4:6], 16)
+    yiq = (r*299 + g*587 + b*114) / 1000
+    return "black" if yiq >= 128 else "white"
 
 @register.filter
-def status_class(hex_colour):
-    return STATUS_MAP.get(_norm_hex(hex_colour), ("Unknown", "badge-unknown"))[1]
+def text_contrast(value):
+    """
+    Given a hex background (with or without '#'), return 'black' or 'white'
+    for readable foreground text.
+    """
+    hx = norm_hex(value)
+    if not hx:
+        return "black"  # safe default
+    return _yiq_contrast(hx)

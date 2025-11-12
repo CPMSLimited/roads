@@ -310,3 +310,8 @@ GitHub.sublime-settings
 !.vscode/launch.json 
 !.vscode/extensions.json 
 .history
+
+# Debola added
+/venv/
+/staticfiles/
+/django-error.log
