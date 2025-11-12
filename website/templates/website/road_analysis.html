@@ -50,10 +50,29 @@
     <div class="metrics">
       <div class="metric"><div class="label">Total length (km)</div><div class="value">{{ total_length|floatformat:2 }}</div></div>
       <div class="metric"><div class="label">Number of segments</div><div class="value">{{ total_segments|default:"0" }}</div></div>
-      <div class="metric"><div class="label">Good</div><div class="value">{{ counts.good|default:"0" }}</div></div>
-      <div class="metric"><div class="label">Tolerable</div><div class="value">{{ counts.tolerable|default:"0" }}</div></div>
-      <div class="metric"><div class="label">Intolerable</div><div class="value">{{ counts.intolerable|default:"0" }}</div></div>
-      <div class="metric"><div class="label">Failed</div><div class="value">{{ counts.failed|default:"0" }}</div></div>
+      <div class="metric"
+          style="background-color:#{{ 'good'|bucket_color }}; color:{{ 'good'|bucket_color|text_contrast }};">
+        <div class="label">Good</div>
+        <div class="value">{{ counts.good|default:"0" }}</div>
+      </div>
+
+      <div class="metric"
+          style="background-color:#{{ 'tolerable'|bucket_color }}; color:{{ 'tolerable'|bucket_color|text_contrast }};">
+        <div class="label">Tolerable</div>
+        <div class="value">{{ counts.tolerable|default:"0" }}</div>
+      </div>
+
+      <div class="metric"
+          style="background-color:#{{ 'intolerable'|bucket_color }}; color:{{ 'intolerable'|bucket_color|text_contrast }};">
+        <div class="label">Intolerable</div>
+        <div class="value">{{ counts.intolerable|default:"0" }}</div>
+      </div>
+
+      <div class="metric"
+          style="background-color:#{{ 'failed'|bucket_color }}; color:{{ 'failed'|bucket_color|text_contrast }};">
+        <div class="label">Failed</div>
+        <div class="value">{{ counts.failed|default:"0" }}</div>
+      </div>
     </div>
   </div>
 
@@ -79,13 +98,12 @@
             <th>Northings 2</th>
             <th>Eastings 2</th>
             <th>Distance (km)</th>
-            <th>Travel time (hh:mm)</th>
-            <th>Average speed</th>
             <th>Status</th>
           </tr>
         </thead>
         <tbody>
           {% for seg in segments %}
+          {% with bg=seg.status|norm_hex fg=seg.status|text_contrast %}
           <tr>
             <td>{{ seg.route.route }}</td>
             <td>{{ seg.code }}</td>
@@ -98,14 +116,13 @@
             <td>{{ seg.end_lat }}</td>
             <td>{{ seg.end_lon }}</td>
             <td>{{ seg.distance|floatformat:2 }}</td>
-            <td>{{ seg.travel_time|seconds_to_hhmm }}</td>
-            <td>{{ seg.avg_speed|floatformat:1 }} km/h</td>
-            <td>
-              <span class="badge {{ seg.status|status_class }}">{{ seg.status|status_label }}</span>
-            </td>
+            {% with bg=seg.status|canonical_color fg=seg.status|canonical_color|text_contrast %}
+            <td style="background-color:#{{ bg }}; color:{{ fg }}; text-align:center; font-weight:600;">{{ seg.avg_speed|floatformat:1 }} km/h</td>
+            {% endwith %}
           </tr>
+          {% endwith %}
           {% empty %}
-          <tr><td colspan="14" style="text-align:center;">No segments found.</td></tr>
+          <tr><td colspan="12" style="text-align:center;">No segments found.</td></tr>
           {% endfor %}
         </tbody>
       </table>

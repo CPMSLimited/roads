@@ -62,7 +62,7 @@ body {
   gap: 12px;
 }
 .metric { background: #f5f7fa; padding: 12px; border-radius: 6px; text-align: center; }
-.metric .label { font-size: 0.9rem; color: #555; }
+.metric .label { font-size: 0.9rem; }
 .metric .value { font-size: 1.4rem; font-weight: 600; margin-top: 6px; }
 
 .table-wrap { overflow-x: auto; }
@@ -96,7 +96,7 @@ body {
 .page.road-analysis .top { display:flex; gap:24px; align-items:flex-start; flex-wrap:wrap; }
 .page.road-analysis .controls .filters { display:flex; gap:8px 12px; align-items:center; flex-wrap:wrap; }
 .page.road-analysis .metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:8px; flex:1; }
-.metric .label{font-size:12px;color:#6b7280}
+.metric .label{font-size:12px;}
 .metric .value{font-size:18px;font-weight:600}
 
 /* Pagination + page-size select */
