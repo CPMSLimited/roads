@@ -69,3 +69,42 @@ body {
 .table { width: 100%; border-collapse: collapse; font-size: 14px }
 .table th, .table td { border: 1px solid #e5e7eb; padding: 8px 0px; white-space: nowrap; }
 .table thead th { background: #f0f2f5; text-align: left; }
+
+/* Sticky header + responsive table */
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 2;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/* Badges */
+.badge { display:inline-block; padding:2px 8px; border-radius:9999px; font-size:12px; font-weight:600; }
+.badge-good { background:#e8f5e9; color:#1b5e20; }
+.badge-tolerable { background:#fff8e1; color:#8a6d00; }
+.badge-intolerable { background:#fff3e0; color:#9a4d0f; }
+.badge-failed { background:#fdecea; color:#b71c1c; }
+.badge-unknown { background:#f4f4f5; color:#4b5563; }
+
+/* Controls row */
+.page.road-analysis .top { display:flex; gap:24px; align-items:flex-start; flex-wrap:wrap; }
+.page.road-analysis .controls .filters { display:flex; gap:8px 12px; align-items:center; flex-wrap:wrap; }
+.page.road-analysis .metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:8px; flex:1; }
+.metric .label{font-size:12px;color:#6b7280}
+.metric .value{font-size:18px;font-weight:600}
+
+/* Pagination + page-size select */
+.pagination{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
+.page-link{padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;text-decoration:none;color:#111827}
+.page-link.disabled{color:#9ca3af;border-color:#f3f4f6}
+.current{font-size:14px;color:#374151}
+
+/* Buttons */
+.btn{display:inline-block;padding:6px 12px;border:1px solid #e5e7eb;border-radius:6px;text-decoration:none}
+.btn.secondary{background:#f9fafb}
