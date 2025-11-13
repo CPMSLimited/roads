@@ -1,21 +1,17 @@
 # website/views.py
 
-from django.shortcuts import render
-from django.http import HttpResponse
-from decimal import Decimal, InvalidOperation
-from django.db.models import Sum, Count, Q
-from django.db import transaction
-from all_roads.models import Segment, Route
-from django.core.paginator import Paginator
-import csv
-import io
-from .forms import UploadSegmentsForm
 from all_roads.models import Segment, Route, Road
 from collections import defaultdict
-from django.db.models import Max
+from decimal import Decimal, InvalidOperation
+from django.core.paginator import Paginator
+from django.db import models, transaction
+from django.db.models import Sum, Count, Q, IntegerField, Max
 from django.db.models.functions import Cast
-from django.db import models  # if you ever need aggregates/casts
-from django.db.models import IntegerField
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import render
+from .forms import UploadSegmentsForm
+import csv
+import io
 
 # ---- Status buckets used for counts/mini-chart (hex codes) ----
 STATUS_BUCKETS = {
@@ -40,18 +36,21 @@ def uploads(request):
     return render(request, "website/uploads.html")
 
 # ---- Road Analysis with page-size selector + robust filter preservation (Point 5) ----
+
 def road_analysis(request):
     qs = Segment.objects.select_related("route", "start_point", "end_point").all()
 
-    # Query params (single active filter enforced)
+    # Query params (single active filter enforced for route/state)
     selected_route = request.GET.get("route") or ""
     selected_state = request.GET.get("state") or ""
+    selected_segment = request.GET.get("segment") or ""  # new, preserved but no-op (for now)
     show_all = request.GET.get("show") == "all"
 
-    # Enforce mutual exclusivity on the server (defensive)
+    # Enforce mutual exclusivity (route vs state); segment remains independent (no-op)
     if show_all:
         selected_route = ""
         selected_state = ""
+        # selected_segment kept as-is
     elif selected_route:
         selected_state = ""
         qs = qs.filter(route__route=selected_route)
@@ -76,7 +75,13 @@ def road_analysis(request):
         .distinct()
     )
 
-    # ----- Page size (Point 5) -----
+    # NEW: options for the "Select segment" dropdown (no-op for now)
+    # Using distinct codes; cap to 300 to keep the UI light. Adjust later as needed.
+    segments_for_filter = list(
+        Segment.objects.order_by("code").values_list("code", flat=True).distinct()[:300]
+    )
+
+    # ----- Page size -----
     try:
         page_size = int(request.GET.get("page_size") or PAGE_SIZE_DEFAULT)
         if page_size not in PAGE_SIZE_OPTIONS:
@@ -91,10 +96,9 @@ def road_analysis(request):
     page_obj = paginator.get_page(page_number)
     sn_start = page_obj.start_index() - 1
 
-    # ----- Preserve filters across pagination robustly (strip only 'page') -----
+    # Preserve filters across pagination robustly (strip only 'page')
     qd = request.GET.copy()
-    if "page" in qd:
-        qd.pop("page")
+    qd.pop("page", None)
     filters_qs = qd.urlencode()
 
     context = {
@@ -116,6 +120,10 @@ def road_analysis(request):
         # Page-size controls for the template
         "page_size": page_size,
         "page_size_options": PAGE_SIZE_OPTIONS,
+
+        # NEW: segment filter (populated + preserved; currently no-op)
+        "segments_for_filter": segments_for_filter,
+        "selected_segment": selected_segment,
     }
     return render(request, "website/road_analysis.html", context)
 
@@ -416,3 +424,15 @@ def uploads(request):
         form = UploadSegmentsForm()
 
     return render(request, "website/uploads.html", {"form": form, "result": result})
+
+def segment_code_search(request):
+    """
+    Return top matching segment codes for typeahead.
+    GET /segments/search/?q=AB -> { "results": ["AB01", "AB02", ...] }
+    """
+    q = (request.GET.get("q") or "").strip()
+    qs = Segment.objects.order_by("code")
+    if q:
+        qs = qs.filter(code__icontains=q)
+    codes = list(qs.values_list("code", flat=True).distinct()[:20])  # cap results
+    return JsonResponse({"results": codes})

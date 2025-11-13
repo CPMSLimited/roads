@@ -1,110 +1,215 @@
-body {
-    font-family: Arial, sans-serif;
-    text-align: center;
-    margin: 0;
-    padding: 0;
-}
-.site-header {
-    background-color: #f5f5f5;
-    padding: 10px 20px;
-    display: flex;
-    align-items: center;
-}
-.logo {
-    height: 50px;
-    cursor: pointer;
-}
-.landing {
-    margin-top: 80px;
-}
-.landing h1 {
-    font-size: 2em;
-    margin-bottom: 30px;
-}
-.buttons {
-    display: flex;
-    justify-content: center;
-    gap: 20px;
-}
-/* .btn {
-    padding: 10px 20px;
-    background-color: #004d99;
-    color: white;
-    text-decoration: none;
-    border-radius: 4px;
-}
-.btn:hover {
-    background-color: #0073e6;
-} */
-.page.uploads { max-width: 640px; margin: 60px auto; text-align: left; }
-.upload-form .field { margin-bottom: 16px; display: grid; gap: 8px; }
-.upload-form input[type="file"] { padding: 8px; }
-/* .btn.primary { padding: 10px 16px; border: 0; border-radius: 4px; color: #fff; background: #004d99; cursor: pointer; } */
-/* .btn.primary:hover { background: #0073e6; } */
-.hint { color: #666; font-size: 0.9rem; margin-top: 8px; }
-
-.page.road-analysis { max-width: 1400px; margin: 40px auto; padding: 0 16px; }
-
-.top {
-  display: grid;
-  grid-template-columns: 340px 1fr;
-  gap: 24px;
-  align-items: start;
-  margin-bottom: 24px;
+/* ----------------------------
+   Base & typography
+   ---------------------------- */
+:root{
+  --bg:#ffffff;
+  --bg-alt:#f7f8fa;
+  --border:#e5e7eb;
+  --border-dark:#d1d5db;
+  --text:#111827;
+  --text-muted:#6b7280;
+  --shadow:0 4px 14px rgba(0,0,0,.06);
+  --radius:8px;
+  --radius-sm:6px;
+  --pad-1:6px;
+  --pad-2:8px;
+  --pad-3:12px;
 }
 
-.controls .filters { display: grid; gap: 12px; }
-.controls select, .controls button { padding: 10px; }
-
-.metrics {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(120px, 1fr));
-  gap: 12px;
-}
-.metric { background: #f5f7fa; padding: 12px; border-radius: 6px; text-align: center; }
-.metric .label { font-size: 0.9rem; }
-.metric .value { font-size: 1.4rem; font-weight: 600; margin-top: 6px; }
-
-.table-wrap { overflow-x: auto; }
-.table { width: 100%; border-collapse: collapse; font-size: 14px }
-.table th, .table td { border: 1px solid #e5e7eb; padding: 8px 0px; white-space: nowrap; }
-.table thead th { background: #f0f2f5; text-align: left; }
-
-/* Sticky header + responsive table */
-.table-wrap {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+  color:var(--text);
+  background:var(--bg);
+  margin:0;
+  line-height:1.35;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
 }
 
-.table thead th {
-  position: sticky;
-  top: 0;
-  background: #fff;
-  z-index: 2;
-  border-bottom: 1px solid #e5e7eb;
+/* ----------------------------
+   Header
+   ---------------------------- */
+.site-header{
+  background:var(--bg-alt);
+  padding:10px 16px;
+  display:flex; align-items:center; gap:10px;
+  border-bottom:1px solid var(--border);
+}
+.logo{height:42px; cursor:pointer}
+
+/* ----------------------------
+   Page container
+   ---------------------------- */
+.page.road-analysis{
+  max-width:1400px;
+  margin:28px auto;
+  padding:0 14px;
 }
 
-/* Badges */
-.badge { display:inline-block; padding:2px 8px; border-radius:9999px; font-size:12px; font-weight:600; }
-.badge-good { background:#e8f5e9; color:#1b5e20; }
-.badge-tolerable { background:#fff8e1; color:#8a6d00; }
-.badge-intolerable { background:#fff3e0; color:#9a4d0f; }
-.badge-failed { background:#fdecea; color:#b71c1c; }
-.badge-unknown { background:#f4f4f5; color:#4b5563; }
+/* ----------------------------
+   Top split: left (3 rows) + right (metrics)
+   ---------------------------- */
+.top-split{
+  display:grid; gap:18px;
+  grid-template-columns:420px 1fr;
+  align-items:start; margin-bottom:18px;
+}
+.left-panel{display:grid; gap:12px}
+.panel-row{
+  background:#fff; border:1px solid var(--border);
+  border-radius:var(--radius); padding:12px;
+  box-shadow:var(--shadow);
+}
+.panel-title{margin:0 0 8px; font-size:13px; font-weight:700; color:var(--text)}
+.filters{display:flex; gap:10px 12px; align-items:center; flex-wrap:wrap}
+.filters.grid-2{
+  display:grid; gap:8px 12px; align-items:center;
+  grid-template-columns:1fr 1fr;
+}
+.field-spacer{min-height:1px}
 
-/* Controls row */
-.page.road-analysis .top { display:flex; gap:24px; align-items:flex-start; flex-wrap:wrap; }
-.page.road-analysis .controls .filters { display:flex; gap:8px 12px; align-items:center; flex-wrap:wrap; }
-.page.road-analysis .metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:8px; flex:1; }
-.metric .label{font-size:12px;}
-.metric .value{font-size:18px;font-weight:600}
-
-/* Pagination + page-size select */
-.pagination{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
-.page-link{padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;text-decoration:none;color:#111827}
-.page-link.disabled{color:#9ca3af;border-color:#f3f4f6}
-.current{font-size:14px;color:#374151}
+/* Controls */
+.controls label,
+.filters label{font-size:12px; color:var(--text-muted)}
+.controls select,
+.controls input[type="text"],
+.filters select,
+.filters input[type="text"]{
+  padding:9px 10px; border:1px solid var(--border-dark);
+  border-radius:var(--radius-sm); background:#fff; color:var(--text);
+  min-width:160px;
+}
+.controls select:focus,
+.controls input[type="text"]:focus,
+.filters select:focus,
+.filters input[type="text"]:focus{
+  outline:none; border-color:#94a3b8; box-shadow:0 0 0 2px rgba(148,163,184,.2);
+}
 
 /* Buttons */
-.btn{display:inline-block;padding:6px 12px;border:1px solid #e5e7eb;border-radius:6px;text-decoration:none}
+.btn{
+  display:inline-flex; align-items:center; gap:8px;
+  padding:8px 12px; border:1px solid var(--border-dark);
+  border-radius:var(--radius-sm); text-decoration:none; color:var(--text);
+  background:#fff; cursor:pointer; transition:background .15s,border-color .15s;
+}
+.btn:hover{background:#f9fafb; border-color:#cbd5e1}
 .btn.secondary{background:#f9fafb}
+
+/* Segment type-ahead */
+.segment-wrap{position:relative; display:inline-block}
+.suggestions{
+  position:absolute; left:0; top:calc(100% + 4px);
+  z-index:10; background:#fff; border:1px solid var(--border-dark);
+  border-radius:var(--radius); max-height:240px; overflow:auto;
+  min-width:240px; box-shadow:var(--shadow);
+}
+.suggestions[hidden]{display:none}
+.suggestions button{
+  display:block; width:100%; text-align:left; border:0;
+  background:#fff; padding:8px 10px; cursor:pointer; font-size:14px;
+}
+.suggestions button:hover{background:var(--bg-alt)}
+
+/* ----------------------------
+   Right panel metrics
+   ---------------------------- */
+.right-panel{display:flex; flex-direction:column; gap:12px}
+.metrics-row{display:grid; gap:10px}
+.metrics-top{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.metrics-status{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+
+.metric{
+  background:#fff; border:1px solid var(--border);
+  border-radius:var(--radius); padding:12px;
+  text-align:center; box-shadow:var(--shadow);
+}
+.metric .label{font-size:12px; color:var(--text-muted)}
+.metric .value{font-size:18px; font-weight:700; margin-top:4px}
+
+/* If you still keep a single .metrics block anywhere */
+.metrics{
+  display:grid; gap:10px;
+  grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+}
+
+/* ----------------------------
+   Chart area
+   ---------------------------- */
+.mt-4{margin-top:14px}
+
+/* ----------------------------
+   Table
+   ---------------------------- */
+.table-wrap{
+  margin-top:16px;
+  background:#fff; border:1px solid var(--border);
+  border-radius:var(--radius); box-shadow:var(--shadow);
+  overflow:auto; -webkit-overflow-scrolling:touch;
+}
+.table{
+  width:100%; border-collapse:separate; border-spacing:0;
+  font-size:13px;
+}
+.table thead th{
+  position:sticky; top:0;
+  background:#fff; z-index:2;
+  font-weight:700; text-align:left; color:#111827;
+  border-bottom:1px solid var(--border-dark);
+  padding:10px 10px;
+  white-space:nowrap;
+}
+.table tbody td{
+  border-top:1px solid var(--border);
+  padding:8px 10px; white-space:nowrap; vertical-align:middle;
+}
+.table tbody tr:nth-child(even){background:#fafafa}
+.table tbody tr:hover{background:#f5f7fb}
+
+/* Compact numeric cells */
+.table td:nth-last-child(2), /* Distance (km) */
+.table td:last-child{        /* Status */
+  text-align:center; font-variant-numeric:tabular-nums;
+}
+
+/* ----------------------------
+   Pagination
+   ---------------------------- */
+.pagination{
+  display:flex; gap:8px; align-items:center;
+  margin:12px 0; flex-wrap:wrap; justify-content:flex-end;
+}
+.page-link{
+  padding:6px 10px; border:1px solid var(--border-dark);
+  border-radius:var(--radius-sm); text-decoration:none; color:var(--text);
+  background:#fff;
+}
+.page-link:hover{background:#f9fafb}
+.page-link.disabled{color:#9ca3af; border-color:#eef2f7}
+.current{font-size:13px; color:#374151}
+
+/* ----------------------------
+   Uploads (unchanged but tidied)
+   ---------------------------- */
+.page.uploads{max-width:640px; margin:40px auto; text-align:left}
+.upload-form .field{margin-bottom:14px; display:grid; gap:8px}
+.upload-form input[type="file"]{padding:8px}
+.hint{color:var(--text-muted); font-size:.9rem; margin-top:6px}
+
+/* ----------------------------
+   Small screens
+   ---------------------------- */
+@media (max-width: 980px){
+  .top-split{grid-template-columns:1fr}
+  .panel-row{padding:10px}
+  .filters.grid-2{grid-template-columns:1fr}
+  .metrics-top{grid-template-columns:1fr 1fr}
+  .metrics-status{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width: 640px){
+  .metrics-top{grid-template-columns:1fr}
+  .metrics-status{grid-template-columns:1fr 1fr}
+  .page.road-analysis{padding:0 10px}
+}

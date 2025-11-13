@@ -6,72 +6,115 @@
 {% block content %}
 <section class="page road-analysis">
 
-  <div class="top">
-    <!-- Left: filters -->
-    <div class="controls">
-      <form id="filtersForm" method="get" class="filters">
-        <a href="{% url 'road_analysis' %}?show=all" class="btn">Show all</a>
+  <div class="top-split">
+    <!-- LEFT: three rows -->
+    <div class="left-panel">
+      <!-- Row 1: Show all -->
+      <div class="panel-row">
+        <form id="filtersForm" method="get" class="filters">
+          <a href="{% url 'road_analysis' %}?show=all" class="btn">Show all</a>
+          {# Hidden passthrough if present #}
+          {% if request.GET.show %}
+            <input type="hidden" name="show" value="{{ request.GET.show }}">
+          {% endif %}
+        </form>
+      </div>
 
-        <label for="route_select">Select route</label>
-        <select id="route_select" name="route">
-          <option value="">-- All routes --</option>
-          {% for r in routes %}
-            <option value="{{ r.route }}" {% if r.route == selected_route %}selected{% endif %}>
-              {{ r.route }}
-            </option>
-          {% endfor %}
-        </select>
+      <!-- Row 2: Inventory & motorability -->
+      <div class="panel-row">
+        <h3 class="panel-title">Inventory and motorability</h3>
 
-        <label for="state_select">Select state</label>
-        <select id="state_select" name="state">
-          <option value="">-- All states --</option>
-          {% for s in states %}
-            <option value="{{ s }}" {% if s == selected_state %}selected{% endif %}>
-              {{ s }}
-            </option>
-          {% endfor %}
-        </select>
+        <div class="filters grid-2">
+          <label for="route_select">Select route</label>
+          <select id="route_select" name="route" form="filtersForm">
+            <option value="">-- All routes --</option>
+            {% for r in routes %}
+              <option value="{{ r.route }}" {% if r.route == selected_route %}selected{% endif %}>
+                {{ r.route }}
+              </option>
+            {% endfor %}
+          </select>
 
-        <label for="page_size">Page size</label>
-        <select id="page_size" name="page_size">
-          {% for n in page_size_options %}
-            <option value="{{ n }}" {% if n == page_size %}selected{% endif %}>{{ n }}</option>
-          {% endfor %}
-        </select>
+          <label for="state_select">Select state</label>
+          <select id="state_select" name="state" form="filtersForm">
+            <option value="">-- All states --</option>
+            {% for s in states %}
+              <option value="{{ s }}" {% if s == selected_state %}selected{% endif %}>
+                {{ s }}
+              </option>
+            {% endfor %}
+          </select>
 
-        <button type="button" id="clearFiltersBtn" class="btn secondary">Clear filters</button>
+          <label for="page_size">Page size</label>
+          <select id="page_size" name="page_size" form="filtersForm">
+            {% for n in page_size_options %}
+              <option value="{{ n }}" {% if n == page_size %}selected{% endif %}>{{ n }}</option>
+            {% endfor %}
+          </select>
 
-        {# Hidden 'show' passthrough so Show all persists until cleared #}
-        {% if request.GET.show %}<input type="hidden" name="show" value="{{ request.GET.show }}">{% endif %}
-      </form>
+          <div class="field-spacer"></div>
+          <button type="button" id="clearFiltersBtn" class="btn secondary" form="filtersForm">Clear filters</button>
+        </div>
+      </div>
+
+      <!-- Row 3: Select segment (type-ahead) -->
+      <div class="panel-row">
+        <h3 class="panel-title">Road condition analysis</h3>
+        <label for="segment_input" class="panel-title">Select segment</label>
+        <div class="segment-wrap">
+          <input
+            id="segment_input"
+            name="segment"
+            type="text"
+            placeholder="Type a segment code…"
+            value="{{ selected_segment }}"
+            autocomplete="off"
+            form="filtersForm"
+          />
+          <div id="segment_suggestions" class="suggestions" hidden></div>
+        </div>
+      </div>
     </div>
 
-    <!-- Right: metrics -->
-    <div class="metrics">
-      <div class="metric"><div class="label">Total length (km)</div><div class="value">{{ total_length|floatformat:2 }}</div></div>
-      <div class="metric"><div class="label">Number of segments</div><div class="value">{{ total_segments|default:"0" }}</div></div>
-      <div class="metric"
-          style="background-color:#{{ 'good'|bucket_color }}; color:{{ 'good'|bucket_color|text_contrast }};">
-        <div class="label">Good</div>
-        <div class="value">{{ counts.good|default:"0" }}</div>
+    <!-- RIGHT: dynamic content (default = metrics) -->
+    <div class="right-panel">
+      <!-- Row 1: totals -->
+      <div class="metrics-row metrics-top">
+        <div class="metric">
+          <div class="label">Total length (km)</div>
+          <div class="value">{{ total_length|floatformat:2 }}</div>
+        </div>
+        <div class="metric">
+          <div class="label">Number of segments</div>
+          <div class="value">{{ total_segments|default:"0" }}</div>
+        </div>
       </div>
 
-      <div class="metric"
-          style="background-color:#{{ 'tolerable'|bucket_color }}; color:{{ 'tolerable'|bucket_color|text_contrast }};">
-        <div class="label">Tolerable</div>
-        <div class="value">{{ counts.tolerable|default:"0" }}</div>
-      </div>
+      <!-- Row 2: condition metrics -->
+      <div class="metrics-row metrics-status">
+        <div class="metric"
+            style="background-color:#{{ 'good'|bucket_color }}; color:{{ 'good'|bucket_color|text_contrast }};">
+          <div class="label">Good</div>
+          <div class="value">{{ counts.good|default:"0" }}</div>
+        </div>
 
-      <div class="metric"
-          style="background-color:#{{ 'intolerable'|bucket_color }}; color:{{ 'intolerable'|bucket_color|text_contrast }};">
-        <div class="label">Intolerable</div>
-        <div class="value">{{ counts.intolerable|default:"0" }}</div>
-      </div>
+        <div class="metric"
+            style="background-color:#{{ 'tolerable'|bucket_color }}; color:{{ 'tolerable'|bucket_color|text_contrast }};">
+          <div class="label">Tolerable</div>
+          <div class="value">{{ counts.tolerable|default:"0" }}</div>
+        </div>
 
-      <div class="metric"
-          style="background-color:#{{ 'failed'|bucket_color }}; color:{{ 'failed'|bucket_color|text_contrast }};">
-        <div class="label">Failed</div>
-        <div class="value">{{ counts.failed|default:"0" }}</div>
+        <div class="metric"
+            style="background-color:#{{ 'intolerable'|bucket_color }}; color:{{ 'intolerable'|bucket_color|text_contrast }};">
+          <div class="label">Intolerable</div>
+          <div class="value">{{ counts.intolerable|default:"0" }}</div>
+        </div>
+
+        <div class="metric"
+            style="background-color:#{{ 'failed'|bucket_color }}; color:{{ 'failed'|bucket_color|text_contrast }};">
+          <div class="label">Failed</div>
+          <div class="value">{{ counts.failed|default:"0" }}</div>
+        </div>
       </div>
     </div>
   </div>
@@ -81,10 +124,10 @@
     <canvas id="statusChart" height="140"></canvas>
   </div>
 
-  <!-- Bottom: table -->
+  <!-- 3️⃣ TABLE + PAGINATION -->
   <div class="bottom">
     <div class="table-wrap">
-      <table class="table" style="font-size: 14px; width:100%; min-width:1000px;">
+      <table class="table" style="font-size:14px; width:100%; min-width:1000px;">
         <thead>
           <tr>
             <th>Route</th>
@@ -103,7 +146,7 @@
         </thead>
         <tbody>
           {% for seg in segments %}
-          {% with bg=seg.status|norm_hex fg=seg.status|text_contrast %}
+          {% with bg=seg.status|canonical_color fg=seg.status|canonical_color|text_contrast %}
           <tr>
             <td>{{ seg.route.route }}</td>
             <td>{{ seg.code }}</td>
@@ -116,9 +159,9 @@
             <td>{{ seg.end_lat }}</td>
             <td>{{ seg.end_lon }}</td>
             <td>{{ seg.distance|floatformat:2 }}</td>
-            {% with bg=seg.status|canonical_color fg=seg.status|canonical_color|text_contrast %}
-            <td style="background-color:#{{ bg }}; color:{{ fg }}; text-align:center; font-weight:600;">{{ seg.avg_speed|floatformat:1 }} km/h</td>
-            {% endwith %}
+            <td style="background-color:#{{ bg }}; color:{{ fg }}; text-align:center; font-weight:600;">
+              {{ seg.avg_speed|floatformat:1 }} km/h
+            </td>
           </tr>
           {% endwith %}
           {% empty %}
@@ -128,7 +171,6 @@
       </table>
     </div>
 
-    <!-- Pagination -->
     {% if page_obj.paginator.num_pages > 1 %}
     <nav class="pagination" aria-label="Pagination">
       {% if page_obj.has_previous %}
@@ -152,75 +194,137 @@
     {% endif %}
   </div>
 
-</section>
+  <script>
+    (function() {
+      const form = document.getElementById('filtersForm');
+      const routeSel = document.getElementById('route_select');
+      const stateSel = document.getElementById('state_select');
+      const pageSizeSel = document.getElementById('page_size');
+      const clearBtn = document.getElementById('clearFiltersBtn');
 
-<script>
-  (function() {
-    const form = document.getElementById('filtersForm');
-    const routeSel = document.getElementById('route_select');
-    const stateSel = document.getElementById('state_select');
-    const pageSizeSel = document.getElementById('page_size');
-    const clearBtn = document.getElementById('clearFiltersBtn');
+      // segment typeahead
+      const segInput = document.getElementById('segment_input');
+      const segBox = document.getElementById('segment_suggestions');
+      let segTimer = null;
 
-    // Debounce helper
-    let timer = null;
-    const debounce = (fn, delay=400) => (...args) => {
-      clearTimeout(timer);
-      timer = setTimeout(() => fn.apply(this, args), delay);
-    };
-
-    function applySingleFilter(changed) {
-      if (changed === routeSel) {
-        if (routeSel.value) { stateSel.value = ""; stateSel.disabled = true; }
-        else { stateSel.disabled = false; }
-      } else if (changed === stateSel) {
-        if (stateSel.value) { routeSel.value = ""; routeSel.disabled = true; }
-        else { routeSel.disabled = false; }
-      }
-      // Clear 'page' so we go back to first page when changing filters
-      const pageInput = form.querySelector('input[name="page"]');
-      if (pageInput) pageInput.remove();
-      form.submit();
-    }
-
-    const debouncedFilter = debounce(applySingleFilter);
-
-    // Initial disable on page load (reflect current selection)
-    if (routeSel.value) stateSel.disabled = true;
-    if (stateSel.value) routeSel.disabled = true;
-
-    routeSel.addEventListener('change', () => debouncedFilter(routeSel));
-    stateSel.addEventListener('change', () => debouncedFilter(stateSel));
-    pageSizeSel.addEventListener('change', () => {
-      // Reset to first page on page-size change
-      const pageInput = form.querySelector('input[name="page"]');
-      if (pageInput) pageInput.remove();
-      form.submit();
-    });
-
-    clearBtn.addEventListener('click', () => {
-      routeSel.value = "";
-      stateSel.value = "";
-      routeSel.disabled = false;
-      stateSel.disabled = false;
-      // Remove paging and show flags
-      const p = form.querySelector('input[name="page"]'); if (p) p.remove();
-      const s = form.querySelector('input[name="show"]'); if (s) s.remove();
-      form.submit();
-    });
-
-    // Tiny Chart.js: counts by status
-    const ctx = document.getElementById('statusChart');
-    if (ctx && window.Chart) {
-      const data = {
-        labels: ['Good','Tolerable','Intolerable','Failed'],
-        datasets: [{
-          label: 'Segments',
-          data: [{{ counts.good|default:"0" }}, {{ counts.tolerable|default:"0" }}, {{ counts.intolerable|default:"0" }}, {{ counts.failed|default:"0" }}]
-        }]
+      // Debounce helper (for filters & typeahead)
+      let timer = null;
+      const debounce = (fn, delay=300) => (...args) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), delay);
       };
-      new Chart(ctx, { type: 'bar', data, options: { responsive: true, plugins: { legend: { display: false } } } });
-    }
-  })();
-</script>
+
+      function resetToFirstPage() {
+        const pageInput = form.querySelector('input[name="page"]');
+        if (pageInput) pageInput.remove();
+      }
+
+      function unsetShowAll() {
+        const s = form.querySelector('input[name="show"]');
+        if (s) s.remove();
+      }
+
+      function applySingleFilter(changed) {
+        if (changed === routeSel) {
+          if (routeSel.value) { stateSel.value = ""; stateSel.disabled = true; }
+          else { stateSel.disabled = false; }
+        } else if (changed === stateSel) {
+          if (stateSel.value) { routeSel.value = ""; routeSel.disabled = true; }
+          else { routeSel.disabled = false; }
+        }
+        resetToFirstPage();
+        unsetShowAll();            // <-- key line: drop show=all when user applies a filter
+        form.submit();
+      }
+      const debouncedFilter = debounce(applySingleFilter, 250);
+
+      // Initial disable on page load (reflect current selection)
+      if (routeSel && routeSel.value) stateSel.disabled = true;
+      if (stateSel && stateSel.value) routeSel.disabled = true;
+
+      routeSel && routeSel.addEventListener('change', () => debouncedFilter(routeSel));
+      stateSel && stateSel.addEventListener('change', () => debouncedFilter(stateSel));
+
+      pageSizeSel && pageSizeSel.addEventListener('change', () => {
+        resetToFirstPage();
+        form.submit();
+      });
+
+      clearBtn && clearBtn.addEventListener('click', () => {
+        if (routeSel) routeSel.value = "";
+        if (stateSel) stateSel.value = "";
+        if (routeSel) routeSel.disabled = false;
+        if (stateSel) stateSel.disabled = false;
+        if (segInput) segInput.value = "";
+        resetToFirstPage();
+        const s = form.querySelector('input[name="show"]'); if (s) s.remove();
+        form.submit();
+      });
+
+      // --- Typeahead helpers ---
+      function segDebounce(fn, wait) {
+        return function(...args) {
+          clearTimeout(segTimer);
+          segTimer = setTimeout(() => fn.apply(this, args), wait);
+        }
+      }
+
+      async function searchCodes(q) {
+        const url = new URL('{% url "segment_code_search" %}', window.location.origin);
+        url.searchParams.set('q', q);
+        const resp = await fetch(url.toString(), { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
+        if (!resp.ok) return [];
+        const data = await resp.json();
+        return data.results || [];
+      }
+
+      function renderSuggestions(items) {
+        if (!items.length) { segBox.hidden = true; segBox.innerHTML = ''; return; }
+        segBox.innerHTML = items.map(c => `<button type="button" data-code="${c}">${c}</button>`).join('');
+        segBox.hidden = false;
+        segBox.style.minWidth = segInput.offsetWidth + 'px';
+      }
+
+      segInput && segInput.addEventListener('input', segDebounce(async function () {
+        const q = this.value.trim();
+        if (q.length < 2) { renderSuggestions([]); return; }
+        const results = await searchCodes(q);
+        renderSuggestions(results);
+      }, 200));
+
+      segBox && segBox.addEventListener('click', function (e) {
+        const btn = e.target.closest('button[data-code]');
+        if (!btn) return;
+        segInput.value = btn.dataset.code;
+        segBox.hidden = true;
+        resetToFirstPage();
+        unsetShowAll();            // <-- also drop show=all when choosing a segment
+        form.submit();
+      });
+
+      segInput && segInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { segBox.hidden = true; unsetShowAll(); }
+        if (e.key === 'Escape') { segBox.hidden = true; }
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!segBox.contains(e.target) && e.target !== segInput) segBox.hidden = true;
+      });
+
+      // Tiny Chart.js (optional)
+      const ctx = document.getElementById('statusChart');
+      if (ctx && window.Chart) {
+        const data = {
+          labels: ['Good','Tolerable','Intolerable','Failed'],
+          datasets: [{
+            label: 'Segments',
+            data: [{{ counts.good|default:"0" }}, {{ counts.tolerable|default:"0" }}, {{ counts.intolerable|default:"0" }}, {{ counts.failed|default:"0" }}]
+          }]
+        };
+        new Chart(ctx, { type: 'bar', data, options: { responsive: true, plugins: { legend: { display: false } } } });
+      }
+    })();
+  </script>
+
+</section>
 {% endblock %}
