@@ -1,8 +1,9 @@
 # all_roads/services.py
 from decimal import Decimal
+import time
 import requests
 from decouple import config
-from all_roads.models import Segment, Address
+from all_roads.models import Segment, Address, SubSegment
 from all_roads.utils import get_status_color
 
 def get_or_create_address(address_str, lat, lng):
@@ -73,6 +74,75 @@ def refresh_segments_from_google(queryset, sleep_between=0.0):
             segment.error_processing = True
             segment.save(update_fields=["error_processing"])
             failed += 1
+        finally:
+            if sleep_between:
+                time.sleep(sleep_between)
 
     return {"updated": updated, "failed": failed, "total": queryset.count()}
 
+def refresh_subsegments_from_google(queryset, sleep_between=0.0):
+    """
+    Similar to refresh_segments_from_google but scoped to SubSegment objects.
+    Each subsegment already stores its coordinate pairs, so we just keep
+    distance / travel_time / avg_speed / status fresh.
+    """
+    api_key = config("GOOGLE_ROUTES_API_KEY")
+    updated, failed = 0, 0
+
+    for subsegment in queryset.iterator(chunk_size=200):
+        try:
+            origin = f"{subsegment.start_lat},{subsegment.start_lon}"
+            destination = f"{subsegment.end_lat},{subsegment.end_lon}"
+            url = (
+                "https://maps.googleapis.com/maps/api/distancematrix/json"
+                f"?origins={origin}&destinations={destination}"
+                f"&mode=driving&units=metric&key={api_key}"
+            )
+
+            r = requests.get(url, timeout=10)
+            r.raise_for_status()
+            data = r.json()
+
+            if data.get("status") != "OK":
+                raise ValueError(f"Bad API status: {data.get('status')}")
+
+            el = data["rows"][0]["elements"][0]
+            if el.get("status") != "OK":
+                raise ValueError(f"Element status: {el.get('status')}")
+
+            dist_km = round(el["distance"]["value"] / 1000, 2)
+            dur_s = int(el["duration"]["value"])
+            speed = round(dist_km / (dur_s / 3600), 1) if dur_s > 0 else 0.0
+
+            subsegment.distance = Decimal(str(dist_km))
+            subsegment.travel_time = dur_s
+            subsegment.avg_speed = Decimal(str(speed))
+            subsegment.status = get_status_color(speed)
+            subsegment.error_processing = False
+            subsegment.save()
+            updated += 1
+
+        except Exception:
+            subsegment.error_processing = True
+            subsegment.save(update_fields=["error_processing"])
+            failed += 1
+        finally:
+            if sleep_between:
+                time.sleep(sleep_between)
+
+    return {"updated": updated, "failed": failed, "total": queryset.count()}
+
+def refresh_segment_and_subsegments(segment, sleep_between=0.0):
+    """
+    Convenience helper for UI triggers: refresh a single Segment plus all of
+    its SubSegments before presenting details to the user.
+    """
+    seg_summary = refresh_segments_from_google(
+        Segment.objects.filter(pk=segment.pk),
+        sleep_between=sleep_between,
+    )
+    sub_summary = refresh_subsegments_from_google(
+        SubSegment.objects.filter(segment=segment),
+        sleep_between=sleep_between,
+    )
+    return {"segment": seg_summary, "subsegments": sub_summary}

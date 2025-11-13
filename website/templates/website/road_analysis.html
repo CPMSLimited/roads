@@ -73,101 +73,149 @@
           />
           <div id="segment_suggestions" class="suggestions" hidden></div>
         </div>
+        <div id="segment_loading" class="loading-banner" role="status" aria-live="polite" hidden>
+          Refreshing segment data…
+        </div>
       </div>
     </div>
 
     <!-- RIGHT: dynamic content (default = metrics) -->
     <div class="right-panel">
-      <!-- Row 1: totals -->
-      <div class="metrics-row metrics-top">
-        <div class="metric">
-          <div class="label">Total length (km)</div>
-          <div class="value">{{ total_length|floatformat:2 }}</div>
+      {% if is_subsegment_view %}
+        <!-- Graph placeholder for a single segment; we'll wire the real chart later -->
+        <div class="panel-row">
+          <h3 class="panel-title">Segment: {{ parent_segment.code }}</h3>
+          <canvas id="segmentGraph" height="180"></canvas>
         </div>
-        <div class="metric">
-          <div class="label">Number of segments</div>
-          <div class="value">{{ total_segments|default:"0" }}</div>
-        </div>
-      </div>
-
-      <!-- Row 2: condition metrics -->
-      <div class="metrics-row metrics-status">
-        <div class="metric"
-            style="background-color:#{{ 'good'|bucket_color }}; color:{{ 'good'|bucket_color|text_contrast }};">
-          <div class="label">Good</div>
-          <div class="value">{{ counts.good|default:"0" }}</div>
-        </div>
-
-        <div class="metric"
-            style="background-color:#{{ 'tolerable'|bucket_color }}; color:{{ 'tolerable'|bucket_color|text_contrast }};">
-          <div class="label">Tolerable</div>
-          <div class="value">{{ counts.tolerable|default:"0" }}</div>
+      {% else %}
+        <!-- Row 1: totals -->
+        <div class="metrics-row metrics-top">
+          <div class="metric">
+            <div class="label">Total length (km)</div>
+            <div class="value">{{ total_length|floatformat:2 }}</div>
+          </div>
+          <div class="metric">
+            <div class="label">Number of segments</div>
+            <div class="value">{{ total_segments|default:"0" }}</div>
+          </div>
         </div>
 
-        <div class="metric"
-            style="background-color:#{{ 'intolerable'|bucket_color }}; color:{{ 'intolerable'|bucket_color|text_contrast }};">
-          <div class="label">Intolerable</div>
-          <div class="value">{{ counts.intolerable|default:"0" }}</div>
+        <!-- Row 2: condition metrics -->
+        <div class="metrics-row metrics-status">
+          <div class="metric"
+              style="background-color:#{{ 'good'|bucket_color }}; color:{{ 'good'|bucket_color|text_contrast }};">
+            <div class="label">Good</div>
+            <div class="value">{{ counts.good|default:"0" }}</div>
+          </div>
+          <div class="metric"
+              style="background-color:#{{ 'tolerable'|bucket_color }}; color:{{ 'tolerable'|bucket_color|text_contrast }};">
+            <div class="label">Tolerable</div>
+            <div class="value">{{ counts.tolerable|default:"0" }}</div>
+          </div>
+          <div class="metric"
+              style="background-color:#{{ 'intolerable'|bucket_color }}; color:{{ 'intolerable'|bucket_color|text_contrast }};">
+            <div class="label">Intolerable</div>
+            <div class="value">{{ counts.intolerable|default:"0" }}</div>
+          </div>
+          <div class="metric"
+              style="background-color:#{{ 'failed'|bucket_color }}; color:{{ 'failed'|bucket_color|text_contrast }};">
+            <div class="label">Failed</div>
+            <div class="value">{{ counts.failed|default:"0" }}</div>
+          </div>
         </div>
-
-        <div class="metric"
-            style="background-color:#{{ 'failed'|bucket_color }}; color:{{ 'failed'|bucket_color|text_contrast }};">
-          <div class="label">Failed</div>
-          <div class="value">{{ counts.failed|default:"0" }}</div>
-        </div>
-      </div>
+      {% endif %}
     </div>
   </div>
 
+  {% if not is_subsegment_view %}
   <!-- Mini chart -->
   <div class="mt-4" style="max-width:680px;">
     <canvas id="statusChart" height="140"></canvas>
   </div>
+  {% endif %}
 
   <!-- 3️⃣ TABLE + PAGINATION -->
   <div class="bottom">
     <div class="table-wrap">
       <table class="table" style="font-size:14px; width:100%; min-width:1000px;">
-        <thead>
-          <tr>
-            <th>Route</th>
-            <th>Code</th>
-            <th>Name</th>
-            <th>State</th>
-            <th>Start name</th>
-            <th>Northings</th>
-            <th>Eastings</th>
-            <th>End name</th>
-            <th>Northings 2</th>
-            <th>Eastings 2</th>
-            <th>Distance (km)</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for seg in segments %}
-          {% with bg=seg.status|canonical_color fg=seg.status|canonical_color|text_contrast %}
-          <tr>
-            <td>{{ seg.route.route }}</td>
-            <td>{{ seg.code }}</td>
-            <td>{{ seg.name }}</td>
-            <td>{{ seg.state }}</td>
-            <td>{{ seg.start_point.name }}</td>
-            <td>{{ seg.start_lat }}</td>
-            <td>{{ seg.start_lon }}</td>
-            <td>{{ seg.end_point.name }}</td>
-            <td>{{ seg.end_lat }}</td>
-            <td>{{ seg.end_lon }}</td>
-            <td>{{ seg.distance|floatformat:2 }}</td>
-            <td style="background-color:#{{ bg }}; color:{{ fg }}; text-align:center; font-weight:600;">
-              {{ seg.avg_speed|floatformat:1 }} km/h
-            </td>
-          </tr>
-          {% endwith %}
-          {% empty %}
-          <tr><td colspan="12" style="text-align:center;">No segments found.</td></tr>
-          {% endfor %}
-        </tbody>
+
+        {% if is_subsegment_view %}
+          {# ---------------- SUBSEGMENT VIEW ---------------- #}
+          <thead>
+            <tr>
+              <th>Route</th>
+              <th>Segment code</th>
+              <th>Subsegment code</th>
+              <th>Northings</th>
+              <th>Eastings</th>
+              <th>Distance (km)</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in subsegments %}
+              {% with bg=s.status|canonical_color fg=s.status|canonical_color|text_contrast %}
+              <tr>
+                <td>{{ parent_segment.route.route }}</td>
+                <td>{{ parent_segment.code }}</td>
+                <td>{{ s.code }}</td>
+                <td>{{ s.start_lat }}</td>
+                <td>{{ s.start_lon }}</td>
+                <td>{{ s.distance|floatformat:2 }}</td>
+                <td style="background-color:#{{ bg }}; color:{{ fg }}; text-align:center; font-weight:600;">
+                  {{ s.avg_speed|floatformat:1 }} km/h
+                </td>
+              </tr>
+              {% endwith %}
+            {% empty %}
+              <tr><td colspan="7" style="text-align:center;">No subsegments found.</td></tr>
+            {% endfor %}
+          </tbody>
+
+        {% else %}
+          {# ---------------- SEGMENT VIEW (original) ---------------- #}
+          <thead>
+            <tr>
+              <th>Route</th>
+              <th>Code</th>
+              <th>Name</th>
+              <th>State</th>
+              <th>Start name</th>
+              <th>Northings</th>
+              <th>Eastings</th>
+              <th>End name</th>
+              <th>Northings 2</th>
+              <th>Eastings 2</th>
+              <th>Distance (km)</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for seg in segments %}
+              {% with bg=seg.status|canonical_color fg=seg.status|canonical_color|text_contrast %}
+              <tr>
+                <td>{{ seg.route.route }}</td>
+                <td>{{ seg.code }}</td>
+                <td>{{ seg.name }}</td>
+                <td>{{ seg.state }}</td>
+                <td>{{ seg.start_point.name }}</td>
+                <td>{{ seg.start_lat }}</td>
+                <td>{{ seg.start_lon }}</td>
+                <td>{{ seg.end_point.name }}</td>
+                <td>{{ seg.end_lat }}</td>
+                <td>{{ seg.end_lon }}</td>
+                <td>{{ seg.distance|floatformat:2 }}</td>
+                <td style="background-color:#{{ bg }}; color:{{ fg }}; text-align:center; font-weight:600;">
+                  {{ seg.avg_speed|floatformat:1 }} km/h
+                </td>
+              </tr>
+              {% endwith %}
+            {% empty %}
+              <tr><td colspan="12" style="text-align:center;">No segments found.</td></tr>
+            {% endfor %}
+          </tbody>
+        {% endif %}
+
       </table>
     </div>
 
@@ -195,136 +243,196 @@
   </div>
 
   <script>
-    (function() {
-      const form = document.getElementById('filtersForm');
-      const routeSel = document.getElementById('route_select');
-      const stateSel = document.getElementById('state_select');
-      const pageSizeSel = document.getElementById('page_size');
-      const clearBtn = document.getElementById('clearFiltersBtn');
+  (function() {
+    const form        = document.getElementById('filtersForm');
+    const routeSel    = document.getElementById('route_select');
+    const stateSel    = document.getElementById('state_select');
+    const pageSizeSel = document.getElementById('page_size');
+    const clearBtn    = document.getElementById('clearFiltersBtn');
 
-      // segment typeahead
-      const segInput = document.getElementById('segment_input');
-      const segBox = document.getElementById('segment_suggestions');
-      let segTimer = null;
+    // Segment typeahead
+    const segInput = document.getElementById('segment_input');
+    const segBox   = document.getElementById('segment_suggestions');
+    const segLoading = document.getElementById('segment_loading');
+    let segTimer   = null;
 
-      // Debounce helper (for filters & typeahead)
-      let timer = null;
-      const debounce = (fn, delay=300) => (...args) => {
-        clearTimeout(timer);
-        timer = setTimeout(() => fn.apply(this, args), delay);
+    function showSegmentLoading() {
+      if (segLoading) {
+        segLoading.hidden = false;
+      }
+    }
+
+    function resetToFirstPage() {
+      const pageInput = form.querySelector('input[name="page"]');
+      if (pageInput) pageInput.remove();
+    }
+
+    function unsetShowAll() {
+      const s = form.querySelector('input[name="show"]');
+      if (s) s.remove();
+    }
+
+    // --- ROUTE / STATE: mutual exclusivity only ---
+    function applyRouteState(changed) {
+      if (changed === routeSel) {
+        if (routeSel.value) {
+          stateSel.value   = "";
+          stateSel.disabled = true;
+        } else {
+          stateSel.disabled = false;
+        }
+      } else if (changed === stateSel) {
+        if (stateSel.value) {
+          routeSel.value   = "";
+          routeSel.disabled = true;
+        } else {
+          routeSel.disabled = false;
+        }
+      }
+      // Segment is independent – do NOT touch segInput here
+      resetToFirstPage();
+      unsetShowAll();
+      form.submit();
+    }
+
+    // Initial disable based on current selection
+    if (routeSel && routeSel.value) stateSel.disabled = true;
+    if (stateSel && stateSel.value) routeSel.disabled = true;
+
+    routeSel && routeSel.addEventListener('change', () => applyRouteState(routeSel));
+    stateSel && stateSel.addEventListener('change', () => applyRouteState(stateSel));
+
+    // --- PAGE SIZE ---
+    pageSizeSel && pageSizeSel.addEventListener('change', () => {
+      resetToFirstPage();
+      // keep all filters (including segment); no need to unset show here
+      form.submit();
+    });
+
+    // --- CLEAR FILTERS ---
+    clearBtn && clearBtn.addEventListener('click', () => {
+      if (routeSel) { routeSel.value = ""; routeSel.disabled = false; }
+      if (stateSel) { stateSel.value = ""; stateSel.disabled = false; }
+      if (segInput) segInput.value = "";
+
+      resetToFirstPage();
+      unsetShowAll();
+      form.submit();
+    });
+
+    // --- SEGMENT TYPEAHEAD (independent of route/state) ---
+    function segDebounce(fn, wait) {
+      return function(...args) {
+        clearTimeout(segTimer);
+        segTimer = setTimeout(() => fn.apply(this, args), wait);
       };
+    }
 
-      function resetToFirstPage() {
-        const pageInput = form.querySelector('input[name="page"]');
-        if (pageInput) pageInput.remove();
-      }
-
-      function unsetShowAll() {
-        const s = form.querySelector('input[name="show"]');
-        if (s) s.remove();
-      }
-
-      function applySingleFilter(changed) {
-        if (changed === routeSel) {
-          if (routeSel.value) { stateSel.value = ""; stateSel.disabled = true; }
-          else { stateSel.disabled = false; }
-        } else if (changed === stateSel) {
-          if (stateSel.value) { routeSel.value = ""; routeSel.disabled = true; }
-          else { routeSel.disabled = false; }
-        }
-        resetToFirstPage();
-        unsetShowAll();            // <-- key line: drop show=all when user applies a filter
-        form.submit();
-      }
-      const debouncedFilter = debounce(applySingleFilter, 250);
-
-      // Initial disable on page load (reflect current selection)
-      if (routeSel && routeSel.value) stateSel.disabled = true;
-      if (stateSel && stateSel.value) routeSel.disabled = true;
-
-      routeSel && routeSel.addEventListener('change', () => debouncedFilter(routeSel));
-      stateSel && stateSel.addEventListener('change', () => debouncedFilter(stateSel));
-
-      pageSizeSel && pageSizeSel.addEventListener('change', () => {
-        resetToFirstPage();
-        form.submit();
+    async function searchCodes(q) {
+      const url = new URL('{% url "segment_code_search" %}', window.location.origin);
+      url.searchParams.set('q', q);
+      const resp = await fetch(url.toString(), {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
       });
+      if (!resp.ok) return [];
+      const data = await resp.json();
+      return data.results || [];
+    }
 
-      clearBtn && clearBtn.addEventListener('click', () => {
-        if (routeSel) routeSel.value = "";
-        if (stateSel) stateSel.value = "";
-        if (routeSel) routeSel.disabled = false;
-        if (stateSel) stateSel.disabled = false;
-        if (segInput) segInput.value = "";
-        resetToFirstPage();
-        const s = form.querySelector('input[name="show"]'); if (s) s.remove();
-        form.submit();
-      });
-
-      // --- Typeahead helpers ---
-      function segDebounce(fn, wait) {
-        return function(...args) {
-          clearTimeout(segTimer);
-          segTimer = setTimeout(() => fn.apply(this, args), wait);
-        }
+    function renderSuggestions(items) {
+      if (!items.length) {
+        segBox.hidden = true;
+        segBox.innerHTML = '';
+        return;
       }
+      segBox.innerHTML = items.map(c =>
+        `<button type="button" data-code="${c}">${c}</button>`
+      ).join('');
+      segBox.hidden = false;
+      segBox.style.minWidth = segInput.offsetWidth + 'px';
+    }
 
-      async function searchCodes(q) {
-        const url = new URL('{% url "segment_code_search" %}', window.location.origin);
-        url.searchParams.set('q', q);
-        const resp = await fetch(url.toString(), { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
-        if (!resp.ok) return [];
-        const data = await resp.json();
-        return data.results || [];
-      }
+    segInput && segInput.addEventListener('input', segDebounce(async function() {
+      const q = this.value.trim();
+      if (q.length < 2) { renderSuggestions([]); return; }
+      const results = await searchCodes(q);
+      renderSuggestions(results);
+    }, 200));
 
-      function renderSuggestions(items) {
-        if (!items.length) { segBox.hidden = true; segBox.innerHTML = ''; return; }
-        segBox.innerHTML = items.map(c => `<button type="button" data-code="${c}">${c}</button>`).join('');
-        segBox.hidden = false;
-        segBox.style.minWidth = segInput.offsetWidth + 'px';
-      }
+    segBox && segBox.addEventListener('click', function(e) {
+      const btn = e.target.closest('button[data-code]');
+      if (!btn) return;
+      segInput.value = btn.dataset.code;
+      segBox.hidden = true;
+      resetToFirstPage();
+      unsetShowAll();      // move away from "show all" into filtered mode
+      showSegmentLoading();
+      form.submit();       // submits with ?segment=CODE plus any route/state filters
+    });
 
-      segInput && segInput.addEventListener('input', segDebounce(async function () {
-        const q = this.value.trim();
-        if (q.length < 2) { renderSuggestions([]); return; }
-        const results = await searchCodes(q);
-        renderSuggestions(results);
-      }, 200));
-
-      segBox && segBox.addEventListener('click', function (e) {
-        const btn = e.target.closest('button[data-code]');
-        if (!btn) return;
-        segInput.value = btn.dataset.code;
+    segInput && segInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
         segBox.hidden = true;
         resetToFirstPage();
-        unsetShowAll();            // <-- also drop show=all when choosing a segment
-        form.submit();
-      });
+        unsetShowAll();
+        showSegmentLoading();
+        form.submit();     // submit typed segment manually
+      }
+      if (e.key === 'Escape') {
+        segBox.hidden = true;
+      }
+    });
 
-      segInput && segInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') { segBox.hidden = true; unsetShowAll(); }
-        if (e.key === 'Escape') { segBox.hidden = true; }
-      });
+    document.addEventListener('click', (e) => {
+      if (!segBox.contains(e.target) && e.target !== segInput) segBox.hidden = true;
+    });
 
-      document.addEventListener('click', (e) => {
-        if (!segBox.contains(e.target) && e.target !== segInput) segBox.hidden = true;
+    // --- Chart.js for overall status (only used in normal segment view) ---
+    {% if not is_subsegment_view %}
+    const ctx = document.getElementById('statusChart');
+    if (ctx && window.Chart) {
+      const data = {
+        labels: ['Good','Tolerable','Intolerable','Failed'],
+        datasets: [{
+          label: 'Segments',
+          data: [{{ counts.good|default:"0" }},
+                {{ counts.tolerable|default:"0" }},
+                {{ counts.intolerable|default:"0" }},
+                {{ counts.failed|default:"0" }}]
+        }]
+      };
+      new Chart(ctx, {
+        type: 'bar',
+        data,
+        options: { responsive: true, plugins: { legend: { display: false } } }
       });
+    }
+    {% endif %}
+  })();
+  </script>
 
-      // Tiny Chart.js (optional)
-      const ctx = document.getElementById('statusChart');
-      if (ctx && window.Chart) {
-        const data = {
-          labels: ['Good','Tolerable','Intolerable','Failed'],
-          datasets: [{
-            label: 'Segments',
-            data: [{{ counts.good|default:"0" }}, {{ counts.tolerable|default:"0" }}, {{ counts.intolerable|default:"0" }}, {{ counts.failed|default:"0" }}]
-          }]
-        };
-        new Chart(ctx, { type: 'bar', data, options: { responsive: true, plugins: { legend: { display: false } } } });
+  {% if is_subsegment_view %}
+  <script>
+    (function(){
+      const el = document.getElementById("segmentGraph");
+      if (el && window.Chart) {
+        // Placeholder: simple dataset; you'll replace with real series later
+        new Chart(el, {
+          type: 'line',
+          data: {
+            labels: [{% for s in subsegments %}'{{ s.position|default:forloop.counter }}'{% if not forloop.last %}, {% endif %}{% endfor %}],
+            datasets: [{
+              label: 'Avg speed (km/h)',
+              data: [{% for s in subsegments %}{{ s.avg_speed|default:"0" }}{% if not forloop.last %}, {% endif %}{% endfor %}],
+              tension: 0.25,
+              fill: false
+            }]
+          },
+          options: { responsive: true, plugins: { legend: { display: false } } }
+        });
       }
     })();
   </script>
-
+  {% endif %}
 </section>
 {% endblock %}

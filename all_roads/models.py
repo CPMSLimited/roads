@@ -1,4 +1,5 @@
 from django.db import models
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 class Road(models.Model):
     road = models.CharField(max_length=5, unique=True)
@@ -64,3 +65,60 @@ class Segment(models.Model):
 
     def __str__(self):
         return self.code
+    
+class SubSegment(models.Model):
+    """
+    A sub-division of a Segment (typically 25 per Segment).
+    SubSegments inherit most properties of Segment, but deliberately
+    exclude: index, name, state, start_point, end_point.
+    """
+    segment = models.ForeignKey( Segment, on_delete=models.CASCADE,related_name="subsegments", db_index=True,)
+    code = models.CharField(max_length=16, unique=True, blank=True)
+    position = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(25)],
+        help_text="Order of this sub-segment within its parent segment (1–25)."
+    )
+    start_lat = models.DecimalField(max_digits=9, decimal_places=5, default=0.00)
+    start_lon = models.DecimalField(max_digits=9, decimal_places=5, default=0.00)
+    end_lat   = models.DecimalField(max_digits=9, decimal_places=5, default=0.00)
+    end_lon   = models.DecimalField(max_digits=9, decimal_places=5, default=0.00)
+    distance    = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    travel_time = models.IntegerField(default=0)  # seconds
+    avg_speed   = models.DecimalField(max_digits=4, decimal_places=1, default=0.0)
+    error_processing = models.BooleanField(default=False)
+    status = models.CharField(
+        max_length=6,
+        choices=Segment.STATUS_CHOICES,
+        default='666699',
+        help_text="Traffic color code based on average speed"
+    )
+
+    class Meta:
+        db_table = "sub_segments"
+        verbose_name = "Sub-segment"
+        verbose_name_plural = "Sub-segments"
+        # Prevent duplicate positions within the same parent segment
+        constraints = [
+            models.UniqueConstraint(
+                fields=["segment", "position"],
+                name="uq_subsegment_segment_position"
+            ),
+            models.CheckConstraint(
+                check=models.Q(position__gte=1) & models.Q(position__lte=25),
+                name="ck_subsegment_position_1_25",
+            ),
+        ]
+        ordering = ["segment_id", "position"]
+
+    def __str__(self):
+        return self.code or f"{self.segment.code}-{self.position:02d}"
+
+    def save(self, *args, **kwargs):
+        if not self.code and self.segment_id and self.position:
+            self.code = f"{self.segment.code}-{self.position:02d}"
+        super().save(*args, **kwargs)
+
+    @property
+    def route(self):
+        """Convenience: a sub-segment's route is the parent's route."""
+        return self.segment.route

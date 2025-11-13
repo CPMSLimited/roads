@@ -138,3 +138,7 @@ Traceback (most recent call last):
     raise TemplateSyntaxError("Invalid filter: '%s'" % filter_name)
 django.template.exceptions.TemplateSyntaxError: Invalid filter: 'seconds_to_hhmm'
 "GET /road-analysis/ HTTP/1.1" 500 266312
+You're accessing the development server over HTTPS, but it only supports HTTP.
+
+You're accessing the development server over HTTPS, but it only supports HTTP.
+

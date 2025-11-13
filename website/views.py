@@ -1,6 +1,9 @@
 # website/views.py
 
-from all_roads.models import Segment, Route, Road
+import logging
+
+from all_roads.models import Segment, Route, Road, SubSegment
+from all_roads.services import refresh_segment_and_subsegments
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 from django.core.paginator import Paginator
@@ -12,6 +15,8 @@ from django.shortcuts import render
 from .forms import UploadSegmentsForm
 import csv
 import io
+
+logger = logging.getLogger(__name__)
 
 # ---- Status buckets used for counts/mini-chart (hex codes) ----
 STATUS_BUCKETS = {
@@ -28,29 +33,41 @@ PAGE_SIZE_OPTIONS = [25, 50, 100]
 def landing(request):
     return render(request, "website/landing.html")
 
-def uploads(request):
-    if request.method == "POST":
-        # Placeholder only — real behaviour to be added when you share details
-        # uploaded_file = request.FILES.get("segment_file")
-        return HttpResponse("Upload received (stub). Behaviour to be defined.")
-    return render(request, "website/uploads.html")
+# def uploads(request):
+#     if request.method == "POST":
+#         # Placeholder only — real behaviour to be added when you share details
+#         # uploaded_file = request.FILES.get("segment_file")
+#         return HttpResponse("Upload received (stub). Behaviour to be defined.")
+#     return render(request, "website/uploads.html")
 
 # ---- Road Analysis with page-size selector + robust filter preservation (Point 5) ----
+
+
+
+# website/views.py
+from decimal import Decimal
+from urllib.parse import urlencode
+from django.db.models import Sum, Count
+from django.core.paginator import Paginator
+from django.shortcuts import render, get_object_or_404
+
+from all_roads.models import Segment, Route
+from all_roads.models import SubSegment  # <-- NEW import
+# assume STATUS_BUCKETS, PAGE_SIZE_DEFAULT, PAGE_SIZE_OPTIONS exist in this module
 
 def road_analysis(request):
     qs = Segment.objects.select_related("route", "start_point", "end_point").all()
 
-    # Query params (single active filter enforced for route/state)
-    selected_route = request.GET.get("route") or ""
-    selected_state = request.GET.get("state") or ""
-    selected_segment = request.GET.get("segment") or ""  # new, preserved but no-op (for now)
-    show_all = request.GET.get("show") == "all"
+    # Query params
+    selected_route   = request.GET.get("route") or ""
+    selected_state   = request.GET.get("state") or ""
+    selected_segment = (request.GET.get("segment") or "").strip()
+    show_all         = request.GET.get("show") == "all"
 
-    # Enforce mutual exclusivity (route vs state); segment remains independent (no-op)
+    # Enforce mutual exclusivity (route vs state)
     if show_all:
         selected_route = ""
         selected_state = ""
-        # selected_segment kept as-is
     elif selected_route:
         selected_state = ""
         qs = qs.filter(route__route=selected_route)
@@ -58,13 +75,33 @@ def road_analysis(request):
         selected_route = ""
         qs = qs.filter(state=selected_state)
 
-    # Aggregates for metrics
-    agg = qs.aggregate(total_length=Sum("distance"), total_segments=Count("id"))
-    total_length = (agg["total_length"] or Decimal("0.00")).quantize(Decimal("0.01"))
-    total_segments = agg["total_segments"] or 0
+    # Are we viewing subsegments for a specific segment code?
+    is_subsegment_view = False
+    sub_qs = None
+    parent_segment = None
 
-    # Counts per status bucket (for mini-chart)
-    counts = {k: qs.filter(status__in=v["codes"]).count() for k, v in STATUS_BUCKETS.items()}
+    if selected_segment:
+        # case-insensitive exact match; switch to subsegment mode if found
+        parent_segment = get_object_or_404(Segment, code__iexact=selected_segment)
+        try:
+            refresh_segment_and_subsegments(parent_segment)
+            parent_segment.refresh_from_db(fields=["avg_speed", "status", "distance", "travel_time"])
+        except Exception as exc:
+            logger.warning("Unable to refresh segment %s before rendering subsegments: %s", parent_segment.code, exc)
+        sub_qs = SubSegment.objects.filter(segment=parent_segment).order_by("position", "id")
+        is_subsegment_view = True
+
+    # Aggregates & counts (only meaningful for the normal segment view)
+    if not is_subsegment_view:
+        agg = qs.aggregate(total_length=Sum("distance"), total_segments=Count("id"))
+        total_length   = (agg["total_length"] or Decimal("0.00")).quantize(Decimal("0.01"))
+        total_segments = agg["total_segments"] or 0
+        counts = {k: qs.filter(status__in=v["codes"]).count() for k, v in STATUS_BUCKETS.items()}
+    else:
+        # When viewing subsegments, the top-right panel is a graph, so we don't need totals/metrics.
+        total_length = Decimal("0.00")
+        total_segments = 0
+        counts = {"good": 0, "tolerable": 0, "intolerable": 0, "failed": 0}
 
     # Options for selects
     routes = Route.objects.only("route").order_by("route")
@@ -75,13 +112,7 @@ def road_analysis(request):
         .distinct()
     )
 
-    # NEW: options for the "Select segment" dropdown (no-op for now)
-    # Using distinct codes; cap to 300 to keep the UI light. Adjust later as needed.
-    segments_for_filter = list(
-        Segment.objects.order_by("code").values_list("code", flat=True).distinct()[:300]
-    )
-
-    # ----- Page size -----
+    # Page size
     try:
         page_size = int(request.GET.get("page_size") or PAGE_SIZE_DEFAULT)
         if page_size not in PAGE_SIZE_OPTIONS:
@@ -89,43 +120,55 @@ def road_analysis(request):
     except (TypeError, ValueError):
         page_size = PAGE_SIZE_DEFAULT
 
-    # Ordering + Pagination
-    qs = qs.order_by("route__route", "index", "code")
-    paginator = Paginator(qs, page_size)
-    page_number = request.GET.get("page") or 1
-    page_obj = paginator.get_page(page_number)
+    # Pagination target: segments OR subsegments
+    if is_subsegment_view:
+        paginator = Paginator(sub_qs, page_size)
+    else:
+        qs = qs.order_by("route__route", "index", "code")
+        paginator = Paginator(qs, page_size)
+
+    page_obj = paginator.get_page(request.GET.get("page") or 1)
     sn_start = page_obj.start_index() - 1
 
-    # Preserve filters across pagination robustly (strip only 'page')
+    # Preserve filters across pagination (strip only 'page')
     qd = request.GET.copy()
     qd.pop("page", None)
     filters_qs = qd.urlencode()
 
     context = {
-        "segments": page_obj.object_list,
+        # table data (choose which the template renders)
+        "segments": (page_obj.object_list if not is_subsegment_view else []),
+        "subsegments": (page_obj.object_list if is_subsegment_view else []),
+
         "page_obj": page_obj,
         "sn_start": sn_start,
 
+        # filters
         "routes": routes,
         "states": list(states),
         "selected_route": selected_route,
         "selected_state": selected_state,
+        "selected_segment": selected_segment,
         "show_all": show_all,
 
+        # metrics (for normal view)
         "total_length": total_length,
         "total_segments": total_segments,
         "counts": counts,
         "filters_qs": filters_qs,
 
-        # Page-size controls for the template
+        # page size controls
         "page_size": page_size,
         "page_size_options": PAGE_SIZE_OPTIONS,
 
-        # NEW: segment filter (populated + preserved; currently no-op)
-        "segments_for_filter": segments_for_filter,
-        "selected_segment": selected_segment,
+        # view mode
+        "is_subsegment_view": is_subsegment_view,
+        "parent_segment": parent_segment,
     }
     return render(request, "website/road_analysis.html", context)
+
+
+
 
 # ----------------- Helpers and upload pipeline below (unchanged) -----------------
 
