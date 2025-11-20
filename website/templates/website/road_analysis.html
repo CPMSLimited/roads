@@ -4,6 +4,18 @@
 {% load cpms_extras %}
 
 {% block content %}
+<style>
+  .table-wrap {
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+  .table thead th {
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 2;
+  }
+</style>
 <section class="page road-analysis">
 
   <div class="top-split">
@@ -82,10 +94,10 @@
     <!-- RIGHT: dynamic content (default = metrics) -->
     <div class="right-panel">
       {% if is_subsegment_view %}
-        <!-- Graph placeholder for a single segment; we'll wire the real chart later -->
         <div class="panel-row">
-          <h3 class="panel-title">Segment: {{ parent_segment.code }}</h3>
-          <canvas id="segmentGraph" height="180"></canvas>
+          <h3 class="panel-title">Speed vs Position — {{ parent_segment.code }}</h3>
+          <p class="panel-subtitle">Each point represents a subsegment (position on x-axis, speed on y-axis). Colours follow the status legend.</p>
+          <canvas id="segmentGraph" height="140"></canvas>
         </div>
       {% else %}
         <!-- Row 1: totals -->
@@ -129,7 +141,7 @@
 
   {% if not is_subsegment_view %}
   <!-- Mini chart -->
-  <div class="mt-4" style="max-width:680px;">
+  <div class="mt-4" style="max-width:680px; display: none;">
     <canvas id="statusChart" height="140"></canvas>
   </div>
   {% endif %}
@@ -389,8 +401,13 @@
 
     // --- Chart.js for overall status (only used in normal segment view) ---
     {% if not is_subsegment_view %}
-    const ctx = document.getElementById('statusChart');
-    if (ctx && window.Chart) {
+    (function initStatusChart(){
+      const ctx = document.getElementById('statusChart');
+      if (!ctx) return;
+      if (!window.Chart) {
+        window.addEventListener('load', initStatusChart, { once: true });
+        return;
+      }
       const data = {
         labels: ['Good','Tolerable','Intolerable','Failed'],
         datasets: [{
@@ -406,31 +423,86 @@
         data,
         options: { responsive: true, plugins: { legend: { display: false } } }
       });
-    }
+    })();
     {% endif %}
   })();
   </script>
 
   {% if is_subsegment_view %}
   <script>
-    (function(){
+    (function initSegmentChart(){
       const el = document.getElementById("segmentGraph");
-      if (el && window.Chart) {
-        // Placeholder: simple dataset; you'll replace with real series later
-        new Chart(el, {
-          type: 'line',
-          data: {
-            labels: [{% for s in subsegments %}'{{ s.position|default:forloop.counter }}'{% if not forloop.last %}, {% endif %}{% endfor %}],
-            datasets: [{
-              label: 'Avg speed (km/h)',
-              data: [{% for s in subsegments %}{{ s.avg_speed|default:"0" }}{% if not forloop.last %}, {% endif %}{% endfor %}],
-              tension: 0.25,
-              fill: false
-            }]
-          },
-          options: { responsive: true, plugins: { legend: { display: false } } }
-        });
+      if (!el) return;
+      if (!window.Chart) {
+        window.addEventListener('load', initSegmentChart, { once: true });
+        return;
       }
+      const points = [
+        {% for s in subsegments %}
+        {
+          x: {{ s.position|default:forloop.counter }},
+          y: {{ s.avg_speed|default:"0"|floatformat:1 }},
+          label: "{{ s.code }}",
+          color: "#{{ s.status|canonical_color }}"
+        }{% if not forloop.last %},{% endif %}
+        {% endfor %}
+      ];
+      const totalPositions = points.length || 0;
+      const speeds = points.map(p => p.y);
+      const minSpeed = speeds.length ? Math.min(...speeds) : 0;
+      const maxSpeed = speeds.length ? Math.max(...speeds) : 1;
+      const speedRange = maxSpeed - minSpeed;
+      const padding = speedRange > 0 ? speedRange * 0.1 : 5;
+      const yMin = Math.max(0, minSpeed - padding);
+      const yMax = maxSpeed + padding;
+      new Chart(el, {
+        type: 'line',
+        data: {
+          datasets: [{
+            label: 'Subsegment speed',
+            data: points,
+            parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+            fill: false,
+            borderColor: '#000',
+            borderWidth: 1,
+            tension: 0.35,
+            pointBackgroundColor: points.map(p => p.color),
+            pointBorderColor: points.map(p => p.color),
+            pointRadius: 5,
+            pointHoverRadius: 6,
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(ctx) {
+                  const item = ctx.raw || {};
+                  const code = item.label ? ` (${item.label})` : '';
+                  return `Speed${code}: ${ctx.parsed.y.toFixed(1)} km/h at position ${ctx.parsed.x}`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              type: 'linear',
+              title: { display: true, text: 'Position' },
+              ticks: { precision: 0, stepSize: 1 },
+              min: 0,
+              max: totalPositions > 0 ? totalPositions : 1
+            },
+            y: {
+              title: { display: true, text: 'Speed (km/h)' },
+              ticks: { precision: 1 },
+              min: yMin,
+              max: yMax
+            }
+          }
+        }
+      });
     })();
   </script>
   {% endif %}

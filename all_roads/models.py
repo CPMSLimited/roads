@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 
@@ -78,10 +80,10 @@ class SubSegment(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(25)],
         help_text="Order of this sub-segment within its parent segment (1–25)."
     )
-    start_lat = models.DecimalField(max_digits=9, decimal_places=5, default=0.00)
-    start_lon = models.DecimalField(max_digits=9, decimal_places=5, default=0.00)
-    end_lat   = models.DecimalField(max_digits=9, decimal_places=5, default=0.00)
-    end_lon   = models.DecimalField(max_digits=9, decimal_places=5, default=0.00)
+    start_lat = models.DecimalField(max_digits=18, decimal_places=16, default=0.00)
+    start_lon = models.DecimalField(max_digits=18, decimal_places=16, default=0.00)
+    end_lat   = models.DecimalField(max_digits=18, decimal_places=16, default=0.00)
+    end_lon   = models.DecimalField(max_digits=18, decimal_places=16, default=0.00)
     distance    = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
     travel_time = models.IntegerField(default=0)  # seconds
     avg_speed   = models.DecimalField(max_digits=4, decimal_places=1, default=0.0)
@@ -114,6 +116,7 @@ class SubSegment(models.Model):
         return self.code or f"{self.segment.code}-{self.position:02d}"
 
     def save(self, *args, **kwargs):
+        self._trim_coordinate_fields()
         if not self.code and self.segment_id and self.position:
             self.code = f"{self.segment.code}-{self.position:02d}"
         super().save(*args, **kwargs)
@@ -122,3 +125,28 @@ class SubSegment(models.Model):
     def route(self):
         """Convenience: a sub-segment's route is the parent's route."""
         return self.segment.route
+
+    def _trim_coordinate_fields(self):
+        """
+        Remove trailing zeros from the coordinate decimals before saving
+        so that their string representation stays compact.
+        """
+        for field_name in ("start_lat", "start_lon", "end_lat", "end_lon"):
+            value = getattr(self, field_name)
+            if value is None:
+                continue
+            normalized = self._trim_decimal(value)
+            setattr(self, field_name, normalized)
+
+    @staticmethod
+    def _trim_decimal(value):
+        """
+        Convert Decimal to a normalized representation without trailing zeros.
+        """
+        value = Decimal(value)
+        as_str = format(value, "f")
+        if "." in as_str:
+            as_str = as_str.rstrip("0").rstrip(".")
+        if as_str in {"", "-", "-0"}:
+            as_str = "0"
+        return Decimal(as_str)

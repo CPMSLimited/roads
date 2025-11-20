@@ -6,9 +6,9 @@ from decouple import config
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 SECRET_KEY = config('SECRET_KEY', default='change-me')
-DEBUG = False  # overridden per-environment
+# DEBUG = False  # overridden per-environment
 
-ALLOWED_HOSTS = []  # overridden per-environment
+# ALLOWED_HOSTS = []  # overridden per-environment
 
 INSTALLED_APPS = [
     'django.contrib.admin',

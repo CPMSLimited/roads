@@ -63,6 +63,7 @@ body{
   box-shadow:var(--shadow);
 }
 .panel-title{margin:0 0 8px; font-size:13px; font-weight:700; color:var(--text)}
+.panel-subtitle{margin:0 0 12px; font-size:12px; color:var(--text-muted)}
 .filters{display:flex; gap:10px 12px; align-items:center; flex-wrap:wrap}
 .filters.grid-2{
   display:grid; gap:8px 12px; align-items:center;
