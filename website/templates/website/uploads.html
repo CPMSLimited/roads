@@ -1,10 +1,17 @@
 {% extends "website/base.html" %}
 {% block content %}
 <section class="page uploads">
-  <h1>Uploads</h1>
+  <header class="page-header">
+    <div>
+      <h1>Uploads</h1>
+      <p class="page-subtitle">Manage segment and sub-segment data from spreadsheets.</p>
+    </div>
+    <a href="{% url 'landing' %}" class="btn secondary">Back to home page</a>
+  </header>
 
   <form method="post" enctype="multipart/form-data" class="upload-form">
     {% csrf_token %}
+    <input type="hidden" name="form_type" value="segments">
     {{ form.non_field_errors }}
 
     <div class="field">
@@ -18,7 +25,9 @@
       </label>
     </div>
 
-    <button type="submit" class="btn primary">Upload new segments</button>
+    <div class="form-actions">
+      <button type="submit" class="btn primary">Upload new segments</button>
+    </div>
   </form>
 
   {% if result %}
@@ -36,12 +45,302 @@
       {% endif %}
     </div>
   {% endif %}
+
+  <section class="subsegment-upload card">
+    <div class="card-header">
+      <div>
+        <h2>Upload sub-segments</h2>
+        <p>Select the rows you need and attach the supporting sheet.</p>
+      </div>
+      <a href="{% url 'road_analysis' %}" class="btn tertiary">View in Road Analysis</a>
+    </div>
+    <form method="post" enctype="multipart/form-data" class="upload-form">
+      {% csrf_token %}
+      <input type="hidden" name="form_type" value="subsegments">
+      {{ sub_form.non_field_errors }}
+      <div class="field">
+        <label for="segment_input" class="panel-title">Select segment</label>
+        <div class="segment-wrap">
+          <input
+            id="segment_input"
+            name="segment"
+            type="text"
+            placeholder="Type a segment code…"
+            value="{{ sub_form.segment.value|default_if_none:'' }}"
+            autocomplete="off"
+          />
+          <div id="segment_suggestions" class="suggestions" hidden></div>
+        </div>
+        {% if sub_form.segment.errors %}
+        <ul class="errors">
+          {% for error in sub_form.segment.errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        <div id="segment_loading" class="loading-banner" role="status" aria-live="polite" hidden>
+          Uploading sub-segments…
+        </div>
+      </div>
+
+      <div class="field row-range">
+        <label>Row range</label>
+        <div class="row-range-inputs">
+          <div>
+            <input
+              id="start_row"
+              name="start_row"
+              type="number"
+              min="2"
+              step="1"
+              placeholder="Start row"
+              value="{{ sub_form.start_row.value|default_if_none:'' }}"
+            />
+            <small>First row (e.g. 2)</small>
+            {% if sub_form.start_row.errors %}
+            <ul class="errors">
+              {% for error in sub_form.start_row.errors %}
+                <li>{{ error }}</li>
+              {% endfor %}
+            </ul>
+            {% endif %}
+          </div>
+          <span class="range-separator">to</span>
+          <div>
+            <input
+              id="end_row"
+              name="end_row"
+              type="number"
+              min="2"
+              step="1"
+              placeholder="End row"
+              value="{{ sub_form.end_row.value|default_if_none:'' }}"
+            />
+            <small>Last row (max 25 rows total)</small>
+            {% if sub_form.end_row.errors %}
+            <ul class="errors">
+              {% for error in sub_form.end_row.errors %}
+                <li>{{ error }}</li>
+              {% endfor %}
+            </ul>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="segment_code_file">Segment Code</label>
+        <input
+          id="segment_code_file"
+          name="segment_code_file"
+          type="file"
+          accept=".csv,.xls,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        />
+        <small>Accepted: .csv, .xlsx, .xls</small>
+        {% if sub_form.segment_code_file.errors %}
+        <ul class="errors">
+          {% for error in sub_form.segment_code_file.errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn primary">Upload sub-segments</button>
+      </div>
+    </form>
+
+    {% if sub_result %}
+      <div class="result">
+        <p>Uploaded: {{ sub_result.created }} | Replaced: {{ sub_result.replaced }} | Errors: {{ sub_result.errors|length }}</p>
+        {% if sub_result.errors %}
+        <details>
+          <summary>View errors</summary>
+          <ul>
+            {% for e in sub_result.errors %}
+              <li>{{ e }}</li>
+            {% endfor %}
+          </ul>
+        </details>
+        {% endif %}
+      </div>
+    {% endif %}
+  </section>
+
   <h1>Run updates</h1>
   <form method="post" action="{% url 'queue_refresh' %}">
     {% csrf_token %}
     <button type="submit">Run updates</button>
   </form>
 
+  <script>
+    (function initSegmentTypeahead() {
+      const section = document.querySelector('.subsegment-upload');
+      if (!section) return;
+
+      const form = section.querySelector('form');
+      const segInput = section.querySelector('#segment_input');
+      const segBox = section.querySelector('#segment_suggestions');
+      const segLoading = section.querySelector('#segment_loading');
+      let segTimer = null;
+
+      function renderSuggestions(items) {
+        if (!items.length) {
+          segBox.hidden = true;
+          segBox.innerHTML = '';
+          return;
+        }
+        segBox.innerHTML = items.map(code =>
+          `<button type="button" data-code="${code}">${code}</button>`
+        ).join('');
+        segBox.hidden = false;
+        segBox.style.minWidth = segInput.offsetWidth + 'px';
+      }
+
+      function segDebounce(fn, wait) {
+        return function(...args) {
+          clearTimeout(segTimer);
+          segTimer = setTimeout(() => fn.apply(this, args), wait);
+        };
+      }
+
+      async function searchCodes(q) {
+        const origin = window.location.origin || window.location.href;
+        const url = new URL('{% url "segment_code_search" %}', origin);
+        url.searchParams.set('q', q);
+        const resp = await fetch(url.toString(), {
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        if (!resp.ok) return [];
+        const data = await resp.json();
+        return data.results || [];
+      }
+
+      segInput && segInput.addEventListener('input', segDebounce(async function() {
+        const q = this.value.trim();
+        if (q.length < 2) {
+          renderSuggestions([]);
+          return;
+        }
+        const results = await searchCodes(q);
+        renderSuggestions(results);
+      }, 200));
+
+      segBox && segBox.addEventListener('click', (event) => {
+        const btn = event.target.closest('button[data-code]');
+        if (!btn) return;
+        segInput.value = btn.dataset.code;
+        segBox.hidden = true;
+      });
+
+      segInput && segInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          segBox.hidden = true;
+          segBox.innerHTML = '';
+        }
+      });
+
+      document.addEventListener('click', (event) => {
+        if (!segBox.contains(event.target) && event.target !== segInput) {
+          segBox.hidden = true;
+        }
+      });
+
+      form && form.addEventListener('submit', () => {
+        if (segLoading) segLoading.hidden = false;
+      });
+    })();
+  </script>
 
 </section>
 {% endblock %}
+  <style>
+    .page.uploads {
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+    .page-header .page-subtitle {
+      margin: 0;
+      color: #6b7280;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .card-header h2,
+    .card-header p {
+      margin: 0;
+    }
+    .upload-form {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .field label {
+      font-weight: 600;
+    }
+    .row-range-inputs {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .row-range-inputs input {
+      width: 140px;
+    }
+    .range-separator {
+      font-weight: 600;
+      color: #6b7280;
+      align-self: center;
+    }
+    .form-actions {
+      display: flex;
+      justify-content: flex-end;
+    }
+    .result {
+      margin-top: 1rem;
+      padding: 1rem;
+      border-radius: 8px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+    }
+    .result details {
+      margin-top: 0.5rem;
+    }
+    @media (max-width: 640px) {
+      .card-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .form-actions {
+        width: 100%;
+      }
+      .form-actions button {
+        width: 100%;
+      }
+    }
+  </style>

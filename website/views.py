@@ -12,7 +12,7 @@ from django.db.models import Sum, Count, Q, IntegerField, Max
 from django.db.models.functions import Cast
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
-from .forms import UploadSegmentsForm
+from .forms import UploadSegmentsForm, UploadSubSegmentsForm
 import csv
 import io
 
@@ -233,6 +233,8 @@ REQUIRED_HEADERS = [
     "START_LAT", "START_LON", "END_LAT", "END_LON"
 ]
 
+SUBSEG_REQUIRED_HEADERS = ["X_START", "Y_START", "X_END", "Y_END"]
+
 def _to_decimal(s, field_name, rownum, errors):
     try:
         if s is None or s == "":
@@ -367,106 +369,292 @@ def _read_rows(fileobj, filename):
     else:
         return [], [f"Unsupported file type: {filename}"]
 
+def _read_subsegment_rows(fileobj, filename):
+    """
+    Extract the coordinate columns needed for sub-segment uploads.
+    """
+    name = (filename or "").lower()
+    required_norm = _normalize_headers(SUBSEG_REQUIRED_HEADERS)
+    norm_to_canon = dict(zip(required_norm, SUBSEG_REQUIRED_HEADERS))
+
+    def _build_from_rows(rows):
+        if not rows:
+            return [], ["The spreadsheet is empty."]
+        headers = _normalize_headers(rows[0])
+        idx = {norm_to_canon[h]: headers.index(h) for h in required_norm if h in headers}
+        missing = [norm_to_canon[h] for h in required_norm if h not in headers]
+        if missing:
+            missing_titles = ", ".join(missing).lower()
+            return [], [f"Missing column headers: {missing_titles}."]
+        out = []
+        for i, r in enumerate(rows[1:], start=2):
+            if _is_blank_row(r):
+                continue
+            def cell(h):
+                j = idx[h]
+                return r[j] if j < len(r or []) else ""
+            out.append({
+                "X_START": cell("X_START"),
+                "Y_START": cell("Y_START"),
+                "X_END": cell("X_END"),
+                "Y_END": cell("Y_END"),
+                "_rownum": i,
+            })
+        return out, []
+
+    if name.endswith(".csv"):
+        fileobj.seek(0)
+        data = fileobj.read().decode("utf-8", errors="ignore")
+        rows = list(csv.reader(io.StringIO(data)))
+        return _build_from_rows(rows)
+    elif name.endswith(".xlsx"):
+        if openpyxl is None:
+            return [], ["Excel support is unavailable on this server (.xlsx)."]
+        fileobj.seek(0)
+        wb = openpyxl.load_workbook(fileobj, data_only=True)
+        ws = wb.active
+        rows = [[cell for cell in row] for row in ws.iter_rows(values_only=True)]
+        return _build_from_rows(rows)
+    elif name.endswith(".xls"):
+        if xlrd is None:
+            return [], ["Excel support is unavailable on this server (.xls)."]
+        fileobj.seek(0)
+        book = xlrd.open_workbook(file_contents=fileobj.read())
+        sheet = book.sheet_by_index(0)
+        rows = [sheet.row_values(i) for i in range(sheet.nrows)]
+        return _build_from_rows(rows)
+    elif name.endswith(".numbers"):
+        return [], ["Apple Numbers files must be exported to CSV or Excel before uploading."]
+    else:
+        return [], [f"Unsupported file type: {filename}"]
+
+def _process_subsegment_upload(segment_code, start_row, end_row, fileobj):
+    errors = []
+    seg_code = (segment_code or "").strip()
+    if not seg_code:
+        return {"created": 0, "replaced": 0, "errors": ["Please select a segment."]}
+
+    try:
+        segment_obj = Segment.objects.get(code__iexact=seg_code)
+    except Segment.DoesNotExist:
+        return {
+            "created": 0,
+            "replaced": 0,
+            "errors": [f"The segment “{seg_code}” was not found. Please check the code and try again."]
+        }
+
+    rows, header_errors = _read_subsegment_rows(fileobj, fileobj.name)
+    if header_errors:
+        return {"created": 0, "replaced": 0, "errors": header_errors}
+
+    if not rows:
+        return {"created": 0, "replaced": 0, "errors": ["No sub-segments were found in the spreadsheet."]}
+
+    row_lookup = {row["_rownum"]: row for row in rows}
+    selected_rows = []
+    missing_rows = []
+    for row_num in range(start_row, end_row + 1):
+        data = row_lookup.get(row_num)
+        if data:
+            selected_rows.append(data)
+        else:
+            missing_rows.append(row_num)
+
+    if missing_rows:
+        pretty_rows = ", ".join(str(num) for num in missing_rows)
+        return {
+            "created": 0,
+            "replaced": 0,
+            "errors": [f"Rows {pretty_rows} have no data. Update the sheet or adjust the range."]
+        }
+
+    cleaned_rows = []
+    for row in selected_rows:
+        rownum = row.get("_rownum")
+        coord_errors_before = len(errors)
+        start_lon = _to_decimal(row["X_START"], "x_start", rownum, errors)
+        start_lat = _to_decimal(row["Y_START"], "y_start", rownum, errors)
+        end_lon   = _to_decimal(row["X_END"], "x_end", rownum, errors)
+        end_lat   = _to_decimal(row["Y_END"], "y_end", rownum, errors)
+        has_new_error = len(errors) > coord_errors_before
+
+        coord_bad = False
+        if not _in_lon_range(start_lon):
+            errors.append(f"Row {rownum}: x_start must be between -180 and 180.")
+            coord_bad = True
+        if not _in_lat_range(start_lat):
+            errors.append(f"Row {rownum}: y_start must be between -90 and 90.")
+            coord_bad = True
+        if not _in_lon_range(end_lon):
+            errors.append(f"Row {rownum}: x_end must be between -180 and 180.")
+            coord_bad = True
+        if not _in_lat_range(end_lat):
+            errors.append(f"Row {rownum}: y_end must be between -90 and 90.")
+            coord_bad = True
+
+        if has_new_error or coord_bad:
+            continue
+
+        cleaned_rows.append({
+            "start_lat": start_lat,
+            "start_lon": start_lon,
+            "end_lat": end_lat,
+            "end_lon": end_lon,
+            "_rownum": rownum,
+        })
+
+    if errors:
+        return {"created": 0, "replaced": 0, "errors": errors}
+
+    with transaction.atomic():
+        replaced = SubSegment.objects.filter(segment=segment_obj).count()
+        SubSegment.objects.filter(segment=segment_obj).delete()
+        objs = []
+        for position, payload in enumerate(cleaned_rows, start=1):
+            objs.append(SubSegment(
+                segment=segment_obj,
+                position=position,
+                code=f"{segment_obj.code}-{position:02d}",
+                start_lat=payload["start_lat"],
+                start_lon=payload["start_lon"],
+                end_lat=payload["end_lat"],
+                end_lon=payload["end_lon"],
+            ))
+        SubSegment.objects.bulk_create(objs)
+
+    return {"created": len(cleaned_rows), "replaced": replaced, "errors": []}
+
 def uploads(request):
     result = None
+    sub_result = None
+
     if request.method == "POST":
-        form = UploadSegmentsForm(request.POST, request.FILES)
-        if form.is_valid():
-            f = form.cleaned_data["segment_file"]
-            auto_index = form.cleaned_data.get("auto_index", False)
-
-            rows, header_errors = _read_rows(f, f.name)
-            if header_errors:
-                result = {"created": 0, "updated": 0, "skipped": 0, "errors": header_errors}
+        form_type = request.POST.get("form_type")
+        if form_type == "subsegments":
+            form = UploadSegmentsForm()
+            sub_form = UploadSubSegmentsForm(request.POST, request.FILES)
+            if sub_form.is_valid():
+                sub_result = _process_subsegment_upload(
+                    sub_form.cleaned_data["segment"],
+                    sub_form.cleaned_data["start_row"],
+                    sub_form.cleaned_data["end_row"],
+                    sub_form.cleaned_data["segment_code_file"],
+                )
             else:
-                created = updated = skipped = 0
-                errors = []
-
-                # Index cache primed once for the whole file
-                route_index_cache = _prime_route_max_index() if auto_index else {}
-
-                with transaction.atomic():
-                    for row in rows:
-                        route_code = str(row["ROUTE"] or "").strip().upper()
-                        seg_code   = str(row["SEGMENT CODE"] or "").strip().upper()
-                        state      = str(row["STATE"] or "").strip()
-                        name       = str(row["SEGMENT NAME"] or "").strip()
-                        rnum       = row.get("_rownum", "?")
-
-                        if not route_code or not seg_code:
-                            skipped += 1
-                            errors.append(f"Row {rnum}: missing ROUTE or SEGMENT CODE.")
-                            continue
-
-                        # Convert to Decimal
-                        start_lat = _to_decimal(row["START_LAT"], "START_LAT", rnum, errors)
-                        start_lon = _to_decimal(row["START_LON"], "START_LON", rnum, errors)
-                        end_lat   = _to_decimal(row["END_LAT"], "END_LAT", rnum, errors)
-                        end_lon   = _to_decimal(row["END_LON"], "END_LON", rnum, errors)
-
-                        # Enforce coordinate ranges
-                        coord_bad = False
-                        if not _in_lat_range(start_lat):
-                            errors.append(f"Row {rnum}: START_LAT out of range [-90, 90].")
-                            coord_bad = True
-                        if not _in_lon_range(start_lon):
-                            errors.append(f"Row {rnum}: START_LON out of range [-180, 180].")
-                            coord_bad = True
-                        if not _in_lat_range(end_lat):
-                            errors.append(f"Row {rnum}: END_LAT out of range [-90, 90].")
-                            coord_bad = True
-                        if not _in_lon_range(end_lon):
-                            errors.append(f"Row {rnum}: END_LON out of range [-180, 180].")
-                            coord_bad = True
-
-                        if coord_bad:
-                            skipped += 1
-                            continue
-                        
-                        # Ensure Road/Route mapping (F* -> 'F'; A*/E* -> 'A')
-                        road_code = _road_code_from_route(route_code)
-                        road_obj, _ = Road.objects.get_or_create(road=road_code)
-
-                        route_obj, created_route = Route.objects.get_or_create(
-                            route=route_code,
-                            defaults={"road": road_obj, "index": ""},
-                        )
-
-                        if not created_route and route_obj.road_id != road_obj.id:
-                            route_obj.road = road_obj
-                            route_obj.save(update_fields=["road"])
-
-                        defaults = {
-                            "route": route_obj,
-                            "name": name,
-                            "state": state,
-                            "start_lat": start_lat,
-                            "start_lon": start_lon,
-                            "end_lat": end_lat,
-                            "end_lon": end_lon,
-                            "error_processing": False,
-                        }
-
-                        obj, was_created = Segment.objects.update_or_create(
-                            code=seg_code,
-                            defaults=defaults,
-                        )
-
-                        if was_created:
-                            if auto_index and not obj.index:
-                                obj.index = _next_index_for_route(route_obj, route_index_cache)
-                                obj.save(update_fields=["index"])
-                            created += 1
-                        else:
-                            updated += 1
-
-                result = {"created": created, "updated": updated, "skipped": skipped, "errors": errors}
+                flat_errors = []
+                for field_errors in sub_form.errors.values():
+                    flat_errors.extend(field_errors)
+                sub_result = {
+                    "created": 0,
+                    "replaced": 0,
+                    "errors": flat_errors,
+                }
         else:
-            result = {"created": 0, "updated": 0, "skipped": 0, "errors": ["Invalid form submission."]}
+            sub_form = UploadSubSegmentsForm()
+            form = UploadSegmentsForm(request.POST, request.FILES)
+            if form.is_valid():
+                f = form.cleaned_data["segment_file"]
+                auto_index = form.cleaned_data.get("auto_index", False)
+
+                rows, header_errors = _read_rows(f, f.name)
+                if header_errors:
+                    result = {"created": 0, "updated": 0, "skipped": 0, "errors": header_errors}
+                else:
+                    created = updated = skipped = 0
+                    errors = []
+
+                    # Index cache primed once for the whole file
+                    route_index_cache = _prime_route_max_index() if auto_index else {}
+
+                    with transaction.atomic():
+                        for row in rows:
+                            route_code = str(row["ROUTE"] or "").strip().upper()
+                            seg_code   = str(row["SEGMENT CODE"] or "").strip().upper()
+                            state      = str(row["STATE"] or "").strip()
+                            name       = str(row["SEGMENT NAME"] or "").strip()
+                            rnum       = row.get("_rownum", "?")
+
+                            if not route_code or not seg_code:
+                                skipped += 1
+                                errors.append(f"Row {rnum}: missing ROUTE or SEGMENT CODE.")
+                                continue
+
+                            # Convert to Decimal
+                            start_lat = _to_decimal(row["START_LAT"], "START_LAT", rnum, errors)
+                            start_lon = _to_decimal(row["START_LON"], "START_LON", rnum, errors)
+                            end_lat   = _to_decimal(row["END_LAT"], "END_LAT", rnum, errors)
+                            end_lon   = _to_decimal(row["END_LON"], "END_LON", rnum, errors)
+
+                            # Enforce coordinate ranges
+                            coord_bad = False
+                            if not _in_lat_range(start_lat):
+                                errors.append(f"Row {rnum}: START_LAT out of range [-90, 90].")
+                                coord_bad = True
+                            if not _in_lon_range(start_lon):
+                                errors.append(f"Row {rnum}: START_LON out of range [-180, 180].")
+                                coord_bad = True
+                            if not _in_lat_range(end_lat):
+                                errors.append(f"Row {rnum}: END_LAT out of range [-90, 90].")
+                                coord_bad = True
+                            if not _in_lon_range(end_lon):
+                                errors.append(f"Row {rnum}: END_LON out of range [-180, 180].")
+                                coord_bad = True
+
+                            if coord_bad:
+                                skipped += 1
+                                continue
+                            
+                            # Ensure Road/Route mapping (F* -> 'F'; A*/E* -> 'A')
+                            road_code = _road_code_from_route(route_code)
+                            road_obj, _ = Road.objects.get_or_create(road=road_code)
+
+                            route_obj, created_route = Route.objects.get_or_create(
+                                route=route_code,
+                                defaults={"road": road_obj, "index": ""},
+                            )
+
+                            if not created_route and route_obj.road_id != road_obj.id:
+                                route_obj.road = road_obj
+                                route_obj.save(update_fields=["road"])
+
+                            defaults = {
+                                "route": route_obj,
+                                "name": name,
+                                "state": state,
+                                "start_lat": start_lat,
+                                "start_lon": start_lon,
+                                "end_lat": end_lat,
+                                "end_lon": end_lon,
+                                "error_processing": False,
+                            }
+
+                            obj, was_created = Segment.objects.update_or_create(
+                                code=seg_code,
+                                defaults=defaults,
+                            )
+
+                            if was_created:
+                                if auto_index and not obj.index:
+                                    obj.index = _next_index_for_route(route_obj, route_index_cache)
+                                    obj.save(update_fields=["index"])
+                                created += 1
+                            else:
+                                updated += 1
+
+                    result = {"created": created, "updated": updated, "skipped": skipped, "errors": errors}
+            else:
+                result = {"created": 0, "updated": 0, "skipped": 0, "errors": ["Invalid form submission."]}
     else:
         form = UploadSegmentsForm()
+        sub_form = UploadSubSegmentsForm()
 
-    return render(request, "website/uploads.html", {"form": form, "result": result})
+    context = {
+        "form": form,
+        "result": result,
+        "sub_form": sub_form,
+        "sub_result": sub_result,
+    }
+    return render(request, "website/uploads.html", context)
 
 def segment_code_search(request):
     """

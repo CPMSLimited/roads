@@ -16,7 +16,24 @@
     z-index: 2;
   }
 </style>
+<style>
+  .road-analysis .page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+  .road-analysis .page-header h1 {
+    margin: 0;
+  }
+</style>
 <section class="page road-analysis">
+  <div class="page-header">
+    <h1>Road analysis</h1>
+    <a href="{% url 'landing' %}" class="btn secondary">Back to home page</a>
+  </div>
 
   <div class="top-split">
     <!-- LEFT: three rows -->
