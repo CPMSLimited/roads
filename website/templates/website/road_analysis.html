@@ -68,9 +68,11 @@
           <select id="state_select" name="state" form="filtersForm">
             <option value="">-- All states --</option>
             {% for s in states %}
-              <option value="{{ s }}" {% if s == selected_state %}selected{% endif %}>
-                {{ s }}
-              </option>
+              {% ifchanged s %}
+                <option value="{{ s }}" {% if s == selected_state %}selected{% endif %}>
+                  {{ s }}
+                </option>
+              {% endifchanged %}
             {% endfor %}
           </select>
 
