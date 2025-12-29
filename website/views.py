@@ -9,7 +9,7 @@ from decimal import Decimal, InvalidOperation
 from django.core.paginator import Paginator
 from django.db import models, transaction
 from django.db.models import Sum, Count, Q, IntegerField, Max
-from django.db.models.functions import Cast
+from django.db.models.functions import Cast, Trim, Upper
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from .forms import UploadSegmentsForm, UploadSubSegmentsForm
@@ -60,7 +60,9 @@ def road_analysis(request):
 
     # Query params
     selected_route   = request.GET.get("route") or ""
-    selected_state   = request.GET.get("state") or ""
+    selected_state   = (request.GET.get("state") or "").strip()
+    if selected_state:
+        selected_state = selected_state.upper()
     selected_segment = (request.GET.get("segment") or "").strip()
     show_all         = request.GET.get("show") == "all"
 
@@ -73,7 +75,7 @@ def road_analysis(request):
         qs = qs.filter(route__route=selected_route)
     elif selected_state:
         selected_route = ""
-        qs = qs.filter(state=selected_state)
+        qs = qs.annotate(_normalized_state=Upper(Trim("state"))).filter(_normalized_state=selected_state)
 
     # Are we viewing subsegments for a specific segment code?
     is_subsegment_view = False
@@ -106,9 +108,11 @@ def road_analysis(request):
     # Options for selects
     routes = Route.objects.only("route").order_by("route")
     states = (
-        Segment.objects.exclude(state="")
-        .order_by("state")
-        .values_list("state", flat=True)
+        Segment.objects.filter(state__isnull=False)
+        .annotate(normalized_state=Upper(Trim("state")))
+        .filter(~Q(normalized_state=""))
+        .order_by("normalized_state")
+        .values_list("normalized_state", flat=True)
         .distinct()
     )
 
