@@ -1,10 +1,67 @@
 {% extends "website/base.html" %}
 {% block content %}
-<section class="landing">
-    <h1>Welcome to FERMA</h1>
-    <div class="buttons">
-        <a href="{% url 'road_analysis' %}" class="btn">Road Analysis</a>
-        <a href="{% url 'uploads' %}" class="btn">Uploads</a>
+<section class="landing-hero">
+    <div class="hero-copy">
+        <span class="hero-pill">FERMA Staff and Management</span>
+        <h1>Data-Driven Solutions for Safer Nigerian Roads</h1>
+        <p>
+            FERMA's smart road management platform tracks road conditions in real time,
+            enabling proactive maintenance and safer travel.
+        </p>
+        <a href="{% url 'road_inventory' %}" class="btn btn-solid">View Road Inventory</a>
     </div>
 </section>
+
+<section class="landing-section">
+    <h2>Manage road assets.</h2>
+    <p class="section-subtitle">Our platform prioritizes road efficiency and timely monitoring.</p>
+    <div class="feature-grid">
+        <article class="feature-card">
+            <h3>Comprehensive Road Inventory</h3>
+            <p>Access detailed data on road conditions, surface quality, and infrastructure.</p>
+        </article>
+        <article class="feature-card">
+            <h3>Real-Time Motorability Reports</h3>
+            <p>Monitor travel safety and accessibility with up-to-date condition assessments.</p>
+        </article>
+        <article class="feature-card">
+            <h3>Predictive Maintenance Planning</h3>
+            <p>Prioritize repairs using analytics to maximize budget efficiency and road lifespan.</p>
+        </article>
+    </div>
+</section>
+
+<section class="landing-section statement">
+    <p>
+        Our road management solutions include real-time monitoring of road conditions, with a
+        focus on identifying maintenance needs before deterioration. We deliver practical insight
+        for efficient maintenance by tracking inventory and motorability continuously.
+    </p>
+</section>
+
+<section class="landing-section offer">
+    <div class="offer-text">
+        <h2>What we offer</h2>
+        <ul>
+            <li>Preventive maintenance that catches issues early.</li>
+            <li>Efficient resource allocation based on live condition data.</li>
+            <li>Data-driven planning for targeted interventions.</li>
+        </ul>
+    </div>
+    <div class="offer-image" aria-hidden="true"></div>
+</section>
+
+<section class="landing-cta">
+    <div>
+        <h2>Increase efficiency and enhance safety through preventive road maintenance.</h2>
+        <p>Over 100 roads currently rehabilitated and 100+ roads under maintenance.</p>
+    </div>
+    <a href="{% url 'road_motorability' %}" class="btn btn-light">Visit FERMA</a>
+</section>
+
+<footer class="site-footer">
+    <span>&copy; 2026 Federal Roads Maintenance Agency</span>
+    <span>Terms of Service</span>
+    <span>Privacy Policy</span>
+</footer>
 {% endblock %}

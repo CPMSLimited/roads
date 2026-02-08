@@ -3,16 +3,25 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CPMS Ferma</title>
     <link rel="stylesheet" href="{% static 'website/css/style.css' %}">
 </head>
-<body>
-<header class="site-header">
-    <a href="{% url 'landing' %}">
-        <!-- <img src="{% static 'website/img/logo.png' %}" alt="FERMA Logo" class="logo"> -->
+<body class="{% block body_class %}{% endblock %}">
+<header class="top-nav">
+    <a href="{% url 'landing' %}" class="brand-mark" aria-label="FERMA home">
+        <span class="brand-mark-ring">FR</span>
     </a>
+    <nav class="main-nav" aria-label="Primary navigation">
+        <a href="{% url 'landing' %}" class="{% if active_page == 'home' %}is-active{% endif %}">Home</a>
+        <a href="{% url 'road_inventory' %}" class="{% if active_page == 'inventory' %}is-active{% endif %}">Road Inventory</a>
+        <a href="{% url 'road_motorability' %}" class="{% if active_page == 'motorability' %}is-active{% endif %}">Road Motorability</a>
+        <a href="{% url 'road_condition' %}" class="{% if active_page == 'condition' %}is-active{% endif %}">Road Condition</a>
+        <a href="{% url 'library' %}" class="{% if active_page == 'library' %}is-active{% endif %}">Library</a>
+    </nav>
+    <a href="{% url 'uploads' %}" class="account-chip">AO.</a>
 </header>
-<main>
+<main class="main-content">
     {% block content %}{% endblock %}
 </main>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>

@@ -1,0 +1,80 @@
+{% extends "website/base.html" %}
+{% block body_class %}app-body{% endblock %}
+{% block content %}
+<section class="condition-page">
+    <div class="kpi-grid">
+        <article class="kpi-card"><span>Total length of road (km)</span><strong>{{ total_length }}</strong></article>
+        <article class="kpi-card"><span>Number of routes</span><strong>{{ total_segments }}</strong></article>
+        <article class="kpi-card"><span>Good</span><strong>{{ counts.good }}</strong></article>
+        <article class="kpi-card"><span>Tolerable</span><strong>{{ counts.tolerable }}</strong></article>
+        <article class="kpi-card"><span>Intolerable</span><strong>{{ counts.intolerable }}</strong></article>
+        <article class="kpi-card"><span>Failed</span><strong>{{ counts.failed }}</strong></article>
+    </div>
+
+    <div class="condition-grid">
+        <div class="condition-main">
+            <div class="panel-toolbar">
+                <form method="get" class="toolbar-filters">
+                    <select><option>All roads</option></select>
+                    <select><option>Select route</option></select>
+                    <select><option>Select speed</option></select>
+                </form>
+            </div>
+            <div class="map-placeholder" aria-label="Map placeholder">
+                <span>Nigerian road network map area</span>
+            </div>
+
+            <article class="table-card">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Route</th>
+                            <th>Segment Code</th>
+                            <th>Subsegment Code</th>
+                            <th>Northings</th>
+                            <th>Eastings</th>
+                            <th>Distance(km)</th>
+                            <th>Status (km/hr)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for seg in segments %}
+                        <tr>
+                            <td>{{ seg.route.route }}</td>
+                            <td>{{ seg.code }}</td>
+                            <td>{{ seg.code }}-01</td>
+                            <td>{{ seg.start_lat }}</td>
+                            <td>{{ seg.start_lon }}</td>
+                            <td>{{ seg.distance }}</td>
+                            <td><span class="speed-tag">{{ seg.avg_speed }} (km/hr)</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </article>
+        </div>
+
+        <aside class="condition-side">
+            <article class="table-card side-card">
+                <h2>Road Condition Analysis</h2>
+                <p>Flag defect locations for analysis.</p>
+                <input type="text" placeholder="Input segment code">
+                <a href="#" class="btn btn-solid">Run Analysis</a>
+            </article>
+
+            <article class="table-card side-card">
+                <header class="section-head"><h2>Active maintenance cycles</h2></header>
+                <ul class="cycle-list">
+                    {% for row in active_cycles %}
+                    <li>
+                        <h3>{{ row.code }}</h3>
+                        <p>Stage: Physical Inspection</p>
+                        <span class="status-chip status-progress">In Progress</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </article>
+        </aside>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends "website/base.html" %}
+{% block body_class %}app-body{% endblock %}
+{% block content %}
+<section class="app-shell">
+    <aside class="app-sidebar">
+        <nav class="sidebar-nav sidebar-nav-icons">
+            <a href="{% url 'road_motorability' %}">Overview</a>
+            <a class="is-active" href="{% url 'library' %}">Root Cause Analysis</a>
+            <a href="{% url 'road_inventory' %}">Physical Inspection</a>
+            <a href="{% url 'road_condition' %}">Solution design</a>
+        </nav>
+        <div class="sidebar-actions">
+            <a href="{% url 'uploads' %}" class="btn btn-outline">Update Route Info</a>
+            <a href="{% url 'road_condition' %}" class="btn btn-solid">Run Updates</a>
+        </div>
+    </aside>
+
+    <div class="empty-state-wrap">
+        <div class="kpi-grid">
+            <article class="kpi-card"><span>Total reports</span><strong>{{ report_count }}</strong></article>
+            <article class="kpi-card"><span>Ongoing</span><strong>0</strong></article>
+            <article class="kpi-card"><span>Completed</span><strong>0</strong></article>
+            <article class="kpi-card"><span>Create</span><strong>New Report</strong></article>
+        </div>
+
+        <article class="empty-state">
+            <h1>Your report folder is empty</h1>
+            <p>Create a new report and it will show up here.</p>
+            <a href="{% url 'road_condition' %}" class="btn btn-soft">Start A New Report</a>
+        </article>
+    </div>
+</section>
+{% endblock %}

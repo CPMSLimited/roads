@@ -1,0 +1,95 @@
+{% extends "website/base.html" %}
+{% block body_class %}app-body{% endblock %}
+{% block content %}
+<section class="app-shell">
+    <aside class="app-sidebar">
+        <div class="sidebar-search">
+            <input type="search" placeholder="Search" aria-label="Search">
+        </div>
+        <nav class="sidebar-nav">
+            <a class="is-active" href="{% url 'road_inventory' %}">Road inventory</a>
+            <a href="{% url 'road_motorability' %}">Reports</a>
+            <a href="{% url 'road_condition' %}">Technical Guide</a>
+            <a href="{% url 'library' %}">User Guide</a>
+        </nav>
+    </aside>
+
+    <div class="app-panel">
+        <div class="panel-toolbar">
+            <h1>All Routes ({{ total_segments }})</h1>
+            <form class="toolbar-filters" method="get">
+                <select name="route" aria-label="Filter route">
+                    <option value="">All roads</option>
+                    {% for r in routes %}
+                    <option value="{{ r.route }}" {% if selected_route == r.route %}selected{% endif %}>{{ r.route }}</option>
+                    {% endfor %}
+                </select>
+                <select name="state" aria-label="Filter state">
+                    <option value="">Select state</option>
+                    {% for state in states %}
+                    <option value="{{ state }}" {% if selected_state == state %}selected{% endif %}>{{ state }}</option>
+                    {% endfor %}
+                </select>
+                <button class="btn btn-outline" type="submit">Filter</button>
+            </form>
+        </div>
+
+        <div class="table-card">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Route</th>
+                        <th>Code</th>
+                        <th>Name</th>
+                        <th>State</th>
+                        <th>Start name</th>
+                        <th>Northings</th>
+                        <th>Eastings</th>
+                        <th>End name</th>
+                        <th>Northings 2</th>
+                        <th>Eastings 2</th>
+                        <th>Distance (km)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for seg in segments %}
+                    <tr>
+                        <td>{{ seg.route.route }}</td>
+                        <td>{{ seg.code }}</td>
+                        <td>{{ seg.name|default:'-' }}</td>
+                        <td>{{ seg.state|default:'-' }}</td>
+                        <td>{{ seg.start_point.name|default:'-' }}</td>
+                        <td>{{ seg.start_lat }}</td>
+                        <td>{{ seg.start_lon }}</td>
+                        <td>{{ seg.end_point.name|default:'-' }}</td>
+                        <td>{{ seg.end_lat }}</td>
+                        <td>{{ seg.end_lon }}</td>
+                        <td>{{ seg.distance }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="11" class="is-empty">No routes found for the selected filter.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if page_obj.paginator.num_pages > 1 %}
+        <nav class="pager" aria-label="Inventory pagination">
+            {% if page_obj.has_previous %}
+            <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
+            {% else %}
+            <span class="is-disabled">Previous</span>
+            {% endif %}
+            <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+            {% else %}
+            <span class="is-disabled">Next</span>
+            {% endif %}
+        </nav>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

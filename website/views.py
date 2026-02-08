@@ -31,7 +31,51 @@ PAGE_SIZE_DEFAULT = 25
 PAGE_SIZE_OPTIONS = [25, 50, 100]
 
 def landing(request):
-    return render(request, "website/landing.html")
+    return render(request, "website/landing.html", {"active_page": "home"})
+
+
+def _overview_metrics(qs):
+    agg = qs.aggregate(total_length=Sum("distance"), total_segments=Count("id"))
+    return {
+        "total_length": (agg["total_length"] or Decimal("0.00")).quantize(Decimal("0.01")),
+        "total_segments": agg["total_segments"] or 0,
+        "counts": {k: qs.filter(status__in=v["codes"]).count() for k, v in STATUS_BUCKETS.items()},
+    }
+
+
+def road_inventory(request):
+    return road_analysis(request)
+
+
+def road_motorability(request):
+    qs = Segment.objects.select_related("route").order_by("route__route", "code")
+    context = {
+        "active_page": "motorability",
+        "work_rows": list(qs[:6]),
+        "docs_rows": list(qs[:5]),
+        "literature_rows": list(qs[6:10]),
+        **_overview_metrics(qs),
+    }
+    return render(request, "website/road_motorability.html", context)
+
+
+def road_condition(request):
+    qs = Segment.objects.select_related("route").order_by("route__route", "code")
+    context = {
+        "active_page": "condition",
+        "segments": list(qs[:8]),
+        "active_cycles": list(qs[:3]),
+        **_overview_metrics(qs),
+    }
+    return render(request, "website/road_condition.html", context)
+
+
+def library(request):
+    return render(
+        request,
+        "website/library.html",
+        {"active_page": "library", "report_count": Segment.objects.count()},
+    )
 
 # def uploads(request):
 #     if request.method == "POST":
@@ -168,6 +212,7 @@ def road_analysis(request):
         # view mode
         "is_subsegment_view": is_subsegment_view,
         "parent_segment": parent_segment,
+        "active_page": "inventory",
     }
     return render(request, "website/road_analysis.html", context)
 
@@ -657,6 +702,7 @@ def uploads(request):
         "result": result,
         "sub_form": sub_form,
         "sub_result": sub_result,
+        "active_page": "uploads",
     }
     return render(request, "website/uploads.html", context)
 
