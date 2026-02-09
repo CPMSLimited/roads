@@ -6,7 +6,8 @@ BUCKETS = {
     "good":        {"codes": ["339933", "006600"],      "canonical": "339933"},
     "tolerable":   {"codes": ["00CC00", "FFFFCC"],      "canonical": "00CC00"},
     "intolerable": {"codes": ["FF9966", "FF5050"],      "canonical": "FF9966"},
-    "failed":      {"codes": ["FF0000", "666699"],      "canonical": "FF0000"},
+    "failed":      {"codes": ["FF0000"],                "canonical": "FF0000"},
+    "no_response": {"codes": ["666699"],                "canonical": "666699"},
 }
 
 # ------------ generic hex helpers ------------

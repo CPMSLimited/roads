@@ -2,7 +2,7 @@
 
 import logging
 
-from all_roads.models import Segment, Route, Road, SubSegment
+from all_roads.models import Segment, Route, Road, State, SubSegment
 from all_roads.services import refresh_segment_and_subsegments
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
@@ -23,7 +23,8 @@ STATUS_BUCKETS = {
     "good": {"codes": ["339933", "006600"]},         # Good (>=90 km/h)
     "tolerable": {"codes": ["00CC00", "FFFFCC"]},    # OK / Manageable
     "intolerable": {"codes": ["FF9966", "FF5050"]},  # Poor / Bad
-    "failed": {"codes": ["FF0000", "666699"]},       # Worsen / No response
+    "failed": {"codes": ["FF0000"]},                 # Failed
+    "no_response": {"codes": ["666699"]},            # Unknown / no response
 }
 
 # ---- Pagination options (Point 5) ----
@@ -43,31 +44,158 @@ def _overview_metrics(qs):
     }
 
 
+def _build_inventory_context(request, active_page="inventory"):
+    qs = Segment.objects.select_related("route", "start_point", "end_point").all()
+    current_view = request.GET.get("view") or "map"
+    selected_road = request.GET.get("road") or ""
+    selected_route = request.GET.get("route") or ""
+    selected_state = (request.GET.get("state") or "").strip()
+
+    # Keep one active filter at a time.
+    if selected_road:
+        selected_route = ""
+        selected_state = ""
+        qs = qs.filter(route__road__road=selected_road)
+    elif selected_route:
+        selected_road = ""
+        selected_state = ""
+        qs = qs.filter(route__route=selected_route)
+    elif selected_state:
+        selected_road = ""
+        selected_route = ""
+        qs = qs.filter(state__iexact=selected_state)
+
+    roads = Road.objects.only("road").order_by("road")
+    routes = Route.objects.only("route").order_by("route")
+    states = State.objects.only("state").order_by("state").values_list("state", flat=True)
+
+    paginator = Paginator(qs.order_by("route__route", "index", "code"), 50)
+    page_obj = paginator.get_page(request.GET.get("page") or 1)
+    filters = {}
+    if current_view:
+        filters["view"] = current_view
+    if selected_road:
+        filters["road"] = selected_road
+    if selected_route:
+        filters["route"] = selected_route
+    if selected_state:
+        filters["state"] = selected_state
+
+    metrics = _overview_metrics(qs)
+    all_rows = list(qs.order_by("route__route", "code")[:12])
+    focus_segment = all_rows[0] if all_rows else None
+    unique_route_count = qs.values("route_id").distinct().count()
+
+    return {
+        "active_page": active_page,
+        "segments": page_obj.object_list,
+        "page_obj": page_obj,
+        "roads": roads,
+        "routes": routes,
+        "states": list(states),
+        "selected_road": selected_road,
+        "selected_route": selected_route,
+        "selected_state": selected_state,
+        "current_view": current_view,
+        "filters_qs": urlencode(filters),
+        "number_routes": unique_route_count,
+        "segment_length_total": "----",
+        "focus_segment": focus_segment,
+        "report_rows": all_rows[:3],
+        **metrics,
+    }
+
+
 def road_inventory(request):
-    return road_analysis(request)
+    context = _build_inventory_context(request, active_page="inventory")
+    return render(request, "website/road_inventory.html", context)
 
 
-def road_motorability(request):
-    qs = Segment.objects.select_related("route").order_by("route__route", "code")
-    context = {
-        "active_page": "motorability",
-        "work_rows": list(qs[:6]),
-        "docs_rows": list(qs[:5]),
-        "literature_rows": list(qs[6:10]),
-        **_overview_metrics(qs),
+def _build_motorability_and_condition_context(request):
+    qs = Segment.objects.select_related("route", "start_point", "end_point").all()
+    current_view = request.GET.get("view") or "map"
+    selected_road = request.GET.get("road") or ""
+    selected_route = request.GET.get("route") or ""
+    selected_state = (request.GET.get("state") or "").strip()
+    selected_speed = (request.GET.get("speed") or "").strip().lower()
+
+    # Keep one active filter at a time.
+    if selected_road:
+        selected_route = ""
+        selected_state = ""
+        selected_speed = ""
+        qs = qs.filter(route__road__road=selected_road)
+    elif selected_route:
+        selected_road = ""
+        selected_state = ""
+        selected_speed = ""
+        qs = qs.filter(route__route=selected_route)
+    elif selected_state:
+        selected_road = ""
+        selected_route = ""
+        selected_speed = ""
+        qs = qs.filter(state__iexact=selected_state)
+    elif selected_speed in STATUS_BUCKETS:
+        selected_road = ""
+        selected_route = ""
+        selected_state = ""
+        qs = qs.filter(status__in=STATUS_BUCKETS[selected_speed]["codes"])
+
+    roads = Road.objects.only("road").order_by("road")
+    routes = Route.objects.only("route").order_by("route")
+    states = State.objects.only("state").order_by("state").values_list("state", flat=True)
+    speed_options = [
+        ("good", "Good"),
+        ("tolerable", "Tolerable"),
+        ("intolerable", "Intolerable"),
+        ("failed", "Failed"),
+        ("no_response", "No response"),
+    ]
+
+    paginator = Paginator(qs.order_by("route__route", "index", "code"), 50)
+    page_obj = paginator.get_page(request.GET.get("page") or 1)
+    filters = {}
+    if current_view:
+        filters["view"] = current_view
+    if selected_road:
+        filters["road"] = selected_road
+    if selected_route:
+        filters["route"] = selected_route
+    if selected_state:
+        filters["state"] = selected_state
+    if selected_speed:
+        filters["speed"] = selected_speed
+
+    metrics = _overview_metrics(qs)
+    all_rows = list(qs.order_by("route__route", "code")[:12])
+    focus_segment = all_rows[0] if all_rows else None
+    unique_route_count = qs.values("route_id").distinct().count()
+
+    return {
+        "active_page": "motorability_and_condition",
+        "segments": page_obj.object_list,
+        "page_obj": page_obj,
+        "roads": roads,
+        "routes": routes,
+        "states": list(states),
+        "speed_options": speed_options,
+        "selected_road": selected_road,
+        "selected_route": selected_route,
+        "selected_state": selected_state,
+        "selected_speed": selected_speed,
+        "current_view": current_view,
+        "filters_qs": urlencode(filters),
+        "number_routes": unique_route_count,
+        "segment_length_total": "----",
+        "focus_segment": focus_segment,
+        "report_rows": all_rows[:3],
+        **metrics,
     }
-    return render(request, "website/road_motorability.html", context)
 
 
-def road_condition(request):
-    qs = Segment.objects.select_related("route").order_by("route__route", "code")
-    context = {
-        "active_page": "condition",
-        "segments": list(qs[:8]),
-        "active_cycles": list(qs[:3]),
-        **_overview_metrics(qs),
-    }
-    return render(request, "website/road_condition.html", context)
+def motorability_and_condition(request):
+    context = _build_motorability_and_condition_context(request)
+    return render(request, "website/motorability_and_condition.html", context)
 
 
 def library(request):
@@ -147,7 +275,7 @@ def road_analysis(request):
         # When viewing subsegments, the top-right panel is a graph, so we don't need totals/metrics.
         total_length = Decimal("0.00")
         total_segments = 0
-        counts = {"good": 0, "tolerable": 0, "intolerable": 0, "failed": 0}
+        counts = {"good": 0, "tolerable": 0, "intolerable": 0, "failed": 0, "no_response": 0}
 
     # Options for selects
     routes = Route.objects.only("route").order_by("route")
@@ -717,3 +845,55 @@ def segment_code_search(request):
         qs = qs.filter(code__icontains=q)
     codes = list(qs.values_list("code", flat=True).distinct()[:20])  # cap results
     return JsonResponse({"results": codes})
+
+
+def motorability_and_condition_subsegments(request):
+    """
+    AJAX endpoint for motorability_and_condition:
+    Case-insensitive segment lookup by code, then return its subsegments.
+    """
+    segment_code = (request.GET.get("segment") or "").strip()
+    if not segment_code:
+        return JsonResponse(
+            {"ok": False, "message": "Please select a segment code.", "rows": []},
+            status=400,
+        )
+
+    segment = Segment.objects.filter(code__iexact=segment_code).first()
+    if not segment:
+        return JsonResponse(
+            {"ok": False, "message": f'Segment "{segment_code}" was not found.', "rows": []},
+            status=404,
+        )
+
+    sub_qs = SubSegment.objects.filter(segment=segment).order_by("position", "id")
+    rows = [
+        {
+            "segment_code": segment.code,
+            "code": row.code or f"{segment.code}-{row.position:02d}",
+            "position": row.position,
+            "start_lat": str(row.start_lat),
+            "start_lon": str(row.start_lon),
+            "distance": str(row.distance),
+            "avg_speed": float(row.avg_speed or 0),
+            "status": row.status or "666699",
+        }
+        for row in sub_qs
+    ]
+
+    if not rows:
+        return JsonResponse(
+            {
+                "ok": True,
+                "message": f'Segment "{segment.code}" has no subsegments.',
+                "rows": [],
+            }
+        )
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "message": f'Loaded {len(rows)} subsegments for "{segment.code}".',
+            "rows": rows,
+        }
+    )

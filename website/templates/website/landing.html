@@ -1,6 +1,8 @@
 {% extends "website/base.html" %}
+{% load static %}
+{% block body_class %}landing-body{% endblock %}
 {% block content %}
-<section class="landing-hero">
+<section class="landing-hero" style="--hero-image:url('{% static 'website/img/hero-road.jpg' %}');">
     <div class="hero-copy">
         <span class="hero-pill">FERMA Staff and Management</span>
         <h1>Data-Driven Solutions for Safer Nigerian Roads</h1>
@@ -8,60 +10,100 @@
             FERMA's smart road management platform tracks road conditions in real time,
             enabling proactive maintenance and safer travel.
         </p>
-        <a href="{% url 'road_inventory' %}" class="btn btn-solid">View Road Inventory</a>
+        <a href="{% url 'road_inventory' %}" class="btn btn-solid hero-cta-btn">
+            <span class="hero-cta-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="14" height="14" role="img" focusable="false">
+                    <path fill="currentColor" d="M3 19h18v2H3v-2Zm2-2h14l-1.8-9a2 2 0 0 0-2-1.6h-1.5V3h-3v3H9.2a2 2 0 0 0-2 1.6L5 17Zm7-11h1v3h-1V6Zm0 5h1v3h-1v-3Z"/>
+                </svg>
+            </span>
+            <span>View Road Inventory</span>
+        </a>
     </div>
 </section>
 
-<section class="landing-section">
+<section class="landing-section assets-block">
     <h2>Manage road assets.</h2>
     <p class="section-subtitle">Our platform prioritizes road efficiency and timely monitoring.</p>
     <div class="feature-grid">
         <article class="feature-card">
-            <h3>Comprehensive Road Inventory</h3>
+            <div class="feature-media" aria-hidden="true"></div>
+            <h3><span>Comprehensive Road Inventory</span><em>&rarr;</em></h3>
             <p>Access detailed data on road conditions, surface quality, and infrastructure.</p>
         </article>
         <article class="feature-card">
-            <h3>Real-Time Motorability Reports</h3>
+            <div class="feature-media" aria-hidden="true"></div>
+            <h3><span>Real-Time Motorability Reports</span><em>&rarr;</em></h3>
             <p>Monitor travel safety and accessibility with up-to-date condition assessments.</p>
         </article>
         <article class="feature-card">
-            <h3>Predictive Maintenance Planning</h3>
+            <div class="feature-media" aria-hidden="true"></div>
+            <h3><span>Predictive Maintenance Planning</span><em>&rarr;</em></h3>
             <p>Prioritize repairs using analytics to maximize budget efficiency and road lifespan.</p>
         </article>
     </div>
 </section>
 
-<section class="landing-section statement">
+<section class="landing-section statement-block">
     <p>
-        Our road management solutions include real-time monitoring of road conditions, with a
-        focus on identifying maintenance needs before deterioration. We deliver practical insight
-        for efficient maintenance by tracking inventory and motorability continuously.
+        Our road management solutions include real-time monitoring of road conditions. The core
+        focus is to identify maintenance needs and prevent roads from deteriorating. We aim to
+        deliver data-driven insights for efficient road maintenance. Key functionalities track road
+        inventory and assess motorability.
     </p>
 </section>
 
-<section class="landing-section offer">
+<section class="landing-section offer-block">
     <div class="offer-text">
         <h2>What we offer</h2>
         <ul>
-            <li>Preventive maintenance that catches issues early.</li>
-            <li>Efficient resource allocation based on live condition data.</li>
-            <li>Data-driven planning for targeted interventions.</li>
+            <li>
+                <strong>Preventive Maintenance</strong>
+                <span>Identify issues before they become critical, saving costs and ensuring safety.</span>
+            </li>
+            <li>
+                <strong>Efficient Resource Allocation</strong>
+                <span>Make informed choices based on real-time road condition assessments.</span>
+            </li>
+            <li>
+                <strong>Data-Driven Decisions</strong>
+                <span>Prioritize maintenance work where it is needed most.</span>
+            </li>
         </ul>
     </div>
     <div class="offer-image" aria-hidden="true"></div>
 </section>
 
 <section class="landing-cta">
-    <div>
-        <h2>Increase efficiency and enhance safety through preventive road maintenance.</h2>
-        <p>Over 100 roads currently rehabilitated and 100+ roads under maintenance.</p>
+    <div class="cta-main">
+        <h2>To increase efficiency and enhance safety through preventive road maintenance</h2>
+        <p>Over 100 roads currently rehabilitated</p>
     </div>
-    <a href="{% url 'road_motorability' %}" class="btn btn-light">Visit FERMA</a>
+    <div class="cta-side">
+        <p>
+            By increasing the effectiveness and efficiency of preventive road maintenance, we ensure
+            the safety of all road users and proper resource allocation.
+        </p>
+        <a href="{% url 'motorability_and_condition' %}" class="btn btn-light">Visit FERMA</a>
+    </div>
 </section>
 
 <footer class="site-footer">
-    <span>&copy; 2026 Federal Roads Maintenance Agency</span>
-    <span>Terms of Service</span>
-    <span>Privacy Policy</span>
+    <div class="footer-left">
+        <a href="{% url 'landing' %}" class="brand-mark" aria-label="FERMA home">
+            <span class="brand-mark-ring">FR</span>
+        </a>
+        <small>&copy; 2026 Federal Roads Maintenance Agency. All rights reserved.</small>
+    </div>
+    <nav class="footer-nav" aria-label="Footer navigation">
+        <a href="{% url 'landing' %}">Home</a>
+        <a href="{% url 'road_inventory' %}">Road Inventory</a>
+        <a href="{% url 'motorability_and_condition' %}">Motorability &amp; Condition</a>
+        <a href="{% url 'library' %}">Library</a>
+    </nav>
+    <div class="footer-contact">
+        <span>Phone number: +1 (555) 123-4567</span>
+        <span>Email: info@fermadashboard.org</span>
+        <span><a href="#">Terms of Service</a> <a href="#">Privacy Policy</a></span>
+    </div>
 </footer>
 {% endblock %}

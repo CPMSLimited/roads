@@ -1,0 +1,632 @@
+{% extends "website/base.html" %}
+{% load static %}
+{% block body_class %}app-body{% endblock %}
+{% block content %}
+<section class="new-inventory-page">
+    <div class="new-inventory-main">
+        <div class="kpi-grid kpi-grid-four">
+            <article class="kpi-card">
+                <span>Total length of road (km)</span>
+                <strong>{{ total_length }}</strong>
+            </article>
+            <article class="kpi-card">
+                <span>Number of routes</span>
+                <strong>{{ number_routes }}</strong>
+            </article>
+            <article class="kpi-card">
+                <span>Length of segment</span>
+                <strong>{{ segment_length_total }}</strong>
+            </article>
+            <article class="kpi-card">
+                <span>Number of segments</span>
+                <strong>{{ total_segments }}</strong>
+            </article>
+        </div>
+
+        <div class="inventory-tools-row">
+            <div class="inventory-tools-layout">
+                <nav id="inventoryInlinePager" class="pager inventory-inline-pager" aria-label="Inventory table pagination">
+                    {% if page_obj.has_previous %}
+                    <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
+                    {% else %}
+                    <span class="is-disabled">Previous</span>
+                    {% endif %}
+
+                    {% if page_obj.paginator.count == 0 %}
+                    <span>Page 0 of 0</span>
+                    {% else %}
+                    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                    {% endif %}
+
+                    {% if page_obj.has_next %}
+                    <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+                    {% else %}
+                    <span class="is-disabled">Next</span>
+                    {% endif %}
+                </nav>
+
+	                <form id="inventoryFiltersForm" class="toolbar-filters inventory-tools-controls" method="get">
+	                    <input type="hidden" name="view" id="inventoryViewInput" value="{{ current_view|default:'map' }}">
+                    <div id="primaryFilterFields" class="primary-filter-fields">
+                        <label class="inventory-field">
+                            <span>Select road</span>
+                            <select name="road" aria-label="All roads filter">
+                                <option value="">All roads</option>
+                                {% for r in roads %}
+                                <option value="{{ r.road }}" {% if selected_road == r.road %}selected{% endif %}>{{ r.road }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label class="inventory-field">
+                            <span>Select route</span>
+                            <select name="route" aria-label="Select route">
+                                <option value="">Select route</option>
+                                {% for r in routes %}
+                                <option value="{{ r.route }}" {% if selected_route == r.route %}selected{% endif %}>{{ r.route }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label class="inventory-field">
+                            <span>Select state</span>
+                            <select name="state" aria-label="Select state">
+                                <option value="">Select state</option>
+                                {% for state in states %}
+                                <option value="{{ state }}" {% if selected_state == state %}selected{% endif %}>{{ state }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label class="inventory-field">
+                            <span>Select speed</span>
+                            <select name="speed" aria-label="Select speed">
+                                <option value="">Select speed</option>
+                                {% for value, label in speed_options %}
+                                <option value="{{ value }}" {% if selected_speed == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                    </div>
+	                <button class="btn btn-ghost inventory-view-btn is-active" type="button" data-view-target="map" aria-label="Map view" aria-pressed="true">
+	                    <svg viewBox="0 0 24 24" width="16" height="16" role="img" focusable="false">
+	                        <path fill="currentColor" d="M3 6.4 8 4l8 2.4L21 4v13.2l-5 2.4-8-2.4-5 2.4V6.4Zm6 .5v9.4l6 1.8V8.7L9 6.9Z"/>
+                    </svg>
+                </button>
+                <button class="btn btn-ghost inventory-view-btn" type="button" data-view-target="table" aria-label="Table view" aria-pressed="false">
+                    <svg viewBox="0 0 24 24" width="16" height="16" role="img" focusable="false">
+                        <path fill="currentColor" d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h16v2H4v-2Z"/>
+                    </svg>
+                </button>
+                </form>
+            </div>
+        </div>
+
+        <article class="table-card map-card">
+            <div id="inventoryMapView" class="map-placeholder inventory-map" aria-label="Road inventory map">
+                <div class="inventory-workspace">
+                    <div class="workspace-main">
+                        <article class="table-card speed-chart-card">
+                            <header class="workspace-head">
+                                <h3 id="inventorySpeedChartTitle">Speed vs Position — Select a segment</h3>
+                                <p>Each point represents a subsegment (position on x-axis, speed on y-axis). Colours follow the status legend.</p>
+                            </header>
+                            <div class="workspace-chart-wrap">
+                                <canvas id="inventorySpeedChart" aria-label="Speed vs Position chart"></canvas>
+                                <p id="inventorySpeedChartPrompt" class="chart-empty-prompt">Select a segment on the right table to view the graph.</p>
+                            </div>
+                        </article>
+
+                        <article class="table-card workspace-table-card">
+                            <header class="workspace-table-headline">
+                                <h2>Sub segments</h2>
+                            </header>
+                            <p id="subsegmentFeedback" class="subsegment-feedback">Select a segment on the right table to load subsegments.</p>
+                            <div class="workspace-table-wrap">
+                                <table class="data-table inventory-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Segment Code</th>
+                                            <th>Subsegment Code</th>
+                                            <th>Northings</th>
+                                            <th>Eastings</th>
+                                            <th>Distance(km)</th>
+                                            <th>Status (km/hr)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="subsegmentTableBody">
+                                        {% if subsegments %}
+                                        {% for sub in subsegments %}
+                                        <tr>
+                                            <td>{{ sub.segment_code }}</td>
+                                            <td>{{ sub.code }}</td>
+                                            <td>{{ sub.start_lat }}</td>
+                                            <td>{{ sub.start_lon }}</td>
+                                            <td>{{ sub.distance }}</td>
+                                            <td class="inventory-status-cell" data-status="{{ sub.status|default:'666699' }}">
+                                                {{ sub.avg_speed }} (km/hr)
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                        {% else %}
+                                        <tr>
+                                            <td colspan="6" class="is-empty">No subsegments loaded.</td>
+                                        </tr>
+                                        {% endif %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </article>
+                    </div>
+                </div>
+            </div>
+            <div id="inventoryTableView" class="inventory-table-view is-hidden" aria-label="Road inventory table view">
+                <table class="data-table inventory-table">
+                    <thead>
+                        <tr>
+                            <th>Route</th>
+                            <th>Code</th>
+                            <th>Name</th>
+                            <th>State</th>
+                            <th>Start name</th>
+                            <th>Northings</th>
+                            <th>Eastings</th>
+                            <th>End name</th>
+                            <th>Northings 2</th>
+                            <th>Eastings 2</th>
+                            <th>Distance(km)</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for seg in segments %}
+                        <tr>
+                            <td>{{ seg.route.route }}</td>
+                            <td>{{ seg.code }}</td>
+                            <td>{{ seg.name|default:"-" }}</td>
+                            <td>{{ seg.state|default:"-" }}</td>
+                            <td>{{ seg.start_point.name|default:"-" }}</td>
+                            <td>{{ seg.start_lat }}</td>
+                            <td>{{ seg.start_lon }}</td>
+                            <td>{{ seg.end_point.name|default:"-" }}</td>
+                            <td>{{ seg.end_lat }}</td>
+                            <td>{{ seg.end_lon }}</td>
+                            <td>{{ seg.distance }}</td>
+                            <td class="inventory-status-cell" data-status="{{ seg.status|default:'666699' }}">
+                                {{ seg.get_status_display }}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="12" class="is-empty">No routes found for the selected filter.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+            </div>
+        </article>
+    </div>
+
+    <aside id="inventoryRightMapPanel" class="new-inventory-side">
+        <article class="table-card side-card analysis-detail-card">
+            <h3>Road Condition Analysis</h3>
+            <p>Flag defect locations for analysis.</p>
+            <div class="analysis-code-row">
+                <span>Sub-segment Code</span>
+                <a href="#">Clear Selection</a>
+            </div>
+            <div class="analysis-chip-box">
+                <span class="analysis-chip chip-orange">{{ focus_segment.code|default:"A1LAS2" }}</span>
+                <span class="analysis-chip chip-blue">{{ segments.1.code|default:"A1LAS4" }}</span>
+            </div>
+            <button class="btn btn-solid" type="button">Save Draft</button>
+            <button class="btn btn-outline" type="button">Complete Report Template</button>
+        </article>
+
+        <article class="table-card side-card map-filter-results-card">
+            <div class="map-filter-results-top">
+                <form id="inventoryFiltersFormSide" class="toolbar-filters inventory-tools-controls inventory-tools-controls-secondary" method="get">
+                    <input type="hidden" name="view" class="inventory-view-input" value="{{ current_view|default:'map' }}">
+                    <label class="inventory-field">
+                        <span>Select road</span>
+                        <select name="road" aria-label="All roads filter">
+                            <option value="">All roads</option>
+                            {% for r in roads %}
+                            <option value="{{ r.road }}" {% if selected_road == r.road %}selected{% endif %}>{{ r.road }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label class="inventory-field">
+                        <span>Select route</span>
+                        <select name="route" aria-label="Select route">
+                            <option value="">Select route</option>
+                            {% for r in routes %}
+                            <option value="{{ r.route }}" {% if selected_route == r.route %}selected{% endif %}>{{ r.route }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label class="inventory-field">
+                        <span>Select state</span>
+                        <select name="state" aria-label="Select state">
+                            <option value="">Select state</option>
+                            {% for state in states %}
+                            <option value="{{ state }}" {% if selected_state == state %}selected{% endif %}>{{ state }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label class="inventory-field">
+                        <span>Select speed</span>
+                        <select name="speed" aria-label="Select speed">
+                            <option value="">Select speed</option>
+                            {% for value, label in speed_options %}
+                            <option value="{{ value }}" {% if selected_speed == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                </form>
+            </div>
+            <div class="map-filter-results-bottom">
+                <p class="side-results-instruction">Select a segment to view its road condition</p>
+                <div class="workspace-table-wrap side-results-wrap">
+                    <table class="data-table inventory-table side-results-table">
+                        <thead>
+                            <tr>
+                                <th>Segment code</th>
+                                <th>State</th>
+                                <th>Distance</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for seg in segments %}
+                            <tr class="segment-select-row" data-segment-code="{{ seg.code }}">
+                                <td>{{ seg.code }}</td>
+                                <td>{{ seg.state|default:"-" }}</td>
+                                <td>{{ seg.distance }}</td>
+                                <td class="inventory-status-cell" data-status="{{ seg.status|default:'666699' }}">{{ seg.get_status_display }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="is-empty">No routes found for the selected filter.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </article>
+    </aside>
+
+    <aside id="inventoryRightTablePanel" class="new-inventory-side is-hidden">
+        <div class="kpi-grid kpi-grid-status">
+            <article class="kpi-card kpi-good"><span>Good</span><strong>{{ counts.good }}</strong></article>
+            <article class="kpi-card kpi-blue"><span>Tolerable</span><strong>{{ counts.tolerable }}</strong></article>
+            <article class="kpi-card kpi-orange"><span>Intolerable</span><strong>{{ counts.intolerable }}</strong></article>
+            <article class="kpi-card kpi-red"><span>Failed</span><strong>{{ counts.failed }}</strong></article>
+        </div>
+
+        <article class="table-card side-card route-info-card">
+            <h2>Route info</h2>
+            {% if focus_segment %}
+            <p><strong>Name:</strong> {{ focus_segment.route.route }}</p>
+            <p><strong>Total length:</strong> {{ total_length }} km</p>
+            <p><strong>Alignment:</strong> Inter-City</p>
+            <p><strong>Description:</strong> {{ focus_segment.start_point.name|default:"-" }} - {{ focus_segment.end_point.name|default:"-" }}</p>
+            {% else %}
+            <p>No route data available.</p>
+            {% endif %}
+        </article>
+
+        <article class="table-card side-card report-list-card">
+            <header class="section-head">
+                <h2>Reports</h2>
+                <a href="#" class="mini-link">View all</a>
+            </header>
+            <ul class="cycle-list">
+                {% for row in report_rows %}
+                <li>
+                    <div>
+                        <h3>{{ row.route.route }} {{ row.name|default:"Lagos-Ibadan" }}</h3>
+                        <p>Stage: {% if forloop.first %}Remedy Design{% else %}Physical Inspection{% endif %}</p>
+                    </div>
+                    <span class="status-chip {% if forloop.first %}status-mid-lite{% elif forloop.counter == 2 %}status-progress{% else %}status-ok-lite{% endif %}">
+                        {% if forloop.first %}Pending Approval{% elif forloop.counter == 2 %}In Progress{% else %}Completed{% endif %}
+                    </span>
+                </li>
+                {% empty %}
+                <li><p>No reports available.</p></li>
+                {% endfor %}
+            </ul>
+        </article>
+    </aside>
+</section>
+<script>
+  (function () {
+    const form = document.getElementById("inventoryFiltersForm");
+    const sideForm = document.getElementById("inventoryFiltersFormSide");
+    const viewInputs = document.querySelectorAll('input[name="view"]');
+	    const inlinePager = document.getElementById("inventoryInlinePager");
+	    const primaryFilterFields = document.getElementById("primaryFilterFields");
+    const mapView = document.getElementById("inventoryMapView");
+    const tableView = document.getElementById("inventoryTableView");
+    const rightMapPanel = document.getElementById("inventoryRightMapPanel");
+    const rightTablePanel = document.getElementById("inventoryRightTablePanel");
+    const buttons = document.querySelectorAll(".inventory-view-btn");
+    const subsegmentTableBody = document.getElementById("subsegmentTableBody");
+    const subsegmentFeedback = document.getElementById("subsegmentFeedback");
+    const chartTitle = document.getElementById("inventorySpeedChartTitle");
+    const chartCanvas = document.getElementById("inventorySpeedChart");
+    const chartPrompt = document.getElementById("inventorySpeedChartPrompt");
+    let subsegmentChart = null;
+    if (!form || !inlinePager || !mapView || !tableView || !rightMapPanel || !rightTablePanel || !buttons.length) return;
+
+    function setView(viewName) {
+      const isMap = viewName === "map";
+      mapView.classList.toggle("is-hidden", !isMap);
+      tableView.classList.toggle("is-hidden", isMap);
+	      rightMapPanel.classList.toggle("is-hidden", !isMap);
+	      rightTablePanel.classList.toggle("is-hidden", isMap);
+	      inlinePager.classList.toggle("is-invisible", isMap);
+	      if (primaryFilterFields) {
+	        primaryFilterFields.classList.toggle("is-hidden", isMap);
+	      }
+	      viewInputs.forEach((input) => {
+	        input.value = viewName;
+	      });
+      buttons.forEach((btn) => {
+        const active = btn.dataset.viewTarget === viewName;
+        btn.classList.toggle("is-active", active);
+        btn.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+    }
+
+    buttons.forEach((btn) => {
+      btn.addEventListener("click", () => setView(btn.dataset.viewTarget));
+    });
+
+    function applyStatusContrast() {
+      const cells = document.querySelectorAll(".inventory-status-cell");
+      cells.forEach((cell) => {
+        const raw = (cell.dataset.status || "").replace("#", "").trim();
+        const hex = raw.length === 6 ? raw : "666699";
+        const r = parseInt(hex.slice(0, 2), 16);
+        const g = parseInt(hex.slice(2, 4), 16);
+        const b = parseInt(hex.slice(4, 6), 16);
+        const luminance = (0.299 * r) + (0.587 * g) + (0.114 * b);
+        cell.style.backgroundColor = `#${hex}`;
+        cell.style.color = luminance > 160 ? "#1f2a27" : "#ffffff";
+      });
+    }
+
+    function statusToHex(raw) {
+      const cleaned = String(raw || "").replace("#", "").trim();
+      return /^[0-9a-fA-F]{6}$/.test(cleaned) ? cleaned.toUpperCase() : "666699";
+    }
+
+    function setChartPrompt(message) {
+      if (!chartPrompt) return;
+      chartPrompt.textContent = message;
+      chartPrompt.hidden = false;
+    }
+
+    function hideChartPrompt() {
+      if (!chartPrompt) return;
+      chartPrompt.hidden = true;
+    }
+
+    function clearSubsegmentChart(message) {
+      if (subsegmentChart) {
+        subsegmentChart.destroy();
+        subsegmentChart = null;
+      }
+      if (chartCanvas) {
+        const ctx = chartCanvas.getContext("2d");
+        if (ctx) ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
+      }
+      if (chartTitle) chartTitle.textContent = "Speed vs Position — Select a segment";
+      setChartPrompt(message || "Select a segment on the right table to view the graph.");
+    }
+
+    function renderSubsegmentChart(rows, segmentCode) {
+      if (!chartCanvas || typeof Chart === "undefined") {
+        setChartPrompt("Chart library unavailable.");
+        return;
+      }
+      if (!rows.length) {
+        clearSubsegmentChart(`No subsegments to plot for "${segmentCode}".`);
+        return;
+      }
+
+      const points = rows.map((row, idx) => ({
+        x: Number(row.position ?? (idx + 1)),
+        y: Number(row.avg_speed ?? 0),
+        label: row.code || "",
+        color: `#${statusToHex(row.status)}`
+      }));
+
+      const totalPositions = points.length || 0;
+      const speeds = points.map((p) => p.y);
+      const minSpeed = speeds.length ? Math.min(...speeds) : 0;
+      const maxSpeed = speeds.length ? Math.max(...speeds) : 1;
+      const speedRange = maxSpeed - minSpeed;
+      const padding = speedRange > 0 ? speedRange * 0.1 : 5;
+      const yMin = Math.max(0, minSpeed - padding);
+      const yMax = maxSpeed + padding;
+
+      if (subsegmentChart) {
+        subsegmentChart.destroy();
+      }
+
+      subsegmentChart = new Chart(chartCanvas, {
+        type: "line",
+        data: {
+          datasets: [{
+            label: "Subsegment speed",
+            data: points,
+            parsing: { xAxisKey: "x", yAxisKey: "y" },
+            fill: false,
+            borderColor: "#000",
+            borderWidth: 1,
+            tension: 0.35,
+            pointBackgroundColor: points.map((p) => p.color),
+            pointBorderColor: points.map((p) => p.color),
+            pointRadius: 5,
+            pointHoverRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(ctx) {
+                  const item = ctx.raw || {};
+                  const code = item.label ? ` (${item.label})` : "";
+                  return `Speed${code}: ${ctx.parsed.y.toFixed(1)} km/h at position ${ctx.parsed.x}`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              type: "linear",
+              title: { display: true, text: "Position" },
+              ticks: { precision: 0, stepSize: 1 },
+              min: 0,
+              max: totalPositions > 0 ? totalPositions : 1
+            },
+            y: {
+              title: { display: true, text: "Speed (km/h)" },
+              ticks: { precision: 1 },
+              min: yMin,
+              max: yMax
+            }
+          }
+        }
+      });
+
+      if (chartTitle) chartTitle.textContent = `Speed vs Position — ${segmentCode}`;
+      hideChartPrompt();
+    }
+
+    function resetOtherFilters(formEl, changedSelect) {
+      if (!formEl) return;
+      const roadSelect = formEl.querySelector('select[name="road"]');
+      const routeSelect = formEl.querySelector('select[name="route"]');
+      const stateSelect = formEl.querySelector('select[name="state"]');
+      const speedSelect = formEl.querySelector('select[name="speed"]');
+      if (!roadSelect || !routeSelect || !stateSelect || !speedSelect) return;
+      if (changedSelect === roadSelect) {
+        routeSelect.value = "";
+        stateSelect.value = "";
+        speedSelect.value = "";
+      } else if (changedSelect === routeSelect) {
+        roadSelect.value = "";
+        stateSelect.value = "";
+        speedSelect.value = "";
+      } else if (changedSelect === stateSelect) {
+        roadSelect.value = "";
+        routeSelect.value = "";
+        speedSelect.value = "";
+      } else if (changedSelect === speedSelect) {
+        roadSelect.value = "";
+        routeSelect.value = "";
+        stateSelect.value = "";
+      }
+    }
+
+    function bindFilterForm(formEl) {
+      if (!formEl) return;
+      const selects = [
+        formEl.querySelector('select[name="road"]'),
+        formEl.querySelector('select[name="route"]'),
+        formEl.querySelector('select[name="state"]'),
+        formEl.querySelector('select[name="speed"]')
+      ].filter(Boolean);
+      selects.forEach((sel) => {
+        sel.addEventListener("change", () => {
+          resetOtherFilters(formEl, sel);
+          formEl.submit();
+        });
+      });
+    }
+
+    bindFilterForm(form);
+    bindFilterForm(sideForm);
+
+    function subsegmentCell(row, value, clsName = "") {
+      const td = document.createElement("td");
+      if (clsName) td.className = clsName;
+      td.textContent = value;
+      row.appendChild(td);
+      return td;
+    }
+
+    function setSubsegmentMessage(message) {
+      if (subsegmentFeedback) subsegmentFeedback.textContent = message;
+    }
+
+    function renderSubsegments(rows, message, isError) {
+      if (!subsegmentTableBody) return;
+      subsegmentTableBody.innerHTML = "";
+      if (!rows.length) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 6;
+        td.className = "is-empty";
+        td.textContent = message || "No subsegments found.";
+        tr.appendChild(td);
+        subsegmentTableBody.appendChild(tr);
+        setSubsegmentMessage(message || "No subsegments found.");
+        clearSubsegmentChart(message || "No subsegments found for this segment.");
+        return;
+      }
+
+      rows.forEach((row) => {
+        const tr = document.createElement("tr");
+        subsegmentCell(tr, row.segment_code || "-");
+        subsegmentCell(tr, row.code || "-");
+        subsegmentCell(tr, row.start_lat ?? "-");
+        subsegmentCell(tr, row.start_lon ?? "-");
+        subsegmentCell(tr, row.distance ?? "-");
+        const statusTd = subsegmentCell(tr, `${row.avg_speed ?? 0} (km/hr)`, "inventory-status-cell");
+        statusTd.dataset.status = (row.status || "666699").replace("#", "");
+        subsegmentTableBody.appendChild(tr);
+      });
+      applyStatusContrast();
+      setSubsegmentMessage(message || (isError ? "Could not load subsegments." : `Loaded ${rows.length} subsegments.`));
+      renderSubsegmentChart(rows, rows[0].segment_code || "Selected segment");
+    }
+
+    async function loadSubsegmentsForSegment(segmentCode) {
+      if (!segmentCode) return;
+      setSubsegmentMessage(`Loading subsegments for ${segmentCode}...`);
+      if (chartTitle) chartTitle.textContent = `Speed vs Position — ${segmentCode}`;
+      setChartPrompt(`Loading graph for "${segmentCode}"...`);
+      try {
+        const url = new URL('{% url "motorability_and_condition_subsegments" %}', window.location.origin);
+        url.searchParams.set("segment", segmentCode);
+        const resp = await fetch(url.toString(), { headers: { "X-Requested-With": "XMLHttpRequest" } });
+        const data = await resp.json();
+        if (!resp.ok || data.ok === false) {
+          renderSubsegments([], data.message || `Segment ${segmentCode} was not found.`, true);
+          return;
+        }
+        renderSubsegments(data.rows || [], data.message || "", false);
+      } catch (error) {
+        renderSubsegments([], "Could not load subsegments. Please try again.", true);
+      }
+    }
+
+    document.querySelectorAll(".segment-select-row").forEach((row) => {
+      row.addEventListener("click", () => {
+        const segmentCode = row.dataset.segmentCode || "";
+        loadSubsegmentsForSegment(segmentCode);
+      });
+    });
+
+    applyStatusContrast();
+    clearSubsegmentChart("Select a segment on the right table to view the graph.");
+    setView("{{ current_view|default:'map' }}");
+  })();
+</script>
+{% endblock %}
