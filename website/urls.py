@@ -3,6 +3,8 @@ from . import views
 
 urlpatterns = [
     path("", views.landing, name="landing"),
+    path("road-motorability/", views.road_motorability, name="road_motorability"),
+    path("road-motorability/map-data/", views.road_motorability_map_data, name="road_motorability_map_data"),
     path("road-inventory/", views.road_inventory, name="road_inventory"),
     path("motorability-and-condition/", views.motorability_and_condition, name="motorability_and_condition"),
     path("library/", views.library, name="library"),

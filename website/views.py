@@ -211,6 +211,144 @@ def motorability_and_condition(request):
     context = _build_motorability_and_condition_context(request)
     return render(request, "website/motorability_and_condition.html", context)
 
+def _filtered_segments_for_road_motorability(request):
+    qs = Segment.objects.select_related("route", "start_point", "end_point").all()
+    current_view = request.GET.get("view") or "map"
+    selected_road = request.GET.get("road") or ""
+    selected_route = request.GET.get("route") or ""
+    selected_state = (request.GET.get("state") or "").strip()
+    selected_speed = (request.GET.get("speed") or "").strip().lower()
+
+    if selected_road:
+        selected_route = ""
+        selected_state = ""
+        selected_speed = ""
+        qs = qs.filter(route__road__road=selected_road)
+    elif selected_route:
+        selected_road = ""
+        selected_state = ""
+        selected_speed = ""
+        qs = qs.filter(route__route=selected_route)
+    elif selected_state:
+        selected_road = ""
+        selected_route = ""
+        selected_speed = ""
+        qs = qs.filter(state__iexact=selected_state)
+    elif selected_speed in STATUS_BUCKETS:
+        selected_road = ""
+        selected_route = ""
+        selected_state = ""
+        qs = qs.filter(status__in=STATUS_BUCKETS[selected_speed]["codes"])
+
+    return {
+        "qs": qs,
+        "current_view": current_view,
+        "selected_road": selected_road,
+        "selected_route": selected_route,
+        "selected_state": selected_state,
+        "selected_speed": selected_speed,
+    }
+
+
+def _build_road_motorability_context(request):
+    filtered = _filtered_segments_for_road_motorability(request)
+    qs = filtered["qs"]
+    roads = Road.objects.only("road").order_by("road")
+    routes = Route.objects.only("route").order_by("route")
+    states = State.objects.only("state").order_by("state").values_list("state", flat=True)
+    speed_options = [
+        ("good", "Good"),
+        ("tolerable", "Tolerable"),
+        ("intolerable", "Intolerable"),
+        ("failed", "Failed"),
+        ("no_response", "No response"),
+    ]
+
+    paginator = Paginator(qs.order_by("route__route", "index", "code"), 50)
+    page_obj = paginator.get_page(request.GET.get("page") or 1)
+    filters = {}
+    if filtered["current_view"]:
+        filters["view"] = filtered["current_view"]
+    if filtered["selected_road"]:
+        filters["road"] = filtered["selected_road"]
+    if filtered["selected_route"]:
+        filters["route"] = filtered["selected_route"]
+    if filtered["selected_state"]:
+        filters["state"] = filtered["selected_state"]
+    if filtered["selected_speed"]:
+        filters["speed"] = filtered["selected_speed"]
+
+    metrics = _overview_metrics(qs)
+    all_rows = list(qs.order_by("route__route", "code")[:12])
+    focus_segment = all_rows[0] if all_rows else None
+    unique_route_count = qs.values("route_id").distinct().count()
+
+    return {
+        "active_page": "road_motorability",
+        "segments": page_obj.object_list,
+        "page_obj": page_obj,
+        "roads": roads,
+        "routes": routes,
+        "states": list(states),
+        "speed_options": speed_options,
+        "selected_road": filtered["selected_road"],
+        "selected_route": filtered["selected_route"],
+        "selected_state": filtered["selected_state"],
+        "selected_speed": filtered["selected_speed"],
+        "current_view": filtered["current_view"],
+        "filters_qs": urlencode(filters),
+        "number_routes": unique_route_count,
+        "segment_length_total": "----",
+        "focus_segment": focus_segment,
+        "report_rows": all_rows[:3],
+        **metrics,
+    }
+
+
+def road_motorability(request):
+    context = _build_road_motorability_context(request)
+    return render(request, "website/road_motorability.html", context)
+
+
+def road_motorability_map_data(request):
+    filtered = _filtered_segments_for_road_motorability(request)
+    segments = filtered["qs"].order_by("route__route", "index", "code")
+    features = []
+
+    for seg in segments:
+        try:
+            start_lat = float(seg.start_lat)
+            start_lon = float(seg.start_lon)
+            end_lat = float(seg.end_lat)
+            end_lon = float(seg.end_lon)
+        except (TypeError, ValueError, InvalidOperation):
+            continue
+
+        if start_lat == end_lat and start_lon == end_lon:
+            geometry = {"type": "Point", "coordinates": [start_lon, start_lat]}
+        else:
+            geometry = {
+                "type": "LineString",
+                "coordinates": [[start_lon, start_lat], [end_lon, end_lat]],
+            }
+
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": geometry,
+                "properties": {
+                    "code": seg.code,
+                    "route": getattr(seg.route, "route", ""),
+                    "state": seg.state or "",
+                    "distance": float(seg.distance or 0),
+                    "avg_speed": float(seg.avg_speed or 0),
+                    "status": seg.status or "666699",
+                },
+            }
+        )
+
+    return JsonResponse({"type": "FeatureCollection", "features": features})
+
 
 def library(request):
     mode_value = request.GET.get("mode")

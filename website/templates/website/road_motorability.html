@@ -1,0 +1,363 @@
+{% extends "website/base.html" %}
+{% load static %}
+{% block body_class %}app-body{% endblock %}
+{% block content %}
+<section class="new-inventory-page">
+    <div class="new-inventory-main">
+        <div class="kpi-grid kpi-grid-four">
+            <article class="kpi-card">
+                <span>Total length of road (km)</span>
+                <strong>{{ total_length }}</strong>
+            </article>
+            <article class="kpi-card">
+                <span>Number of routes</span>
+                <strong>{{ number_routes }}</strong>
+            </article>
+            <article class="kpi-card">
+                <span>Length of segment</span>
+                <strong>{{ segment_length_total }}</strong>
+            </article>
+            <article class="kpi-card">
+                <span>Number of segments</span>
+                <strong>{{ total_segments }}</strong>
+            </article>
+        </div>
+
+        <div class="inventory-tools-row">
+            <div class="inventory-tools-layout">
+                <nav id="inventoryInlinePager" class="pager inventory-inline-pager" aria-label="Inventory table pagination">
+                    {% if page_obj.has_previous %}
+                    <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
+                    {% else %}
+                    <span class="is-disabled">Previous</span>
+                    {% endif %}
+
+                    {% if page_obj.paginator.count == 0 %}
+                    <span>Page 0 of 0</span>
+                    {% else %}
+                    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                    {% endif %}
+
+                    {% if page_obj.has_next %}
+                    <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+                    {% else %}
+                    <span class="is-disabled">Next</span>
+                    {% endif %}
+                </nav>
+
+                <form id="inventoryFiltersForm" class="toolbar-filters inventory-tools-controls" method="get">
+                    <input type="hidden" name="view" id="inventoryViewInput" value="{{ current_view|default:'map' }}">
+                    <label class="inventory-field">
+                        <span>Select road</span>
+                        <select name="road" aria-label="All roads filter">
+                            <option value="">All roads</option>
+                            {% for r in roads %}
+                            <option value="{{ r.road }}" {% if selected_road == r.road %}selected{% endif %}>{{ r.road }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label class="inventory-field">
+                        <span>Select route</span>
+                        <select name="route" aria-label="Select route">
+                            <option value="">Select route</option>
+                            {% for r in routes %}
+                            <option value="{{ r.route }}" {% if selected_route == r.route %}selected{% endif %}>{{ r.route }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label class="inventory-field">
+                        <span>Select state</span>
+                        <select name="state" aria-label="Select state">
+                            <option value="">Select state</option>
+                            {% for state in states %}
+                            <option value="{{ state }}" {% if selected_state == state %}selected{% endif %}>{{ state }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label class="inventory-field">
+                        <span>Select speed</span>
+                        <select name="speed" aria-label="Select speed">
+                            <option value="">Select speed</option>
+                            {% for value, label in speed_options %}
+                            <option value="{{ value }}" {% if selected_speed == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <button class="btn btn-ghost inventory-view-btn is-active" type="button" data-view-target="map" aria-label="Map view" aria-pressed="true">
+                        <svg viewBox="0 0 24 24" width="16" height="16" role="img" focusable="false">
+                            <path fill="currentColor" d="M3 6.4 8 4l8 2.4L21 4v13.2l-5 2.4-8-2.4-5 2.4V6.4Zm6 .5v9.4l6 1.8V8.7L9 6.9Z"/>
+                        </svg>
+                    </button>
+                    <button class="btn btn-ghost inventory-view-btn" type="button" data-view-target="table" aria-label="Table view" aria-pressed="false">
+                        <svg viewBox="0 0 24 24" width="16" height="16" role="img" focusable="false">
+                            <path fill="currentColor" d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h16v2H4v-2Z"/>
+                        </svg>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <article class="table-card map-card">
+            <div id="inventoryMapView" class="map-placeholder inventory-map" aria-label="Road inventory map">
+                <div id="roadMotorabilityLeafletMap" class="experiment-leaflet-map" aria-label="Road motorability map"></div>
+            </div>
+            <div id="inventoryTableView" class="inventory-table-view is-hidden" aria-label="Road inventory table view">
+                <table class="data-table inventory-table">
+                    <thead>
+                        <tr>
+                            <th>Route</th>
+                            <th>Code</th>
+                            <th>Name</th>
+                            <th>State</th>
+                            <th>Start name</th>
+                            <th>Northings</th>
+                            <th>Eastings</th>
+                            <th>End name</th>
+                            <th>Northings 2</th>
+                            <th>Eastings 2</th>
+                            <th>Distance(km)</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for seg in segments %}
+                        <tr>
+                            <td>{{ seg.route.route }}</td>
+                            <td>{{ seg.code }}</td>
+                            <td>{{ seg.name|default:"-" }}</td>
+                            <td>{{ seg.state|default:"-" }}</td>
+                            <td>{{ seg.start_point.name|default:"-" }}</td>
+                            <td>{{ seg.start_lat }}</td>
+                            <td>{{ seg.start_lon }}</td>
+                            <td>{{ seg.end_point.name|default:"-" }}</td>
+                            <td>{{ seg.end_lat }}</td>
+                            <td>{{ seg.end_lon }}</td>
+                            <td>{{ seg.distance }}</td>
+                            <td class="inventory-status-cell" data-status="{{ seg.status|default:'666699' }}">{{ seg.get_status_display }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="12" class="is-empty">No routes found for the selected filter.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </article>
+    </div>
+
+    <aside class="new-inventory-side">
+        <div class="kpi-grid kpi-grid-status">
+            <article class="kpi-card kpi-good"><span>Good</span><strong>{{ counts.good }}</strong></article>
+            <article class="kpi-card kpi-blue"><span>Tolerable</span><strong>{{ counts.tolerable }}</strong></article>
+            <article class="kpi-card kpi-orange"><span>Intolerable</span><strong>{{ counts.intolerable }}</strong></article>
+            <article class="kpi-card kpi-red"><span>Failed</span><strong>{{ counts.failed }}</strong></article>
+            <article class="kpi-card"><span>No response</span><strong>{{ counts.no_response }}</strong></article>
+        </div>
+
+        <article class="table-card side-card route-info-card">
+            <h2>Route info</h2>
+            {% if focus_segment %}
+            <p><strong>Name:</strong> {{ focus_segment.route.route }}</p>
+            <p><strong>Total length:</strong> {{ total_length }} km</p>
+            <p><strong>Alignment:</strong> Inter-City</p>
+            <p><strong>Description:</strong> {{ focus_segment.start_point.name|default:"-" }} - {{ focus_segment.end_point.name|default:"-" }}</p>
+            {% else %}
+            <p>No route data available.</p>
+            {% endif %}
+        </article>
+
+        <article class="table-card side-card">
+            <header class="section-head">
+                <h2>Filtered Segments</h2>
+                <span>{{ total_segments }} rows</span>
+            </header>
+            <div class="workspace-table-wrap side-results-wrap">
+                <table class="data-table inventory-table side-results-table">
+                    <thead>
+                        <tr>
+                            <th>Segment code</th>
+                            <th>State</th>
+                            <th>Distance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for seg in segments %}
+                        <tr>
+                            <td>{{ seg.code }}</td>
+                            <td>{{ seg.state|default:"-" }}</td>
+                            <td>{{ seg.distance }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="3" class="is-empty">No routes found for the selected filter.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </article>
+    </aside>
+</section>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<style>
+  .experiment-leaflet-map {
+    width: 100%;
+    height: 520px;
+    border-radius: 12px;
+  }
+</style>
+<script>
+  (function () {
+    const form = document.getElementById("inventoryFiltersForm");
+    const viewInput = document.getElementById("inventoryViewInput");
+    const inlinePager = document.getElementById("inventoryInlinePager");
+    const mapView = document.getElementById("inventoryMapView");
+    const tableView = document.getElementById("inventoryTableView");
+    const mapContainer = document.getElementById("roadMotorabilityLeafletMap");
+    const buttons = document.querySelectorAll(".inventory-view-btn");
+    if (!form || !viewInput || !inlinePager || !mapView || !tableView || !mapContainer || !buttons.length) return;
+
+    let map;
+    let geojsonLayer;
+
+    function statusToHex(raw) {
+      const cleaned = String(raw || "").replace("#", "").trim();
+      return /^[0-9a-fA-F]{6}$/.test(cleaned) ? cleaned.toUpperCase() : "666699";
+    }
+
+    function applyStatusContrast() {
+      const cells = document.querySelectorAll(".inventory-status-cell");
+      cells.forEach((cell) => {
+        const hex = statusToHex(cell.dataset.status);
+        const r = parseInt(hex.slice(0, 2), 16);
+        const g = parseInt(hex.slice(2, 4), 16);
+        const b = parseInt(hex.slice(4, 6), 16);
+        const luminance = (0.299 * r) + (0.587 * g) + (0.114 * b);
+        cell.style.backgroundColor = `#${hex}`;
+        cell.style.color = luminance > 160 ? "#1f2a27" : "#ffffff";
+      });
+    }
+
+    function setupMap() {
+      if (map || typeof L === "undefined") return;
+      map = L.map(mapContainer).setView([9.08, 8.67], 6);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "&copy; OpenStreetMap contributors"
+      }).addTo(map);
+    }
+
+    async function loadMapData() {
+      setupMap();
+      if (!map) return;
+      const params = new URLSearchParams(window.location.search);
+      const url = new URL("{% url 'road_motorability_map_data' %}", window.location.origin);
+      params.forEach((value, key) => url.searchParams.set(key, value));
+
+      try {
+        const resp = await fetch(url.toString(), { headers: { "X-Requested-With": "XMLHttpRequest" } });
+        const data = await resp.json();
+        if (!resp.ok) return;
+
+        if (geojsonLayer) {
+          map.removeLayer(geojsonLayer);
+        }
+
+        geojsonLayer = L.geoJSON(data, {
+          style: function(feature) {
+            const color = `#${statusToHex(feature?.properties?.status)}`;
+            return { color: color, weight: 3, opacity: 0.95 };
+          },
+          pointToLayer: function(feature, latlng) {
+            return L.circleMarker(latlng, {
+              radius: 5,
+              color: `#${statusToHex(feature?.properties?.status)}`,
+              fillOpacity: 0.9,
+            });
+          },
+          onEachFeature: function(feature, layer) {
+            const p = feature.properties || {};
+            const route = p.route || "-";
+            const code = p.code || "-";
+            const state = p.state || "-";
+            const distance = p.distance ?? "-";
+            const speed = p.avg_speed ?? "-";
+            layer.bindPopup(
+              `<strong>${code}</strong><br>Route: ${route}<br>State: ${state}<br>Distance: ${distance} km<br>Avg speed: ${speed} km/h`
+            );
+          }
+        }).addTo(map);
+
+        const bounds = geojsonLayer.getBounds();
+        if (bounds.isValid()) {
+          map.fitBounds(bounds, { padding: [20, 20] });
+        }
+      } catch (error) {
+      }
+    }
+
+    function setView(viewName) {
+      const isMap = viewName === "map";
+      mapView.classList.toggle("is-hidden", !isMap);
+      tableView.classList.toggle("is-hidden", isMap);
+      inlinePager.classList.toggle("is-invisible", isMap);
+      viewInput.value = viewName;
+      buttons.forEach((btn) => {
+        const active = btn.dataset.viewTarget === viewName;
+        btn.classList.toggle("is-active", active);
+        btn.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+      if (isMap) {
+        loadMapData().then(() => {
+          if (map) {
+            setTimeout(() => map.invalidateSize(), 0);
+          }
+        });
+      }
+    }
+
+    buttons.forEach((btn) => {
+      btn.addEventListener("click", () => setView(btn.dataset.viewTarget));
+    });
+
+    const roadSelect = form.querySelector('select[name="road"]');
+    const routeSelect = form.querySelector('select[name="route"]');
+    const stateSelect = form.querySelector('select[name="state"]');
+    const speedSelect = form.querySelector('select[name="speed"]');
+
+    function resetOtherFilters(changedSelect) {
+      if (!roadSelect || !routeSelect || !stateSelect || !speedSelect) return;
+      if (changedSelect === roadSelect) {
+        routeSelect.value = "";
+        stateSelect.value = "";
+        speedSelect.value = "";
+      } else if (changedSelect === routeSelect) {
+        roadSelect.value = "";
+        stateSelect.value = "";
+        speedSelect.value = "";
+      } else if (changedSelect === stateSelect) {
+        roadSelect.value = "";
+        routeSelect.value = "";
+        speedSelect.value = "";
+      } else if (changedSelect === speedSelect) {
+        roadSelect.value = "";
+        routeSelect.value = "";
+        stateSelect.value = "";
+      }
+    }
+
+    [roadSelect, routeSelect, stateSelect, speedSelect].forEach((sel) => {
+      if (!sel) return;
+      sel.addEventListener("change", () => {
+        resetOtherFilters(sel);
+        form.submit();
+      });
+    });
+
+    applyStatusContrast();
+    setView("{{ current_view|default:'map' }}");
+  })();
+</script>
+{% endblock %}
