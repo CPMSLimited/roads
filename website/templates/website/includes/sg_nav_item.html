@@ -1,0 +1,15 @@
+{% load static %}
+<a class="sg-nav-item{% if is_active %} is-active{% endif %}" href="{% url url_name %}">
+    <span class="library-nav-icon" aria-hidden="true">
+        {% if icon_key == "overview" %}
+        <img src="{% static 'website/styleguide/icons/iconoir_view-grid.svg' %}" alt="" role="presentation">
+        {% elif icon_key == "root_cause" %}
+        <img src="{% static 'website/styleguide/icons/iconoir_search.svg' %}" alt="" role="presentation">
+        {% elif icon_key == "physical" %}
+        <img src="{% static 'website/styleguide/icons/iconoir_eye.svg' %}" alt="" role="presentation">
+        {% elif icon_key == "solution" %}
+        <img src="{% static 'website/styleguide/icons/iconoir_notes.svg' %}" alt="" role="presentation">
+        {% endif %}
+    </span>
+    <span>{{ label }}</span>
+</a>

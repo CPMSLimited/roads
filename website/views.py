@@ -2,7 +2,20 @@
 
 import logging
 
-from all_roads.models import Segment, Route, Road, State, SubSegment
+from all_roads.models import (
+    Segment,
+    Route,
+    Road,
+    State,
+    SubSegment,
+    DefectType,
+    RootCauseAnalysis,
+    RootCauseDetail,
+    PhysicalInspection,
+    PhysicalInspectionAnalysis,
+    PhysicalInspectionCharacteristic,
+    PhysicalInspectionAttachment,
+)
 from all_roads.services import refresh_segment_and_subsegments
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
@@ -11,7 +24,8 @@ from django.db import models, transaction
 from django.db.models import Sum, Count, Q, IntegerField, Max
 from django.db.models.functions import Cast, Trim, Upper
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import render, redirect
+from django.urls import reverse
 from .forms import UploadSegmentsForm, UploadSubSegmentsForm
 import csv
 import io
@@ -199,10 +213,636 @@ def motorability_and_condition(request):
 
 
 def library(request):
+    mode_value = request.GET.get("mode")
+    if mode_value == "form":
+        library_mode = "form"
+    elif mode_value == "view":
+        library_mode = "view"
+    else:
+        library_mode = "summary"
+    analysis_id = request.GET.get("analysis") or request.POST.get("analysis_id")
+    subsegment_id = request.GET.get("subsegment") or request.POST.get("subsegment_id")
+    subsegments_qs = SubSegment.objects.select_related("segment").order_by("segment_id", "position")
+    selected_subsegment = None
+    if subsegment_id:
+        selected_subsegment = subsegments_qs.filter(pk=subsegment_id).first()
+    if selected_subsegment is None:
+        selected_subsegment = subsegments_qs.first()
+    defect_type_qs = DefectType.objects.filter(is_active=True).order_by("label")
+    description_options = list(defect_type_qs.values_list("code", "label"))
+    if not description_options:
+        description_options = list(RootCauseAnalysis.DESCRIPTION_CHOICES)
+    existing_analysis = None
+    if analysis_id:
+        existing_analysis = RootCauseAnalysis.objects.prefetch_related("defect_types").filter(pk=analysis_id).first()
+        if existing_analysis and selected_subsegment is None:
+            selected_subsegment = existing_analysis.subsegment
+
+    rca_values = {
+        "description": request.POST.get("description", ""),
+        "subgrade_properties": request.POST.get("subgrade_properties", ""),
+        "vegetation": request.POST.get("vegetation", ""),
+        "topography": request.POST.get("topography", ""),
+        "drainage_characteristics": request.POST.get("drainage_characteristics", ""),
+        "temp_humidity": request.POST.get("temp_humidity", ""),
+        "location": request.POST.get("location", ""),
+    }
+    selected_descriptions = request.POST.getlist("description_options")
+    rca_error = ""
+    rca_success = request.GET.get("saved") == "1"
+    if request.method != "POST" and library_mode == "form" and existing_analysis:
+        selected_subsegment = existing_analysis.subsegment
+        selected_descriptions = list(existing_analysis.defect_types.values_list("code", flat=True))
+        if not selected_descriptions:
+            selected_descriptions = existing_analysis.description_options or []
+        if not selected_descriptions and existing_analysis.description:
+            selected_descriptions = [existing_analysis.description]
+        rca_values["location"] = existing_analysis.location
+        detail = getattr(existing_analysis, "root_cause_detail", None)
+        if detail:
+            if detail.natural_feature == RootCauseDetail.FEATURE_SUBGRADE_PROPERTIES:
+                rca_values["subgrade_properties"] = detail.characteristic
+            elif detail.natural_feature == RootCauseDetail.FEATURE_VEGETATION:
+                rca_values["vegetation"] = detail.characteristic
+            elif detail.natural_feature == RootCauseDetail.FEATURE_TOPOGRAPHY:
+                rca_values["topography"] = detail.characteristic
+            elif detail.natural_feature == RootCauseDetail.FEATURE_DRAINAGE_CHARACTERISTICS:
+                rca_values["drainage_characteristics"] = detail.characteristic
+            elif detail.natural_feature == RootCauseDetail.FEATURE_TEMPERATURE_HUMIDITY:
+                rca_values["temp_humidity"] = detail.characteristic
+
+    if request.method == "POST" and library_mode == "form":
+        submit_action = request.POST.get("submit_action")
+        if submit_action == "complete":
+            status_value = RootCauseAnalysis.STATUS_COMPLETE
+        else:
+            status_value = RootCauseAnalysis.STATUS_DRAFT
+        supporting_file = request.FILES.get("supporting_file")
+
+        if selected_subsegment is None:
+            rca_error = "No subsegment is available. Add subsegment data before creating root cause analysis."
+        elif not selected_descriptions:
+            rca_error = "Select at least one defect description."
+        else:
+            valid_description_values = {value for value, _ in description_options}
+            invalid_descriptions = [value for value in selected_descriptions if value not in valid_description_values]
+            if invalid_descriptions:
+                rca_error = "One or more selected defect descriptions are invalid."
+                selected_primary_description = ""
+            else:
+                selected_primary_description = selected_descriptions[0]
+
+            feature_pairs = [
+                (RootCauseDetail.FEATURE_SUBGRADE_PROPERTIES, rca_values["subgrade_properties"]),
+                (RootCauseDetail.FEATURE_VEGETATION, rca_values["vegetation"]),
+                (RootCauseDetail.FEATURE_TOPOGRAPHY, rca_values["topography"]),
+                (RootCauseDetail.FEATURE_DRAINAGE_CHARACTERISTICS, rca_values["drainage_characteristics"]),
+                (RootCauseDetail.FEATURE_TEMPERATURE_HUMIDITY, rca_values["temp_humidity"]),
+            ]
+            selected_feature_pairs = [(feature, value) for feature, value in feature_pairs if value]
+            valid_by_feature = {
+                feature: {value for value, _ in choices}
+                for feature, choices in RootCauseDetail.CHARACTERISTIC_CHOICES_BY_FEATURE.items()
+            }
+            if len(selected_feature_pairs) > 1 and not rca_error:
+                rca_error = "Select only one root cause description option."
+            invalid_choice = any(
+                value not in valid_by_feature.get(feature, set())
+                for feature, value in selected_feature_pairs
+            )
+            if invalid_choice and not rca_error:
+                rca_error = "One or more selected characteristic values are invalid."
+            if not rca_error:
+                with transaction.atomic():
+                    location_value = (
+                        (rca_values["location"] or "").strip()
+                        or (selected_subsegment.code or "")[:32]
+                        or "Unknown"
+                    )
+                    if existing_analysis:
+                        analysis = existing_analysis
+                        analysis.subsegment = selected_subsegment
+                        analysis.location = location_value[:32]
+                        analysis.description = selected_primary_description
+                        analysis.description_options = selected_descriptions
+                        analysis.status = status_value
+                        if supporting_file:
+                            analysis.supporting_file = supporting_file
+                        analysis.save()
+                    else:
+                        analysis = RootCauseAnalysis.objects.create(
+                            subsegment=selected_subsegment,
+                            location=location_value[:32],
+                            description=selected_primary_description,
+                            description_options=selected_descriptions,
+                            status=status_value,
+                            supporting_file=supporting_file,
+                        )
+                    selected_defect_types = list(
+                        defect_type_qs.filter(code__in=selected_descriptions)
+                    )
+                    analysis.defect_types.set(selected_defect_types)
+                    if selected_feature_pairs:
+                        feature, value = selected_feature_pairs[0]
+                        RootCauseDetail.objects.update_or_create(
+                            root_cause_analysis=analysis,
+                            defaults={
+                                "natural_feature": feature,
+                                "characteristic": value,
+                                "root_cause_analysis_text": "",
+                            },
+                        )
+                    elif existing_analysis:
+                        RootCauseDetail.objects.filter(root_cause_analysis=analysis).delete()
+
+                return redirect(
+                    f"{reverse('library')}?mode=form&saved=1&subsegment={selected_subsegment.pk}&analysis={analysis.pk}"
+                )
+
+    root_cause_analyses = (
+        RootCauseAnalysis.objects.select_related("subsegment", "subsegment__segment", "root_cause_detail")
+        .prefetch_related("defect_types")
+        .order_by("-id")
+    )
+    root_cause_total = root_cause_analyses.count()
+    root_cause_draft_count = root_cause_analyses.filter(status=RootCauseAnalysis.STATUS_DRAFT).count()
+    root_cause_complete_count = root_cause_analyses.filter(status=RootCauseAnalysis.STATUS_COMPLETE).count()
+    description_label_map = dict(description_options)
+    draft_rows = []
+    complete_rows = []
+    for report in root_cause_analyses[:100]:
+        selected_values = list(report.defect_types.values_list("code", flat=True))
+        if not selected_values:
+            selected_values = report.description_options or []
+        selected_labels = [description_label_map.get(value) for value in selected_values if value in description_label_map]
+        defect_text = ", ".join(label.lower() for label in selected_labels if label) or report.get_description_display()
+        condition_label = "Intolerable" if report.pk % 3 == 0 else "Tolerable"
+        condition_class = "intolerable" if condition_label == "Intolerable" else "tolerable"
+        row = {
+            "report": report,
+            "defect_text": defect_text,
+            "condition_label": condition_label,
+            "condition_class": condition_class,
+            "engineer_name": "Engineer Ridwan Bankole",
+        }
+        if report.status == RootCauseAnalysis.STATUS_COMPLETE:
+            complete_rows.append(row)
+        else:
+            draft_rows.append(row)
+
+    for idx, row in enumerate(draft_rows):
+        row["date_text"] = "27/12/2025" if idx == 0 else "5 days"
+    for idx, row in enumerate(complete_rows):
+        row["date_text"] = "2 days" if idx == 0 else "5 days"
+
+    if library_mode == "view" and existing_analysis is None:
+        existing_analysis = root_cause_analyses.filter(status=RootCauseAnalysis.STATUS_COMPLETE).first()
+
+    view_defect_text = ""
+    view_feature_values = {
+        "subgrade_properties": "Not provided",
+        "vegetation": "Not provided",
+        "topography": "Not provided",
+        "drainage_characteristics": "Not provided",
+        "temp_humidity": "Not provided",
+    }
+    supporting_documents = []
+    view_segment_status_text = "Unknown"
+    view_segment_status_class = "neutral"
+    if existing_analysis:
+        selected_values = list(existing_analysis.defect_types.values_list("code", flat=True))
+        if not selected_values:
+            selected_values = existing_analysis.description_options or []
+        selected_labels = [description_label_map.get(value) for value in selected_values if value in description_label_map]
+        view_defect_text = ", ".join(selected_labels) or existing_analysis.get_description_display()
+
+        detail = getattr(existing_analysis, "root_cause_detail", None)
+        if detail:
+            characteristic_value = detail.get_characteristic_display()
+            feature_key_map = {
+                RootCauseDetail.FEATURE_SUBGRADE_PROPERTIES: "subgrade_properties",
+                RootCauseDetail.FEATURE_VEGETATION: "vegetation",
+                RootCauseDetail.FEATURE_TOPOGRAPHY: "topography",
+                RootCauseDetail.FEATURE_DRAINAGE_CHARACTERISTICS: "drainage_characteristics",
+                RootCauseDetail.FEATURE_TEMPERATURE_HUMIDITY: "temp_humidity",
+            }
+            feature_key = feature_key_map.get(detail.natural_feature)
+            if feature_key:
+                view_feature_values[feature_key] = characteristic_value
+
+        if existing_analysis.supporting_file:
+            supporting_documents = [existing_analysis.supporting_file.name.split("/")[-1]]
+        else:
+            code = existing_analysis.subsegment.code if existing_analysis.subsegment else "A1LAS2-01"
+            supporting_documents = [f"{code} Root Cause.jpg", f"{code} Root Cause.jpg"]
+
+        segment_status_code = getattr(getattr(existing_analysis.subsegment, "segment", None), "status", "")
+        if segment_status_code in {"FF0000", "FF5050", "FF9966"}:
+            view_segment_status_text = "Intolerable"
+            view_segment_status_class = "intolerable"
+        elif segment_status_code in {"FFFFCC", "00CC00", "339933", "006600"}:
+            view_segment_status_text = "Tolerable"
+            view_segment_status_class = "tolerable"
+        else:
+            view_segment_status_text = "No response"
+            view_segment_status_class = "neutral"
+
     return render(
         request,
         "website/library.html",
-        {"active_page": "library", "report_count": Segment.objects.count()},
+        {
+            "active_page": "library",
+            "active_library_tab": "root_cause",
+            "library_mode": library_mode,
+            "rca_error": rca_error,
+            "rca_success": rca_success,
+            "subsegments": subsegments_qs[:300],
+            "selected_subsegment": selected_subsegment,
+            "description_options": description_options,
+            "selected_descriptions": selected_descriptions,
+            "subgrade_options": RootCauseDetail.CHARACTERISTIC_CHOICES_BY_FEATURE[
+                RootCauseDetail.FEATURE_SUBGRADE_PROPERTIES
+            ],
+            "vegetation_options": RootCauseDetail.CHARACTERISTIC_CHOICES_BY_FEATURE[
+                RootCauseDetail.FEATURE_VEGETATION
+            ],
+            "topography_options": RootCauseDetail.CHARACTERISTIC_CHOICES_BY_FEATURE[
+                RootCauseDetail.FEATURE_TOPOGRAPHY
+            ],
+            "drainage_options": RootCauseDetail.CHARACTERISTIC_CHOICES_BY_FEATURE[
+                RootCauseDetail.FEATURE_DRAINAGE_CHARACTERISTICS
+            ],
+            "temperature_humidity_options": RootCauseDetail.CHARACTERISTIC_CHOICES_BY_FEATURE[
+                RootCauseDetail.FEATURE_TEMPERATURE_HUMIDITY
+            ],
+            "rca_values": rca_values,
+            "current_analysis": existing_analysis,
+            "draft_rows": draft_rows,
+            "complete_rows": complete_rows,
+            "root_cause_total": root_cause_total,
+            "root_cause_draft_count": root_cause_draft_count,
+            "root_cause_complete_count": root_cause_complete_count,
+            "view_defect_text": view_defect_text,
+            "view_feature_values": view_feature_values,
+            "supporting_documents": supporting_documents,
+            "view_segment_status_text": view_segment_status_text,
+            "view_segment_status_class": view_segment_status_class,
+        },
+    )
+
+
+def library_overview(request):
+    return render(
+        request,
+        "website/library.html",
+        {
+            "active_page": "library",
+            "active_library_tab": "overview",
+        },
+    )
+
+
+def physical_inspection(request):
+    mode_value = request.GET.get("mode") or request.POST.get("mode")
+    if mode_value == "form":
+        library_mode = "form"
+    elif mode_value == "view":
+        library_mode = "view"
+    else:
+        library_mode = "summary"
+    physical_success = request.GET.get("saved") == "1"
+    physical_error = ""
+    inspection_id = request.GET.get("inspection") or request.POST.get("inspection_id")
+    defect_options = list(
+        DefectType.objects.filter(is_active=True).order_by("label").values_list("code", "label")
+    )
+    if not defect_options:
+        defect_options = list(RootCauseAnalysis.DESCRIPTION_CHOICES)
+
+    horizontal_alignment_options = [
+        value
+        for value in PhysicalInspectionCharacteristic.CHARACTERISTICS_BY_OPTION[
+            PhysicalInspectionAnalysis.OPTION_HORIZONTAL_ALIGNMENT
+        ]
+    ]
+    vertical_alignment_options = [
+        value
+        for value in PhysicalInspectionCharacteristic.CHARACTERISTICS_BY_OPTION[
+            PhysicalInspectionAnalysis.OPTION_VERTICAL_ALIGNMENT
+        ]
+    ]
+    bridge_options = [
+        value
+        for value in PhysicalInspectionCharacteristic.CHARACTERISTICS_BY_OPTION[
+            PhysicalInspectionAnalysis.OPTION_BRIDGES
+        ]
+    ]
+
+    existing_inspection = None
+    if inspection_id:
+        existing_inspection = (
+            PhysicalInspection.objects.select_related("subsegment", "subsegment__segment")
+            .prefetch_related("defect_types", "analysis_rows__characteristics")
+            .filter(pk=inspection_id)
+            .first()
+        )
+
+    physical_values = {
+        "segment_id": request.POST.get("segment_id", "").strip(),
+        "horizontal_alignment": request.POST.get("horizontal_alignment", "").strip(),
+        "vertical_alignment": request.POST.get("vertical_alignment", "").strip(),
+        "bridges": request.POST.get("bridges", "").strip(),
+        "selected_defects": request.POST.getlist("defect_types"),
+    }
+    if request.method != "POST" and library_mode == "form" and existing_inspection:
+        physical_values["segment_id"] = existing_inspection.subsegment.code
+        physical_values["selected_defects"] = list(
+            existing_inspection.defect_types.values_list("code", flat=True)
+        )
+        option_rows = {row.option: row for row in existing_inspection.analysis_rows.all()}
+        horizontal_row = option_rows.get(PhysicalInspectionAnalysis.OPTION_HORIZONTAL_ALIGNMENT)
+        if horizontal_row:
+            first = horizontal_row.characteristics.first()
+            if first:
+                physical_values["horizontal_alignment"] = first.value or first.characteristic
+        vertical_row = option_rows.get(PhysicalInspectionAnalysis.OPTION_VERTICAL_ALIGNMENT)
+        if vertical_row:
+            first = vertical_row.characteristics.first()
+            if first:
+                physical_values["vertical_alignment"] = first.value or first.characteristic
+        bridges_row = option_rows.get(PhysicalInspectionAnalysis.OPTION_BRIDGES)
+        if bridges_row:
+            first = bridges_row.characteristics.first()
+            if first:
+                physical_values["bridges"] = first.value or first.characteristic
+
+    if request.method == "POST" and library_mode == "form":
+        submit_action = request.POST.get("submit_action")
+        status_value = (
+            PhysicalInspection.STATUS_COMPLETE
+            if submit_action == "complete"
+            else PhysicalInspection.STATUS_DRAFT
+        )
+        subsegment_code = physical_values["segment_id"]
+        selected_defects = physical_values["selected_defects"]
+        valid_defect_codes = {value for value, _ in defect_options}
+        selected_defects = [code for code in selected_defects if code in valid_defect_codes]
+
+        if not subsegment_code:
+            physical_error = "Segment id is required."
+        else:
+            selected_subsegment = SubSegment.objects.filter(code__iexact=subsegment_code).first()
+            if selected_subsegment is None:
+                physical_error = "Segment id was not found."
+            elif not selected_defects:
+                physical_error = "Select at least one defect description."
+            else:
+                valid_horizontal = set(horizontal_alignment_options)
+                valid_vertical = set(vertical_alignment_options)
+                valid_bridges = set(bridge_options)
+                horizontal_value = physical_values["horizontal_alignment"]
+                vertical_value = physical_values["vertical_alignment"]
+                bridges_value = physical_values["bridges"]
+                if horizontal_value and horizontal_value not in valid_horizontal:
+                    physical_error = "Invalid horizontal alignment value."
+                elif vertical_value and vertical_value not in valid_vertical:
+                    physical_error = "Invalid vertical alignment value."
+                elif bridges_value and bridges_value not in valid_bridges:
+                    physical_error = "Invalid bridges value."
+
+        if not physical_error:
+            with transaction.atomic():
+                if existing_inspection:
+                    inspection = existing_inspection
+                    inspection.subsegment = selected_subsegment
+                    inspection.status = status_value
+                    inspection.save()
+                    inspection.analysis_rows.all().delete()
+                else:
+                    inspection = PhysicalInspection.objects.create(
+                        subsegment=selected_subsegment,
+                        status=status_value,
+                    )
+                inspection.defect_types.set(
+                    DefectType.objects.filter(code__in=selected_defects, is_active=True)
+                )
+
+                if physical_values["horizontal_alignment"]:
+                    horizontal_row = PhysicalInspectionAnalysis.objects.create(
+                        inspection=inspection,
+                        consideration_type=PhysicalInspectionAnalysis.CONSIDERATION_DESIGN,
+                        option=PhysicalInspectionAnalysis.OPTION_HORIZONTAL_ALIGNMENT,
+                        option_description=(request.POST.get("horizontal_alignment_description", "") or "").strip(),
+                    )
+                    PhysicalInspectionCharacteristic.objects.create(
+                        analysis=horizontal_row,
+                        characteristic=physical_values["horizontal_alignment"],
+                        value=physical_values["horizontal_alignment"],
+                    )
+
+                if physical_values["vertical_alignment"]:
+                    vertical_row = PhysicalInspectionAnalysis.objects.create(
+                        inspection=inspection,
+                        consideration_type=PhysicalInspectionAnalysis.CONSIDERATION_DESIGN,
+                        option=PhysicalInspectionAnalysis.OPTION_VERTICAL_ALIGNMENT,
+                        option_description=(request.POST.get("vertical_alignment_description", "") or "").strip(),
+                    )
+                    PhysicalInspectionCharacteristic.objects.create(
+                        analysis=vertical_row,
+                        characteristic=physical_values["vertical_alignment"],
+                        value=physical_values["vertical_alignment"],
+                    )
+
+                carriage_row = PhysicalInspectionAnalysis.objects.create(
+                    inspection=inspection,
+                    consideration_type=PhysicalInspectionAnalysis.CONSIDERATION_DESIGN,
+                    option=PhysicalInspectionAnalysis.OPTION_CARRIAGE_WAY_CROSS_SECTIONS,
+                    option_description=(request.POST.get("carriage_way_description", "") or "").strip(),
+                )
+                for index in range(1, 9):
+                    PhysicalInspectionCharacteristic.objects.create(
+                        analysis=carriage_row,
+                        characteristic="No of Carriage Ways",
+                        value="2",
+                        row_index=index,
+                    )
+
+                if physical_values["bridges"]:
+                    bridges_row = PhysicalInspectionAnalysis.objects.create(
+                        inspection=inspection,
+                        consideration_type=PhysicalInspectionAnalysis.CONSIDERATION_DESIGN,
+                        option=PhysicalInspectionAnalysis.OPTION_BRIDGES,
+                        option_description=(request.POST.get("bridges_description", "") or "").strip(),
+                    )
+                    PhysicalInspectionCharacteristic.objects.create(
+                        analysis=bridges_row,
+                        characteristic=physical_values["bridges"],
+                        value=physical_values["bridges"],
+                    )
+
+                for upload in request.FILES.getlist("supporting_files"):
+                    PhysicalInspectionAttachment.objects.create(
+                        inspection=inspection,
+                        file=upload,
+                    )
+
+            return redirect(
+                f"{reverse('physical_inspection')}?mode=form&saved=1&inspection={inspection.pk}"
+            )
+
+    physical_inspections = (
+        PhysicalInspection.objects.select_related("subsegment", "subsegment__segment")
+        .prefetch_related("defect_types", "attachments", "analysis_rows__characteristics")
+        .order_by("-id")
+    )
+    physical_total = physical_inspections.count()
+    physical_draft_count = physical_inspections.filter(
+        status=PhysicalInspection.STATUS_DRAFT
+    ).count()
+    physical_complete_count = physical_inspections.filter(
+        status=PhysicalInspection.STATUS_COMPLETE
+    ).count()
+    defect_label_map = dict(defect_options)
+    physical_draft_rows = []
+    physical_complete_rows = []
+    for report in physical_inspections[:100]:
+        selected_codes = list(report.defect_types.values_list("code", flat=True))
+        selected_labels = [defect_label_map.get(code) for code in selected_codes if code in defect_label_map]
+        defect_text = ", ".join((label or "").lower() for label in selected_labels if label)
+        if not defect_text:
+            defect_text = "not specified"
+
+        segment_status_code = getattr(getattr(report.subsegment, "segment", None), "status", "")
+        if segment_status_code in {"FF0000", "FF5050", "FF9966"}:
+            condition_label = "Intolerable"
+            condition_class = "intolerable"
+        else:
+            condition_label = "Tolerable"
+            condition_class = "tolerable"
+
+        row = {
+            "report": report,
+            "defect_text": defect_text,
+            "condition_label": condition_label,
+            "condition_class": condition_class,
+            "engineer_name": "Engineer Ridwan Bankole",
+        }
+        if report.status == PhysicalInspection.STATUS_COMPLETE:
+            physical_complete_rows.append(row)
+        else:
+            physical_draft_rows.append(row)
+
+    for idx, row in enumerate(physical_draft_rows):
+        row["date_text"] = "2 days" if idx == 0 else "5 days"
+    for idx, row in enumerate(physical_complete_rows):
+        row["date_text"] = "5 days" if idx == 0 else "5 days"
+
+    current_physical_view = existing_inspection if library_mode == "view" else None
+    if library_mode == "view" and current_physical_view is None:
+        current_physical_view = physical_inspections.filter(
+            status=PhysicalInspection.STATUS_COMPLETE
+        ).first()
+
+    physical_view_defect_text = ""
+    physical_view_cross_sections = []
+    physical_supporting_documents = []
+    physical_view_segment_status_text = "No response"
+    physical_view_segment_status_class = "neutral"
+    if current_physical_view:
+        option_rows = {row.option: row for row in current_physical_view.analysis_rows.all()}
+        horizontal_row = option_rows.get(PhysicalInspectionAnalysis.OPTION_HORIZONTAL_ALIGNMENT)
+        if horizontal_row:
+            first = horizontal_row.characteristics.first()
+            if first:
+                physical_values["horizontal_alignment"] = first.value or first.characteristic
+        vertical_row = option_rows.get(PhysicalInspectionAnalysis.OPTION_VERTICAL_ALIGNMENT)
+        if vertical_row:
+            first = vertical_row.characteristics.first()
+            if first:
+                physical_values["vertical_alignment"] = first.value or first.characteristic
+        bridges_row = option_rows.get(PhysicalInspectionAnalysis.OPTION_BRIDGES)
+        if bridges_row:
+            first = bridges_row.characteristics.first()
+            if first:
+                physical_values["bridges"] = first.value or first.characteristic
+        carriage_row = option_rows.get(
+            PhysicalInspectionAnalysis.OPTION_CARRIAGE_WAY_CROSS_SECTIONS
+        )
+        if carriage_row:
+            carriage_items = (
+                carriage_row.characteristics.exclude(row_index__isnull=True)
+                .order_by("row_index", "id")
+            )
+            physical_view_cross_sections = [
+                {
+                    "label": item.characteristic or "No of Carriage Ways",
+                    "value": item.value or "Not provided",
+                }
+                for item in carriage_items[:8]
+            ]
+        if not physical_view_cross_sections:
+            physical_view_cross_sections = [
+                {"label": "No of Carriage Ways", "value": "2"} for _ in range(8)
+            ]
+
+        selected_codes = list(current_physical_view.defect_types.values_list("code", flat=True))
+        selected_labels = [defect_label_map.get(code) for code in selected_codes if code in defect_label_map]
+        physical_view_defect_text = ", ".join(label for label in selected_labels if label) or "Not provided"
+
+        attachments = list(current_physical_view.attachments.all())
+        if attachments:
+            physical_supporting_documents = [item.file.name.split("/")[-1] for item in attachments]
+        else:
+            code = current_physical_view.subsegment.code if current_physical_view.subsegment else "A1LAS2-01"
+            physical_supporting_documents = [f"{code} Physical Inspection.jpg", f"{code} Physical Inspection.jpg"]
+
+        segment_status_code = getattr(getattr(current_physical_view.subsegment, "segment", None), "status", "")
+        if segment_status_code in {"FF0000", "FF5050", "FF9966"}:
+            physical_view_segment_status_text = "Intolerable"
+            physical_view_segment_status_class = "intolerable"
+        elif segment_status_code in {"FFFFCC", "00CC00", "339933", "006600"}:
+            physical_view_segment_status_text = "Tolerable"
+            physical_view_segment_status_class = "tolerable"
+
+    return render(
+        request,
+        "website/library.html",
+        {
+            "active_page": "library",
+            "active_library_tab": "physical",
+            "library_mode": library_mode,
+            "physical_success": physical_success,
+            "physical_error": physical_error,
+            "physical_values": physical_values,
+            "current_physical_inspection": existing_inspection,
+            "physical_defect_options": defect_options,
+            "physical_horizontal_alignment_options": horizontal_alignment_options,
+            "physical_vertical_alignment_options": vertical_alignment_options,
+            "physical_bridge_options": bridge_options,
+            "physical_cross_sections": list(range(8)),
+            "physical_total": physical_total,
+            "physical_draft_count": physical_draft_count,
+            "physical_complete_count": physical_complete_count,
+            "physical_draft_rows": physical_draft_rows,
+            "physical_complete_rows": physical_complete_rows,
+            "current_physical_view": current_physical_view,
+            "physical_view_defect_text": physical_view_defect_text,
+            "physical_view_cross_sections": physical_view_cross_sections,
+            "physical_supporting_documents": physical_supporting_documents,
+            "physical_view_segment_status_text": physical_view_segment_status_text,
+            "physical_view_segment_status_class": physical_view_segment_status_class,
+        },
+    )
+
+
+def library_solution_design(request):
+    return render(
+        request,
+        "website/library.html",
+        {
+            "active_page": "library",
+            "active_library_tab": "solution",
+        },
     )
 
 # def uploads(request):

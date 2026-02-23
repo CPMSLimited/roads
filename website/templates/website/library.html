@@ -1,35 +1,627 @@
 {% extends "website/base.html" %}
-{% block body_class %}app-body{% endblock %}
+{% load static %}
+{% block body_class %}app-body library-body{% endblock %}
 {% block content %}
-<section class="app-shell">
-    <aside class="app-sidebar">
-        <nav class="sidebar-nav sidebar-nav-icons">
-            <a href="{% url 'motorability_and_condition' %}">Overview</a>
-            <a class="is-active" href="{% url 'library' %}">Root Cause Analysis</a>
-            <a href="{% url 'road_inventory' %}">Physical Inspection</a>
-            <a href="{% url 'motorability_and_condition' %}">Solution design</a>
+{% url 'library' as library_root_url %}
+{% url 'physical_inspection' as physical_root_url %}
+{% with library_form_href=library_root_url|add:'?mode=form' physical_form_href=physical_root_url|add:'?mode=form' %}
+<section class="library-screen">
+    <aside class="library-side">
+        <nav class="library-side-nav" aria-label="Library workflow navigation">
+            {% if active_library_tab == "overview" %}
+            {% include "website/includes/sg_nav_item.html" with url_name="library_overview" icon_key="overview" label="Overview" is_active=True %}
+            {% else %}
+            {% include "website/includes/sg_nav_item.html" with url_name="library_overview" icon_key="overview" label="Overview" %}
+            {% endif %}
+            {% if active_library_tab == "root_cause" %}
+            {% include "website/includes/sg_nav_item.html" with url_name="library" icon_key="root_cause" label="Root Cause Analysis" is_active=True %}
+            {% else %}
+            {% include "website/includes/sg_nav_item.html" with url_name="library" icon_key="root_cause" label="Root Cause Analysis" %}
+            {% endif %}
+            {% if active_library_tab == "physical" %}
+            {% include "website/includes/sg_nav_item.html" with url_name="physical_inspection" icon_key="physical" label="Physical Inspection" is_active=True %}
+            {% else %}
+            {% include "website/includes/sg_nav_item.html" with url_name="physical_inspection" icon_key="physical" label="Physical Inspection" %}
+            {% endif %}
+            {% if active_library_tab == "solution" %}
+            {% include "website/includes/sg_nav_item.html" with url_name="library_solution_design" icon_key="solution" label="Solution Design" is_active=True %}
+            {% else %}
+            {% include "website/includes/sg_nav_item.html" with url_name="library_solution_design" icon_key="solution" label="Solution Design" %}
+            {% endif %}
         </nav>
-        <div class="sidebar-actions">
-            <a href="{% url 'uploads' %}" class="btn btn-outline">Update Route Info</a>
-            <a href="{% url 'motorability_and_condition' %}" class="btn btn-solid">Run Updates</a>
+
+        <div class="library-side-actions">
+            {% include "website/includes/sg_action_button.html" with url_name="uploads" class_name="sg-btn-outline" label="Update Route Info" icon_path="website/styleguide/icons/iconoir_upload.svg" %}
+            {% include "website/includes/sg_action_button.html" with url_name="motorability_and_condition" class_name="sg-btn-primary" label="Run Updates" %}
         </div>
     </aside>
 
-    <div class="empty-state-wrap">
+    <section class="library-main">
+        {% if active_library_tab == "physical" and library_mode == "view" and current_physical_view %}
+        <section class="library-view-shell">
+            <article class="library-view-main">
+                <a class="library-rca-back" href="{% url 'physical_inspection' %}">Back to Summary</a>
+                <header class="library-view-header">
+                    <h1>{{ current_physical_view.subsegment.code }}</h1>
+                    <p>Detailed Analysis Report</p>
+                </header>
+
+                <section class="library-view-section">
+                    <h2>Defects Description</h2>
+                    <p>Select the position of the defect</p>
+                    <div class="library-view-value">{{ physical_view_defect_text }}</div>
+                </section>
+
+                <section class="library-view-section">
+                    <h2>Design Considerations</h2>
+                    <p>Select the natural features and their characteristics</p>
+                    <div class="library-view-field">
+                        <label>Horizontal Alignment</label>
+                        <div class="library-view-value">{{ physical_values.horizontal_alignment|default:"Not provided" }}</div>
+                    </div>
+                    <div class="library-view-field">
+                        <label>Vertical Alignment</label>
+                        <div class="library-view-value">{{ physical_values.vertical_alignment|default:"Not provided" }}</div>
+                    </div>
+                    <div class="library-view-field">
+                        <label>Carriage way cross-sections</label>
+                        <div class="library-view-cross-grid">
+                            {% for item in physical_view_cross_sections %}
+                            <article class="library-view-cross-item">
+                                <span>{{ item.label }}:</span>
+                                <strong>{{ item.value }}</strong>
+                            </article>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="library-view-field">
+                        <label>Bridges</label>
+                        <div class="library-view-value">{{ physical_values.bridges|default:"Not provided" }}</div>
+                    </div>
+                </section>
+            </article>
+
+            <aside class="library-view-pane">
+                <article class="library-view-card">
+                    <header class="library-view-card-head">
+                        <h3>Report Information</h3>
+                        <a class="library-view-map-link" href="#"><img src="{% static 'website/styleguide/icons/iconoir_eye.svg' %}" alt="" role="presentation"><span>View on Map</span></a>
+                    </header>
+                    <dl class="library-view-info-list">
+                        <div><dt>Inspector:</dt><dd>Engineer Ridwan Bankole</dd></div>
+                        <div><dt>Segment:</dt><dd>{{ current_physical_view.subsegment.code }}</dd></div>
+                        <div><dt>Design Speed:</dt><dd>33km/hr</dd></div>
+                        <div><dt>Status:</dt><dd><span class="library-view-status is-{{ physical_view_segment_status_class }}">{{ physical_view_segment_status_text }}</span></dd></div>
+                        <div><dt>Date:</dt><dd>1/8/2025</dd></div>
+                    </dl>
+                </article>
+
+                <section class="library-view-docs">
+                    <h3>Supporting Documents</h3>
+                    {% for doc_name in physical_supporting_documents %}
+                    <article class="library-view-doc-row">
+                        <span class="library-view-doc-check">✓</span>
+                        <span>{{ doc_name }}</span>
+                    </article>
+                    {% endfor %}
+                </section>
+
+                <button type="button" class="library-view-export">Export Report</button>
+                <a class="library-view-edit" href="{{ physical_form_href }}&inspection={{ current_physical_view.pk }}">Edit Report</a>
+            </aside>
+        </section>
+        {% elif active_library_tab == "physical" and library_mode == "form" %}
+        <form class="library-physical-shell" method="post" action="{% url 'physical_inspection' %}?mode=form" enctype="multipart/form-data">
+            {% csrf_token %}
+            <input type="hidden" name="mode" value="form">
+            {% if current_physical_inspection %}
+            <input type="hidden" name="inspection_id" value="{{ current_physical_inspection.pk }}">
+            {% endif %}
+            <article class="library-physical-main">
+                <div class="library-physical-segment-field">
+                    <label for="physical-segment-id">Type segment id</label>
+                    <input id="physical-segment-id" name="segment_id" type="text" placeholder="Type segment id" value="{{ physical_values.segment_id }}">
+                </div>
+                {% if physical_error %}
+                <p class="library-rca-feedback library-rca-feedback-error">{{ physical_error }}</p>
+                {% elif physical_success %}
+                <p class="library-rca-feedback library-rca-feedback-success">Physical inspection saved.</p>
+                {% endif %}
+
+                <section class="library-physical-section">
+                    <h2>Defects Description</h2>
+                    <p>Select the position of the defect</p>
+                    <div class="library-rca-check-grid" role="group" aria-label="Physical defect description options">
+                        {% for value, label in physical_defect_options %}
+                        <label class="library-rca-check-item" for="physical-defect-{{ value }}">
+                            <input
+                                id="physical-defect-{{ value }}"
+                                type="checkbox"
+                                name="defect_types"
+                                value="{{ value }}"
+                                {% if value in physical_values.selected_defects %}checked{% endif %}
+                            >
+                            <span>{{ label }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </section>
+
+                <section class="library-physical-section">
+                    <h2>Design Considerations</h2>
+                    <p>Select the natural features and their natural characteristics</p>
+                    <div class="library-physical-field">
+                        <label for="physical-horizontal">Horizontal Alignment</label>
+                        <select id="physical-horizontal" class="library-physical-select" name="horizontal_alignment">
+                            <option value="">Select alignment type</option>
+                            {% for item in physical_horizontal_alignment_options %}
+                            <option value="{{ item }}" {% if physical_values.horizontal_alignment == item %}selected{% endif %}>{{ item }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="library-physical-field">
+                        <label for="physical-vertical">Vertical Alignment</label>
+                        <select id="physical-vertical" class="library-physical-select" name="vertical_alignment">
+                            <option value="">Select alignment</option>
+                            {% for item in physical_vertical_alignment_options %}
+                            <option value="{{ item }}" {% if physical_values.vertical_alignment == item %}selected{% endif %}>{{ item }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="library-physical-field">
+                        <label>Carriage way cross-sections</label>
+                        <div class="library-physical-cross-grid">
+                            {% for _ in physical_cross_sections %}
+                            <div class="library-physical-cross-item">No of Carriage ways: <strong>2</strong></div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="library-physical-field">
+                        <label for="physical-bridges">Bridges</label>
+                        <select id="physical-bridges" class="library-physical-select" name="bridges">
+                            <option value="">Select bridge type</option>
+                            {% for item in physical_bridge_options %}
+                            <option value="{{ item }}" {% if physical_values.bridges == item %}selected{% endif %}>{{ item }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </section>
+            </article>
+
+            <aside class="library-physical-pane">
+                <article class="library-view-card">
+                    <header class="library-view-card-head">
+                        <h3>Report Information</h3>
+                        <a class="library-view-map-link" href="{% url 'library' %}"><img src="{% static 'website/styleguide/icons/iconoir_eye.svg' %}" alt="" role="presentation"><span>View root cause</span></a>
+                    </header>
+                    <dl class="library-view-info-list">
+                        <div><dt>Inspector:</dt><dd>Engineer Ridwan Bankole</dd></div>
+                        <div><dt>Design Speed:</dt><dd>33km/hr</dd></div>
+                        <div><dt>Status:</dt><dd><span class="library-view-status is-intolerable">Intolerable</span></dd></div>
+                        <div><dt>Date:</dt><dd>1/8/2025</dd></div>
+                    </dl>
+                </article>
+
+                <section class="library-view-docs">
+                    <h3>Upload supporting information</h3>
+                    <input id="physical-supporting-files" class="library-upload-input" type="file" name="supporting_files" multiple>
+                    <label for="physical-supporting-files" class="library-physical-upload-box">
+                        <span class="library-physical-upload-icon">☁</span>
+                        <span>Drag &amp; drop files here</span>
+                        <small>Upload photos, documents or reference material</small>
+                    </label>
+                </section>
+
+                <button type="submit" name="submit_action" value="draft" class="library-physical-save">
+                    <span class="library-physical-btn-icon" aria-hidden="true">
+                        <img src="{% static 'website/styleguide/icons/iconoir_save-floppy-disk.svg' %}" alt="" role="presentation">
+                    </span>
+                    <span>Save Draft</span>
+                </button>
+                <button type="submit" name="submit_action" value="complete" class="library-physical-complete">
+                    <span class="library-physical-btn-icon" aria-hidden="true">
+                        <img src="{% static 'website/styleguide/icons/iconoir_check.svg' %}" alt="" role="presentation">
+                    </span>
+                    <span>Mark as Complete</span>
+                </button>
+            </aside>
+        </form>
+        {% elif active_library_tab == "root_cause" and library_mode == "view" and current_analysis %}
+        <section class="library-view-shell">
+            <article class="library-view-main">
+                <a class="library-rca-back" href="{% url 'library' %}">Back to Summary</a>
+                <header class="library-view-header">
+                    <h1>{{ current_analysis.subsegment.code }}</h1>
+                    <p>Detailed Analysis Report</p>
+                </header>
+
+                <section class="library-view-section">
+                    <h2>Defects Description</h2>
+                    <p>Select the position of the defect</p>
+                    <div class="library-view-value">{{ view_defect_text }}</div>
+                </section>
+
+                <section class="library-view-section">
+                    <h2>Root Cause Description</h2>
+                    <p>Select the natural features and their natural characteristics</p>
+                    <div class="library-view-field">
+                        <label>Subgrade Properties</label>
+                        <div class="library-view-value">{{ view_feature_values.subgrade_properties }}</div>
+                    </div>
+                    <div class="library-view-field">
+                        <label>Vegetation</label>
+                        <div class="library-view-value">{{ view_feature_values.vegetation }}</div>
+                    </div>
+                    <div class="library-view-field">
+                        <label>Topography</label>
+                        <div class="library-view-value">{{ view_feature_values.topography }}</div>
+                    </div>
+                    <div class="library-view-field">
+                        <label>Drainage Characteristics</label>
+                        <div class="library-view-value">{{ view_feature_values.drainage_characteristics }}</div>
+                    </div>
+                    <div class="library-view-field">
+                        <label>Temperature and Humidity</label>
+                        <div class="library-view-value">{{ view_feature_values.temp_humidity }}</div>
+                    </div>
+                </section>
+            </article>
+
+            <aside class="library-view-pane">
+                <article class="library-view-card">
+                    <header class="library-view-card-head">
+                        <h3>Report Information</h3>
+                        <a class="library-view-map-link" href="#"><img src="{% static 'website/styleguide/icons/iconoir_eye.svg' %}" alt="" role="presentation"><span>View on Map</span></a>
+                    </header>
+                    <dl class="library-view-info-list">
+                        <div><dt>Inspector:</dt><dd>Engineer Ridwan Bankole</dd></div>
+                        <div><dt>Segment:</dt><dd>{{ current_analysis.subsegment.code }}</dd></div>
+                        <div><dt>Design Speed:</dt><dd>33km/hr</dd></div>
+                        <div><dt>Status:</dt><dd><span class="library-view-status is-{{ view_segment_status_class }}">{{ view_segment_status_text }}</span></dd></div>
+                        <div><dt>Date:</dt><dd>1/8/2025</dd></div>
+                    </dl>
+                </article>
+
+                <section class="library-view-docs">
+                    <h3>Supporting Documents</h3>
+                    {% for doc_name in supporting_documents %}
+                    <article class="library-view-doc-row">
+                        <span class="library-view-doc-check">✓</span>
+                        <span>{{ doc_name }}</span>
+                    </article>
+                    {% endfor %}
+                </section>
+
+                <button type="button" class="library-view-export">Export Report</button>
+                <a class="library-view-edit" href="{{ library_form_href }}&subsegment={{ current_analysis.subsegment_id }}&analysis={{ current_analysis.pk }}">Edit Report</a>
+            </aside>
+        </section>
+        {% elif active_library_tab == "root_cause" and library_mode == "form" %}
+        <form class="library-rca-shell" method="post" action="{{ library_form_href }}" enctype="multipart/form-data">
+            {% csrf_token %}
+            {% if current_analysis %}
+            <input type="hidden" name="analysis_id" value="{{ current_analysis.pk }}">
+            {% endif %}
+            <input type="hidden" name="subsegment_id" value="{% if selected_subsegment %}{{ selected_subsegment.pk }}{% endif %}">
+            <input type="hidden" name="location" value="{% if selected_subsegment %}{{ selected_subsegment.code }}{% endif %}">
+            <article class="library-rca-main">
+                <a class="library-rca-back" href="{% url 'library' %}">Back to Summary</a>
+                <header class="library-rca-header">
+                    <h1>{% if selected_subsegment %}{{ selected_subsegment.code }}{% else %}Root Cause Analysis{% endif %}</h1>
+                    <p>Detailed analysis report</p>
+                </header>
+                {% if rca_error %}
+                <p class="library-rca-feedback library-rca-feedback-error">{{ rca_error }}</p>
+                {% elif rca_success %}
+                <p class="library-rca-feedback library-rca-feedback-success">Root cause analysis saved.</p>
+                {% endif %}
+
+                <section class="library-rca-section">
+                    <h2>Defect description</h2>
+                    <p>Select the position of the defect</p>
+                    <div class="library-rca-check-grid" role="group" aria-label="Defect description options">
+                        {% for value, label in description_options %}
+                        <label class="library-rca-check-item" for="rca-desc-{{ value }}">
+                            <input
+                                id="rca-desc-{{ value }}"
+                                type="checkbox"
+                                name="description_options"
+                                value="{{ value }}"
+                                {% if value in selected_descriptions %}checked{% endif %}
+                            >
+                            <span>{{ label }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </section>
+
+                <section class="library-rca-section">
+                    <h2>Root cause description</h2>
+                    <p>Select the natural features and their characteristics</p>
+                    <div class="library-rca-field">
+                        <label for="rca-subgrade-properties">Subgrade Properties</label>
+                        <select id="rca-subgrade-properties" class="library-rca-select" name="subgrade_properties" aria-label="Subgrade Properties">
+                            <option value="">Select value</option>
+                            {% for value, label in subgrade_options %}
+                            <option value="{{ value }}" {% if rca_values.subgrade_properties == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="library-rca-field">
+                        <label for="rca-vegetation">Vegetation</label>
+                        <select id="rca-vegetation" class="library-rca-select" name="vegetation" aria-label="Vegetation">
+                            <option value="">Select value</option>
+                            {% for value, label in vegetation_options %}
+                            <option value="{{ value }}" {% if rca_values.vegetation == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="library-rca-field">
+                        <label for="rca-topography">Topography</label>
+                        <select id="rca-topography" class="library-rca-select" name="topography" aria-label="Topography">
+                            <option value="">Select value</option>
+                            {% for value, label in topography_options %}
+                            <option value="{{ value }}" {% if rca_values.topography == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="library-rca-field">
+                        <label for="rca-drainage">Drainage Characteristics</label>
+                        <select id="rca-drainage" class="library-rca-select" name="drainage_characteristics" aria-label="Drainage Characteristics">
+                            <option value="">Select value</option>
+                            {% for value, label in drainage_options %}
+                            <option value="{{ value }}" {% if rca_values.drainage_characteristics == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="library-rca-field">
+                        <label for="rca-temp-humidity">Temperature &amp; Humidity</label>
+                        <select id="rca-temp-humidity" class="library-rca-select" name="temp_humidity" aria-label="Temperature and Humidity">
+                            <option value="">Select value</option>
+                            {% for value, label in temperature_humidity_options %}
+                            <option value="{{ value }}" {% if rca_values.temp_humidity == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </section>
+
+            </article>
+
+            <aside class="library-rca-pane" aria-label="Supporting information upload">
+                <article class="library-rca-card library-upload-card">
+                    <h3 class="library-upload-title">Upload supporting information</h3>
+                    <input id="library-supporting-files" class="library-upload-input" type="file" name="supporting_file">
+                    <label for="library-supporting-files" class="library-upload-dropzone">
+                        <span class="library-upload-dropzone-icon" aria-hidden="true">
+                            <img src="{% static 'website/styleguide/icons/bytesize_upload.svg' %}" alt="" role="presentation">
+                        </span>
+                        <span>Select files to upload</span>
+                    </label>
+                </article>
+
+                <button type="submit" name="submit_action" value="draft" class="library-pane-btn library-pane-btn-draft">
+                    <span class="library-pane-btn-icon" aria-hidden="true">
+                        <img src="{% static 'website/styleguide/icons/iconoir_save-floppy-disk.svg' %}" alt="" role="presentation">
+                    </span>
+                    <span>Save draft</span>
+                </button>
+
+                <button type="submit" name="submit_action" value="complete" class="library-pane-btn library-pane-btn-complete">
+                    <span class="library-pane-btn-icon" aria-hidden="true">
+                        <img src="{% static 'website/styleguide/icons/iconoir_check.svg' %}" alt="" role="presentation">
+                    </span>
+                    <span>Mark as complete</span>
+                </button>
+            </aside>
+        </form>
+        {% else %}
         <div class="library-toolbar">
-            <div class="kpi-grid">
-                <article class="kpi-card"><span>Total reports</span><strong>{{ report_count }}</strong></article>
-                <article class="kpi-card"><span>Ongoing</span><strong>0</strong></article>
-                <article class="kpi-card"><span>Completed</span><strong>0</strong></article>
+            <div class="library-kpi-grid">
+                {% if active_library_tab == "physical" %}
+                {% include "website/includes/sg_kpi_card.html" with label="Total Inspections" value=physical_total %}
+                {% else %}
+                {% include "website/includes/sg_kpi_card.html" with label="Total reports" value=root_cause_total %}
+                {% endif %}
+                {% if active_library_tab == "physical" %}
+                {% include "website/includes/sg_kpi_card.html" with label="Ongoing" value=physical_draft_count %}
+                {% else %}
+                {% include "website/includes/sg_kpi_card.html" with label="Pending" value=root_cause_draft_count %}
+                {% endif %}
+                {% if active_library_tab == "physical" %}
+                {% include "website/includes/sg_kpi_card.html" with label="Completed" value=physical_complete_count %}
+                {% else %}
+                {% include "website/includes/sg_kpi_card.html" with label="Complete" value=root_cause_complete_count %}
+                {% endif %}
             </div>
-            <a href="#" class="btn btn-solid">Create New Report</a>
+            {% if active_library_tab == "physical" %}
+            {% include "website/includes/sg_action_button.html" with href=physical_form_href class_name="library-toolbar-action sg-btn-primary" label="Create New Inspection" icon_path="website/styleguide/icons/iconoir_add-circle.svg" %}
+            {% else %}
+            {% include "website/includes/sg_action_button.html" with href=library_form_href class_name="library-toolbar-action sg-btn-primary" label="Create New Report" icon_path="website/styleguide/icons/iconoir_add-circle.svg" %}
+            {% endif %}
         </div>
 
-        <article class="empty-state">
+        {% if active_library_tab == "physical" and physical_total %}
+        <section class="library-report-table-wrap" aria-label="Existing physical inspections">
+            <article class="library-report-table-card">
+                <header class="library-report-table-head">
+                    <h2>Drafts</h2>
+                    <div class="library-report-controls">
+                        <button type="button" class="library-report-priority">Priority</button>
+                        <button type="button" class="library-report-filter" aria-label="Filter rows">
+                            <span></span><span></span><span></span>
+                        </button>
+                    </div>
+                </header>
+                <table class="library-report-table">
+                    <thead>
+                        <tr>
+                            <th>Sub-segment Code</th>
+                            <th>Status</th>
+                            <th>Condition</th>
+                            <th>Date</th>
+                            <th>Engineer-in-charge</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in physical_draft_rows %}
+                        <tr>
+                            <td>{{ row.report.subsegment.code }}</td>
+                            <td>{{ row.defect_text }}</td>
+                            <td><span class="library-condition-chip is-{{ row.condition_class }}">{{ row.condition_label }}</span></td>
+                            <td>{{ row.date_text }}</td>
+                            <td>{{ row.engineer_name }}</td>
+                            <td>
+                                <a class="library-row-action" href="{{ physical_form_href }}&inspection={{ row.report.pk }}">
+                                    <img src="{% static 'website/styleguide/icons/iconoir_eye.svg' %}" alt="" role="presentation">
+                                    <span>view details</span>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </article>
+
+            <article class="library-report-table-card">
+                <header class="library-report-table-head">
+                    <h2>Complete Reports</h2>
+                    <div class="library-report-controls">
+                        <button type="button" class="library-report-priority">Priority</button>
+                        <button type="button" class="library-report-filter" aria-label="Filter rows">
+                            <span></span><span></span><span></span>
+                        </button>
+                    </div>
+                </header>
+                <table class="library-report-table">
+                    <thead>
+                        <tr>
+                            <th>Sub-segment Code</th>
+                            <th>Status</th>
+                            <th>Condition</th>
+                            <th>Date</th>
+                            <th>Engineer-in-charge</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in physical_complete_rows %}
+                        <tr>
+                            <td>{{ row.report.subsegment.code }}</td>
+                            <td>{{ row.defect_text }}</td>
+                            <td><span class="library-condition-chip is-{{ row.condition_class }}">{{ row.condition_label }}</span></td>
+                            <td>{{ row.date_text }}</td>
+                            <td>{{ row.engineer_name }}</td>
+                            <td>
+                                <a class="library-row-action" href="{{ physical_root_url }}?mode=view&inspection={{ row.report.pk }}">
+                                    <img src="{% static 'website/styleguide/icons/iconoir_eye.svg' %}" alt="" role="presentation">
+                                    <span>view details</span>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </article>
+        </section>
+        {% elif active_library_tab == "root_cause" and root_cause_total %}
+        <section class="library-report-table-wrap" aria-label="Existing root cause analyses">
+            <article class="library-report-table-card">
+                <header class="library-report-table-head">
+                    <h2>Drafts</h2>
+                    <div class="library-report-controls">
+                        <button type="button" class="library-report-priority">Priority</button>
+                        <button type="button" class="library-report-filter" aria-label="Filter rows">
+                            <span></span><span></span><span></span>
+                        </button>
+                    </div>
+                </header>
+                <table class="library-report-table">
+                    <thead>
+                        <tr>
+                            <th>Sub-segment Code</th>
+                            <th>Status</th>
+                            <th>Condition</th>
+                            <th>Date</th>
+                            <th>Engineer-in-charge</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in draft_rows %}
+                        <tr>
+                            <td>{{ row.report.subsegment.code }}</td>
+                            <td>{{ row.defect_text }}</td>
+                            <td><span class="library-condition-chip is-{{ row.condition_class }}">{{ row.condition_label }}</span></td>
+                            <td>{{ row.date_text }}</td>
+                            <td>{{ row.engineer_name }}</td>
+                            <td>
+                                <a class="library-row-action" href="{{ library_form_href }}&subsegment={{ row.report.subsegment_id }}&analysis={{ row.report.pk }}">
+                                    <img src="{% static 'website/styleguide/icons/iconoir_eye.svg' %}" alt="" role="presentation">
+                                    <span>view details</span>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </article>
+
+            <article class="library-report-table-card">
+                <header class="library-report-table-head">
+                    <h2>Completed Reports</h2>
+                    <div class="library-report-controls">
+                        <button type="button" class="library-report-priority">Priority</button>
+                        <button type="button" class="library-report-filter" aria-label="Filter rows">
+                            <span></span><span></span><span></span>
+                        </button>
+                    </div>
+                </header>
+                <table class="library-report-table">
+                    <thead>
+                        <tr>
+                            <th>Sub-segment Code</th>
+                            <th>Status</th>
+                            <th>Condition</th>
+                            <th>Date</th>
+                            <th>Engineer-in-charge</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in complete_rows %}
+                        <tr>
+                            <td>{{ row.report.subsegment.code }}</td>
+                            <td>{{ row.defect_text }}</td>
+                            <td><span class="library-condition-chip is-{{ row.condition_class }}">{{ row.condition_label }}</span></td>
+                            <td>{{ row.date_text }}</td>
+                            <td>{{ row.engineer_name }}</td>
+                            <td>
+                                <a class="library-row-action" href="{{ library_root_url }}?mode=view&subsegment={{ row.report.subsegment_id }}&analysis={{ row.report.pk }}">
+                                    <img src="{% static 'website/styleguide/icons/iconoir_eye.svg' %}" alt="" role="presentation">
+                                    <span>view details</span>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </article>
+        </section>
+        {% else %}
+        <article class="library-empty-state">
             <h1>Your report folder is empty</h1>
             <p>Create a new report and it will show up here.</p>
-            <a href="{% url 'motorability_and_condition' %}" class="btn btn-soft">Start A New Report</a>
+            {% if active_library_tab == "physical" %}
+            {% include "website/includes/sg_action_button.html" with href=physical_form_href class_name="library-empty-action sg-btn-soft" label="Create New Inspection" %}
+            {% else %}
+            {% include "website/includes/sg_action_button.html" with href=library_form_href class_name="library-empty-action sg-btn-soft" label="Create New Report" %}
+            {% endif %}
+            <img class="library-loading is-hidden" src="{% static 'website/styleguide/ferma_platform/Loading animation.svg' %}" alt="Loading animation preview">
         </article>
-    </div>
+        {% endif %}
+        {% endif %}
+    </section>
 </section>
+{% endwith %}
 {% endblock %}

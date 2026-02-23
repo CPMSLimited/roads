@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.db import models
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
 
 class Road(models.Model):
@@ -150,3 +151,467 @@ class SubSegment(models.Model):
         if as_str in {"", "-", "-0"}:
             as_str = "0"
         return Decimal(as_str)
+
+
+class DefectType(models.Model):
+    CODE_PAVEMENT = "pavement"
+    CODE_SHOULDERS = "shoulders"
+    CODE_DRAINAGE = "drainage"
+    CODE_TRAFFIC_VOLUME = "traffic_volume"
+    CODE_BRIDGES = "bridges"
+    CODE_CULVERTS = "culverts"
+    CODE_ROAD_JUNCTIONS = "road_junctions"
+    CODE_OTHERS = "others"
+
+    CODE_CHOICES = [
+        (CODE_PAVEMENT, "Pavement"),
+        (CODE_SHOULDERS, "Shoulders"),
+        (CODE_DRAINAGE, "Drainage"),
+        (CODE_TRAFFIC_VOLUME, "Traffic Volume"),
+        (CODE_BRIDGES, "Bridges"),
+        (CODE_CULVERTS, "Culverts"),
+        (CODE_ROAD_JUNCTIONS, "Road Junctions"),
+        (CODE_OTHERS, "Others"),
+    ]
+
+    code = models.CharField(max_length=32, unique=True, choices=CODE_CHOICES)
+    label = models.CharField(max_length=64)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["label"]
+
+    def __str__(self):
+        return self.label
+
+
+class RootCauseAnalysis(models.Model):
+    DESCRIPTION_PAVEMENT = "pavement"
+    DESCRIPTION_SHOULDERS = "shoulders"
+    DESCRIPTION_DRAINAGE = "drainage"
+    DESCRIPTION_TRAFFIC_VOLUME = "traffic_volume"
+    DESCRIPTION_BRIDGES = "bridges"
+    DESCRIPTION_CULVERTS = "culverts"
+    DESCRIPTION_ROAD_JUNCTIONS = "road_junctions"
+    DESCRIPTION_OTHERS = "others"
+
+    DESCRIPTION_CHOICES = [
+        (DESCRIPTION_PAVEMENT, "Pavement"),
+        (DESCRIPTION_SHOULDERS, "Shoulders"),
+        (DESCRIPTION_DRAINAGE, "Drainage"),
+        (DESCRIPTION_TRAFFIC_VOLUME, "Traffic Volume"),
+        (DESCRIPTION_BRIDGES, "Bridges"),
+        (DESCRIPTION_CULVERTS, "Culverts"),
+        (DESCRIPTION_ROAD_JUNCTIONS, "Road Junctions"),
+        (DESCRIPTION_OTHERS, "Others"),
+    ]
+
+    STATUS_DRAFT = "draft"
+    STATUS_COMPLETE = "complete"
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, "Draft"),
+        (STATUS_COMPLETE, "Complete"),
+    ]
+
+    subsegment = models.ForeignKey(
+        SubSegment,
+        on_delete=models.CASCADE,
+        related_name="root_cause_analyses",
+    )
+    location = models.CharField(max_length=32)
+    description = models.CharField(max_length=32, choices=DESCRIPTION_CHOICES)
+    description_options = models.JSONField(default=list, blank=True)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+    supporting_file = models.FileField(upload_to="root_cause/supporting/", blank=True, null=True)
+    defect_types = models.ManyToManyField(
+        DefectType,
+        blank=True,
+        related_name="root_cause_analyses",
+    )
+
+    class Meta:
+        ordering = ["-id"]
+
+    def __str__(self):
+        return f"RCA {self.subsegment.code} ({self.get_description_display()})"
+
+
+class RootCauseDetail(models.Model):
+    FEATURE_SUBGRADE_PROPERTIES = "subgrade_properties"
+    FEATURE_VEGETATION = "vegetation"
+    FEATURE_TOPOGRAPHY = "topography"
+    FEATURE_DRAINAGE_CHARACTERISTICS = "drainage_characteristics"
+    FEATURE_TEMPERATURE_HUMIDITY = "temperature_humidity"
+
+    NATURAL_FEATURE_CHOICES = [
+        (FEATURE_SUBGRADE_PROPERTIES, "Subgrade Properties"),
+        (FEATURE_VEGETATION, "Vegetation"),
+        (FEATURE_TOPOGRAPHY, "Topography"),
+        (FEATURE_DRAINAGE_CHARACTERISTICS, "Drainage Characteristics"),
+        (FEATURE_TEMPERATURE_HUMIDITY, "Temperature & Humidity"),
+    ]
+
+    CHARACTERISTIC_SUBGRADE_ALLUVIAL = "alluvial"
+    CHARACTERISTIC_SUBGRADE_FOREST_CLAYEY = "forest_clayey"
+    CHARACTERISTIC_SUBGRADE_LATERITIC = "lateritic"
+    CHARACTERISTIC_SUBGRADE_SANDY = "sandy"
+
+    CHARACTERISTIC_VEGETATION_MANGROVE = "mangrove_forest"
+    CHARACTERISTIC_VEGETATION_RAIN_FOREST = "rain_forest"
+    CHARACTERISTIC_VEGETATION_LIGHT_FOREST = "light_forest"
+    CHARACTERISTIC_VEGETATION_SAVANNAH = "savannah"
+    CHARACTERISTIC_VEGETATION_SAHEL = "sahel_savannah"
+
+    CHARACTERISTIC_TOPO_HILL_TOP = "hill_top"
+    CHARACTERISTIC_TOPO_STEEP = "steeply_sloping_gt_20"
+    CHARACTERISTIC_TOPO_MODERATE = "moderately_sloping_10_to_20"
+    CHARACTERISTIC_TOPO_MILD = "mildly_sloping_lt_10"
+    CHARACTERISTIC_TOPO_FLAT = "flat"
+    CHARACTERISTIC_TOPO_VALLEY = "valley"
+
+    CHARACTERISTIC_DRAINAGE_SUBGRADE_DRAINAGE = "subgrade_drainage"
+    CHARACTERISTIC_DRAINAGE_VEGETATION_COVER = "vegetation_cover"
+    CHARACTERISTIC_DRAINAGE_TOPOGRAPHY = "topography"
+    CHARACTERISTIC_DRAINAGE_RIVERS_STREAMS = "rivers_streams"
+
+    CHARACTERISTIC_TEMP_VERY_HOT_VERY_DRY = "very_hot_very_dry"
+    CHARACTERISTIC_TEMP_MOD_HOT_DRY = "moderately_hot_dry"
+    CHARACTERISTIC_TEMP_MOD_HOT_HUMID = "moderately_hot_humid"
+    CHARACTERISTIC_TEMP_COOL_DRY = "cool_dry"
+
+    CHARACTERISTIC_CHOICES_BY_FEATURE = {
+        FEATURE_SUBGRADE_PROPERTIES: [
+            (CHARACTERISTIC_SUBGRADE_ALLUVIAL, "Alluvial"),
+            (CHARACTERISTIC_SUBGRADE_FOREST_CLAYEY, "Forest/Clayey"),
+            (CHARACTERISTIC_SUBGRADE_LATERITIC, "Lateritic"),
+            (CHARACTERISTIC_SUBGRADE_SANDY, "Sandy"),
+        ],
+        FEATURE_VEGETATION: [
+            (CHARACTERISTIC_VEGETATION_MANGROVE, "Mangrove Forest"),
+            (CHARACTERISTIC_VEGETATION_RAIN_FOREST, "Rain Forest"),
+            (CHARACTERISTIC_VEGETATION_LIGHT_FOREST, "Light Forest"),
+            (CHARACTERISTIC_VEGETATION_SAVANNAH, "Savannah"),
+            (CHARACTERISTIC_VEGETATION_SAHEL, "Sahel Savannah"),
+        ],
+        FEATURE_TOPOGRAPHY: [
+            (CHARACTERISTIC_TOPO_HILL_TOP, "Hill Top"),
+            (CHARACTERISTIC_TOPO_STEEP, "Steeply Sloping (> 20 deg)"),
+            (CHARACTERISTIC_TOPO_MODERATE, "Moderately Sloping (10 < x < 20 deg)"),
+            (CHARACTERISTIC_TOPO_MILD, "Mildly Sloping (x < 10 deg)"),
+            (CHARACTERISTIC_TOPO_FLAT, "Flat"),
+            (CHARACTERISTIC_TOPO_VALLEY, "Valley"),
+        ],
+        FEATURE_DRAINAGE_CHARACTERISTICS: [
+            (CHARACTERISTIC_DRAINAGE_SUBGRADE_DRAINAGE, "Subgrade Drainage"),
+            (CHARACTERISTIC_DRAINAGE_VEGETATION_COVER, "Vegetation Cover"),
+            (CHARACTERISTIC_DRAINAGE_TOPOGRAPHY, "Topography"),
+            (CHARACTERISTIC_DRAINAGE_RIVERS_STREAMS, "River and Streams"),
+        ],
+        FEATURE_TEMPERATURE_HUMIDITY: [
+            (CHARACTERISTIC_TEMP_VERY_HOT_VERY_DRY, "Very Hot & Very Dry"),
+            (CHARACTERISTIC_TEMP_MOD_HOT_DRY, "Moderately Hot & Dry"),
+            (CHARACTERISTIC_TEMP_MOD_HOT_HUMID, "Moderately Hot & Humid"),
+            (CHARACTERISTIC_TEMP_COOL_DRY, "Cool & Dry"),
+        ],
+    }
+
+    CHARACTERISTIC_CHOICES = [
+        choice
+        for choices in CHARACTERISTIC_CHOICES_BY_FEATURE.values()
+        for choice in choices
+    ]
+
+    root_cause_analysis = models.OneToOneField(
+        RootCauseAnalysis,
+        on_delete=models.CASCADE,
+        related_name="root_cause_detail",
+    )
+    natural_feature = models.CharField(max_length=40, choices=NATURAL_FEATURE_CHOICES)
+    characteristic = models.CharField(max_length=40, choices=CHARACTERISTIC_CHOICES)
+    root_cause_analysis_text = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self):
+        return (
+            f"{self.root_cause_analysis.subsegment.code} - "
+            f"{self.get_natural_feature_display()}: {self.get_characteristic_display()}"
+        )
+
+    def clean(self):
+        super().clean()
+        valid_values = {
+            value
+            for value, _ in self.CHARACTERISTIC_CHOICES_BY_FEATURE.get(
+                self.natural_feature, []
+            )
+        }
+        if self.characteristic and self.characteristic not in valid_values:
+            raise ValidationError(
+                {"characteristic": "Characteristic does not match the selected natural feature."}
+            )
+
+
+class PhysicalInspection(models.Model):
+    STATUS_DRAFT = "draft"
+    STATUS_COMPLETE = "complete"
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, "Draft"),
+        (STATUS_COMPLETE, "Complete"),
+    ]
+
+    subsegment = models.ForeignKey(
+        SubSegment,
+        on_delete=models.CASCADE,
+        related_name="physical_inspections",
+    )
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+    defect_types = models.ManyToManyField(
+        DefectType,
+        blank=True,
+        related_name="physical_inspections",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-id"]
+
+    def __str__(self):
+        return f"Physical Inspection {self.subsegment.code}"
+
+
+class PhysicalInspectionAnalysis(models.Model):
+    CONSIDERATION_DESIGN = "design"
+    CONSIDERATION_CONSTRUCTION = "construction"
+    CONSIDERATION_USAGE = "usage"
+    CONSIDERATION_CHOICES = [
+        (CONSIDERATION_DESIGN, "Design Considerations"),
+        (CONSIDERATION_CONSTRUCTION, "Construction Considerations"),
+        (CONSIDERATION_USAGE, "Usage Considerations"),
+    ]
+
+    OPTION_HORIZONTAL_ALIGNMENT = "horizontal_alignment"
+    OPTION_VERTICAL_ALIGNMENT = "vertical_alignment"
+    OPTION_CARRIAGE_WAY_CROSS_SECTIONS = "carriage_way_cross_sections"
+    OPTION_BRIDGES = "bridges"
+    OPTION_CULVERTS = "culverts"
+    OPTION_ROAD_JUNCTION = "road_junction"
+    OPTION_DESIGN_SPEED = "design_speed"
+    OPTION_DESIGN_AXLE_LOAD = "design_axle_load"
+    OPTION_PAVEMENT_BASE_SUBBASE_FAILURE = "pavement_base_subbase_failure"
+    OPTION_DRAINAGE_CONSTRUCTION_FAILURE = "drainage_construction_failure"
+    OPTION_PAVEMENT_FAILURE = "pavement_failure"
+    OPTION_DRAINAGE_FAILURE = "drainage_failure"
+    OPTION_ENCROACHMENT = "encroachment"
+
+    OPTION_CHOICES = [
+        (OPTION_HORIZONTAL_ALIGNMENT, "Horizontal Alignment"),
+        (OPTION_VERTICAL_ALIGNMENT, "Vertical Alignment"),
+        (OPTION_CARRIAGE_WAY_CROSS_SECTIONS, "Carriage Way Cross-Sections"),
+        (OPTION_BRIDGES, "Bridges"),
+        (OPTION_CULVERTS, "Culverts"),
+        (OPTION_ROAD_JUNCTION, "Road Junction"),
+        (OPTION_DESIGN_SPEED, "Design Speed"),
+        (OPTION_DESIGN_AXLE_LOAD, "Design Axle Load"),
+        (OPTION_PAVEMENT_BASE_SUBBASE_FAILURE, "Pavement, Base and Sub-base Failure"),
+        (OPTION_DRAINAGE_CONSTRUCTION_FAILURE, "Drainage Construction Failure"),
+        (OPTION_PAVEMENT_FAILURE, "Pavement Failure"),
+        (OPTION_DRAINAGE_FAILURE, "Drainage Failure"),
+        (OPTION_ENCROACHMENT, "Encroachment"),
+    ]
+
+    OPTIONS_BY_CONSIDERATION = {
+        CONSIDERATION_DESIGN: {
+            OPTION_HORIZONTAL_ALIGNMENT,
+            OPTION_VERTICAL_ALIGNMENT,
+            OPTION_CARRIAGE_WAY_CROSS_SECTIONS,
+            OPTION_BRIDGES,
+            OPTION_CULVERTS,
+            OPTION_ROAD_JUNCTION,
+            OPTION_DESIGN_SPEED,
+            OPTION_DESIGN_AXLE_LOAD,
+        },
+        CONSIDERATION_CONSTRUCTION: {
+            OPTION_PAVEMENT_BASE_SUBBASE_FAILURE,
+            OPTION_DRAINAGE_CONSTRUCTION_FAILURE,
+        },
+        CONSIDERATION_USAGE: {
+            OPTION_PAVEMENT_FAILURE,
+            OPTION_DRAINAGE_FAILURE,
+            OPTION_ENCROACHMENT,
+        },
+    }
+
+    inspection = models.ForeignKey(
+        PhysicalInspection,
+        on_delete=models.CASCADE,
+        related_name="analysis_rows",
+    )
+    consideration_type = models.CharField(max_length=24, choices=CONSIDERATION_CHOICES)
+    option = models.CharField(max_length=64, choices=OPTION_CHOICES)
+    option_description = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["inspection", "option"],
+                name="uq_physicalinspection_option",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.inspection.subsegment.code} - "
+            f"{self.get_consideration_type_display()} - {self.get_option_display()}"
+        )
+
+    def clean(self):
+        super().clean()
+        valid_options = self.OPTIONS_BY_CONSIDERATION.get(self.consideration_type, set())
+        if self.option and self.option not in valid_options:
+            raise ValidationError(
+                {"option": "Option does not match the selected consideration type."}
+            )
+
+
+class PhysicalInspectionCharacteristic(models.Model):
+    CHARACTERISTICS_BY_OPTION = {
+        PhysicalInspectionAnalysis.OPTION_HORIZONTAL_ALIGNMENT: [
+            "Straight",
+            "Gentle Curve",
+            "Sharp Bend",
+            "Road Junction",
+        ],
+        PhysicalInspectionAnalysis.OPTION_VERTICAL_ALIGNMENT: [
+            "Hill Top",
+            "Steeply Sloping (x>20o)",
+            "Moderate Sloping (10<x<20o)",
+            "Mildly Sloping (x<10o)",
+            "Flat",
+            "Valley",
+        ],
+        PhysicalInspectionAnalysis.OPTION_CARRIAGE_WAY_CROSS_SECTIONS: [
+            "No of Carriage Ways",
+            "No of Lanes",
+            "Width of Lanes",
+            "Width of Shoulders",
+            "Pavement Type",
+            "Pavement Specifications",
+            "Side Drains",
+            "Median Type",
+            "Adjacent Land-Use",
+        ],
+        PhysicalInspectionAnalysis.OPTION_BRIDGES: [
+            "Bridge Type",
+            "Bridge Length",
+            "No of Spans",
+            "Bridge Width",
+            "No of Carriage Ways",
+        ],
+        PhysicalInspectionAnalysis.OPTION_CULVERTS: [
+            "Culvert Type",
+            "Culvert Length",
+            "No of Spans",
+            "Culvert Width",
+            "No of Carriage Ways",
+        ],
+        PhysicalInspectionAnalysis.OPTION_ROAD_JUNCTION: [
+            "Junction Type",
+            "Bridge Length",
+            "No of Spans",
+            "No of Carriage Ways",
+        ],
+        PhysicalInspectionAnalysis.OPTION_DESIGN_SPEED: ["Design Speed"],
+        PhysicalInspectionAnalysis.OPTION_DESIGN_AXLE_LOAD: ["Design Axle Load"],
+        PhysicalInspectionAnalysis.OPTION_PAVEMENT_BASE_SUBBASE_FAILURE: [
+            "Materials Spec",
+            "Layer Compaction",
+            "Layer Thickness",
+        ],
+        PhysicalInspectionAnalysis.OPTION_DRAINAGE_CONSTRUCTION_FAILURE: [
+            "Side Drains Capacity",
+            "Side Drains Slope",
+            "Side Drains Height",
+            "Vertical Alignment",
+            "Porous Pavement",
+        ],
+        PhysicalInspectionAnalysis.OPTION_PAVEMENT_FAILURE: [
+            "Pavement Cracks",
+            "Pavement Depressions",
+            "Pavement Wearing",
+        ],
+        PhysicalInspectionAnalysis.OPTION_DRAINAGE_FAILURE: [
+            "Side Drains Blockage",
+            "Pavement Ponding",
+            "Flooding",
+            "Ground Saturation",
+            "Blocked Culverts",
+            "Siltation",
+        ],
+        PhysicalInspectionAnalysis.OPTION_ENCROACHMENT: [
+            "Encroachment Type",
+            "Infrastructure Installation",
+        ],
+    }
+
+    analysis = models.ForeignKey(
+        PhysicalInspectionAnalysis,
+        on_delete=models.CASCADE,
+        related_name="characteristics",
+    )
+    characteristic = models.CharField(max_length=64)
+    value = models.CharField(max_length=255, blank=True)
+    notes = models.TextField(blank=True)
+    row_index = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(8)],
+        help_text="For repeated carriage-way rows; keep between 1 and 8.",
+    )
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.analysis.get_option_display()} - {self.characteristic}"
+
+    def clean(self):
+        super().clean()
+        allowed = set(self.CHARACTERISTICS_BY_OPTION.get(self.analysis.option, []))
+        if self.characteristic and self.characteristic not in allowed:
+            raise ValidationError(
+                {"characteristic": "Characteristic does not match the selected option."}
+            )
+        if (
+            self.analysis.option == PhysicalInspectionAnalysis.OPTION_CARRIAGE_WAY_CROSS_SECTIONS
+            and self.row_index is None
+        ):
+            raise ValidationError(
+                {"row_index": "Row index is required for carriage-way cross-sections."}
+            )
+        if (
+            self.analysis.option != PhysicalInspectionAnalysis.OPTION_CARRIAGE_WAY_CROSS_SECTIONS
+            and self.row_index is not None
+        ):
+            raise ValidationError(
+                {"row_index": "Row index is only allowed for carriage-way cross-sections."}
+            )
+
+
+class PhysicalInspectionAttachment(models.Model):
+    inspection = models.ForeignKey(
+        PhysicalInspection,
+        on_delete=models.CASCADE,
+        related_name="attachments",
+    )
+    file = models.FileField(upload_to="physical_inspection/supporting/")
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self):
+        return self.file.name.split("/")[-1]

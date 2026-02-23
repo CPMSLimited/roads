@@ -1,0 +1,24 @@
+{% load static %}
+{% if url_name %}
+{% url url_name as resolved_href %}
+<a href="{{ resolved_href }}" class="btn {{ class_name }}">
+    {% if icon_path %}
+    <span class="sg-btn-icon" aria-hidden="true"><img src="{% static icon_path %}" alt="" role="presentation"></span>
+    {% endif %}
+    <span>{{ label }}</span>
+</a>
+{% elif href %}
+<a href="{{ href }}" class="btn {{ class_name }}">
+    {% if icon_path %}
+    <span class="sg-btn-icon" aria-hidden="true"><img src="{% static icon_path %}" alt="" role="presentation"></span>
+    {% endif %}
+    <span>{{ label }}</span>
+</a>
+{% else %}
+<button type="{{ button_type|default:'button' }}" class="{{ class_name }}">
+    {% if icon_path %}
+    <span class="sg-btn-icon" aria-hidden="true"><img src="{% static icon_path %}" alt="" role="presentation"></span>
+    {% endif %}
+    <span>{{ label }}</span>
+</button>
+{% endif %}
