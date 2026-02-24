@@ -90,7 +90,7 @@
 
         <article class="table-card map-card">
             <div id="inventoryMapView" class="map-placeholder inventory-map" aria-label="Road inventory map">
-                <img src="{% static 'website/img/map.png' %}" alt="Road inventory map" class="inventory-map-image">
+                {% include "website/includes/shared_leaflet_map.html" with map_dom_id="roadInventoryLeafletMap" map_data_url_name="segments_map_data" %}
             </div>
             <div id="inventoryTableView" class="inventory-table-view is-hidden" aria-label="Road inventory table view">
                 <table class="data-table inventory-table">
@@ -200,6 +200,9 @@
         btn.classList.toggle("is-active", active);
         btn.setAttribute("aria-pressed", active ? "true" : "false");
       });
+      if (isMap) {
+        window.dispatchEvent(new CustomEvent("shared-leaflet:refresh", { detail: { id: "roadInventoryLeafletMap" } }));
+      }
     }
 
     buttons.forEach((btn) => {

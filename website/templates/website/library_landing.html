@@ -1,0 +1,208 @@
+{% extends "website/base.html" %}
+{% load static %}
+{% block body_class %}app-body{% endblock %}
+{% block content %}
+<form id="libraryLandingFilters" class="library-landing-v2" method="get" action="{% url 'library' %}" autocomplete="off">
+    <aside class="library-v2-side">
+        <div class="library-v2-search">
+            <input id="segmentCodeSearch" type="text" name="segment_code" placeholder="Search" aria-label="Search by segment code" value="{{ segment_code_query }}" minlength="2" autocomplete="off">
+            <button type="submit" class="library-v2-search-btn" aria-label="Search segment code">&#128269;</button>
+            <div id="segmentCodeSuggestions" class="library-v2-suggestions" role="listbox" aria-label="Segment code suggestions"></div>
+        </div>
+        <nav class="library-v2-nav" aria-label="Library sections">
+            <a class="{% if active_library_section == 'road_inventory' %}is-active{% endif %}" href="{% url 'library_road_inventory' %}"><span aria-hidden="true">&#128193;</span> Road inventory</a>
+            <a class="{% if active_library_section == 'reports' %}is-active{% endif %}" href="{% url 'library_reports' %}"><span aria-hidden="true">&#128193;</span> Reports</a>
+            <a class="{% if active_library_section == 'technical_guide' %}is-active{% endif %}" href="{% url 'library_technical_guide' %}"><span aria-hidden="true">&#128193;</span> Technical Guide</a>
+            <a class="{% if active_library_section == 'user_guide' %}is-active{% endif %}" href="{% url 'library_user_guide' %}"><span aria-hidden="true">&#128193;</span> User Guide</a>
+        </nav>
+    </aside>
+
+    <article class="library-v2-main">
+        <header class="library-v2-head">
+            <h1>Routes <span>({{ page_obj.paginator.count }})</span></h1>
+            <div class="library-v2-filters">
+                <nav class="library-v2-pager library-v2-pager-top" aria-label="Library table pagination">
+                    {% if page_obj.has_previous %}
+                    <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
+                    {% else %}
+                    <span class="is-disabled">Previous</span>
+                    {% endif %}
+
+                    {% if page_obj.paginator.count == 0 %}
+                    <span>Page 0 of 0</span>
+                    {% else %}
+                    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                    {% endif %}
+
+                    {% if page_obj.has_next %}
+                    <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+                    {% else %}
+                    <span class="is-disabled">Next</span>
+                    {% endif %}
+                </nav>
+                <select name="route" id="libraryRouteSelect" aria-label="Filter by route">
+                    <option value="">All routes</option>
+                    {% for r in routes %}
+                    <option value="{{ r.route }}" {% if selected_route == r.route %}selected{% endif %}>{{ r.route }}</option>
+                    {% endfor %}
+                </select>
+                <select name="state" id="libraryStateSelect" aria-label="Filter by state">
+                    <option value="">Select state</option>
+                    {% for s in states %}
+                    <option value="{{ s.state }}" {% if selected_state == s.state %}selected{% endif %}>{{ s.state }}</option>
+                    {% endfor %}
+                </select>
+                <button type="button" aria-label="More filters">&#9776;</button>
+            </div>
+        </header>
+
+        <div class="library-v2-table-wrap">
+            <table class="library-v2-table">
+                <thead>
+                    <tr>
+                        <th>Route</th>
+                        <th>Segment code</th>
+                        <th>Name</th>
+                        <th>State</th>
+                        <th>Start name</th>
+                        <th>Northings</th>
+                        <th>Eastings</th>
+                        <th>End name</th>
+                        <th>Northings 2</th>
+                        <th>Eastings 2</th>
+                        <th>Distance(km)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for seg in segments %}
+                    <tr>
+                        <td>{{ seg.route.route }}</td>
+                        <td>{{ seg.code }}</td>
+                        <td>{{ seg.name|default:"-" }}</td>
+                        <td>{{ seg.state|default:"-" }}</td>
+                        <td>{{ seg.start_point.name|default:"-" }}</td>
+                        <td>{{ seg.start_lat }}</td>
+                        <td>{{ seg.start_lon }}</td>
+                        <td>{{ seg.end_point.name|default:"-" }}</td>
+                        <td>{{ seg.end_lat }}</td>
+                        <td>{{ seg.end_lon }}</td>
+                        <td>{{ seg.distance }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="11" class="is-empty">No segment matched your filters.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </article>
+</form>
+
+<script>
+  (function () {
+    const form = document.getElementById("libraryLandingFilters");
+    const routeSelect = document.getElementById("libraryRouteSelect");
+    const stateSelect = document.getElementById("libraryStateSelect");
+    const searchInput = document.getElementById("segmentCodeSearch");
+    const suggestionsEl = document.getElementById("segmentCodeSuggestions");
+    if (!form || !routeSelect || !stateSelect || !searchInput || !suggestionsEl) return;
+
+    routeSelect.addEventListener("change", () => form.submit());
+    stateSelect.addEventListener("change", () => form.submit());
+
+    let debounceId = null;
+    let suggestionIndex = -1;
+
+    function clearSuggestions() {
+      suggestionsEl.innerHTML = "";
+      suggestionsEl.classList.remove("is-open");
+      suggestionIndex = -1;
+    }
+
+    function applyActiveSuggestion() {
+      const items = suggestionsEl.querySelectorAll("button");
+      items.forEach((btn, idx) => btn.classList.toggle("is-active", idx === suggestionIndex));
+    }
+
+    function renderSuggestions(values) {
+      if (!values.length) {
+        clearSuggestions();
+        return;
+      }
+      suggestionsEl.innerHTML = "";
+      values.forEach((value) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = value;
+        btn.setAttribute("role", "option");
+        btn.addEventListener("mousedown", (event) => {
+          event.preventDefault();
+          searchInput.value = value;
+          clearSuggestions();
+          form.submit();
+        });
+        suggestionsEl.appendChild(btn);
+      });
+      suggestionsEl.classList.add("is-open");
+      suggestionIndex = -1;
+    }
+
+    function fetchSuggestions() {
+      const q = searchInput.value.trim();
+      if (q.length < 2) {
+        clearSuggestions();
+        return;
+      }
+      const url = new URL('{% url "segment_code_search" %}', window.location.origin);
+      url.searchParams.set("q", q);
+      fetch(url.toString(), { headers: { "X-Requested-With": "XMLHttpRequest" } })
+        .then((response) => response.json())
+        .then((data) => {
+          renderSuggestions(data.results || []);
+        })
+        .catch(() => clearSuggestions());
+    }
+
+    searchInput.addEventListener("input", () => {
+      window.clearTimeout(debounceId);
+      debounceId = window.setTimeout(fetchSuggestions, 180);
+    });
+
+    searchInput.addEventListener("keydown", (event) => {
+      const items = suggestionsEl.querySelectorAll("button");
+      if (!items.length) {
+        if (event.key === "Enter") {
+          form.submit();
+        }
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        suggestionIndex = Math.min(suggestionIndex + 1, items.length - 1);
+        applyActiveSuggestion();
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        suggestionIndex = Math.max(suggestionIndex - 1, -1);
+        applyActiveSuggestion();
+      } else if (event.key === "Escape") {
+        clearSuggestions();
+      } else if (event.key === "Enter") {
+        if (suggestionIndex >= 0 && items[suggestionIndex]) {
+          event.preventDefault();
+          searchInput.value = items[suggestionIndex].textContent || "";
+        }
+        clearSuggestions();
+        form.submit();
+      }
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!suggestionsEl.contains(event.target) && event.target !== searchInput) {
+        clearSuggestions();
+      }
+    });
+  })();
+</script>
+{% endblock %}

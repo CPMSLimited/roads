@@ -99,7 +99,7 @@
 
         <article class="table-card map-card">
             <div id="inventoryMapView" class="map-placeholder inventory-map" aria-label="Road inventory map">
-                <div id="roadMotorabilityLeafletMap" class="experiment-leaflet-map" aria-label="Road motorability map"></div>
+                {% include "website/includes/shared_leaflet_map.html" with map_dom_id="roadMotorabilityLeafletMap" map_data_url_name="segments_map_data" %}
             </div>
             <div id="inventoryTableView" class="inventory-table-view is-hidden" aria-label="Road inventory table view">
                 <table class="data-table inventory-table">
@@ -199,16 +199,6 @@
         </article>
     </aside>
 </section>
-
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-<style>
-  .experiment-leaflet-map {
-    width: 100%;
-    height: 520px;
-    border-radius: 12px;
-  }
-</style>
 <script>
   (function () {
     const form = document.getElementById("inventoryFiltersForm");
@@ -216,12 +206,8 @@
     const inlinePager = document.getElementById("inventoryInlinePager");
     const mapView = document.getElementById("inventoryMapView");
     const tableView = document.getElementById("inventoryTableView");
-    const mapContainer = document.getElementById("roadMotorabilityLeafletMap");
     const buttons = document.querySelectorAll(".inventory-view-btn");
-    if (!form || !viewInput || !inlinePager || !mapView || !tableView || !mapContainer || !buttons.length) return;
-
-    let map;
-    let geojsonLayer;
+    if (!form || !viewInput || !inlinePager || !mapView || !tableView || !buttons.length) return;
 
     function statusToHex(raw) {
       const cleaned = String(raw || "").replace("#", "").trim();
@@ -241,63 +227,6 @@
       });
     }
 
-    function setupMap() {
-      if (map || typeof L === "undefined") return;
-      map = L.map(mapContainer).setView([9.08, 8.67], 6);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "&copy; OpenStreetMap contributors"
-      }).addTo(map);
-    }
-
-    async function loadMapData() {
-      setupMap();
-      if (!map) return;
-      const params = new URLSearchParams(window.location.search);
-      const url = new URL("{% url 'road_motorability_map_data' %}", window.location.origin);
-      params.forEach((value, key) => url.searchParams.set(key, value));
-
-      try {
-        const resp = await fetch(url.toString(), { headers: { "X-Requested-With": "XMLHttpRequest" } });
-        const data = await resp.json();
-        if (!resp.ok) return;
-
-        if (geojsonLayer) {
-          map.removeLayer(geojsonLayer);
-        }
-
-        geojsonLayer = L.geoJSON(data, {
-          style: function(feature) {
-            const color = `#${statusToHex(feature?.properties?.status)}`;
-            return { color: color, weight: 3, opacity: 0.95 };
-          },
-          pointToLayer: function(feature, latlng) {
-            return L.circleMarker(latlng, {
-              radius: 5,
-              color: `#${statusToHex(feature?.properties?.status)}`,
-              fillOpacity: 0.9,
-            });
-          },
-          onEachFeature: function(feature, layer) {
-            const p = feature.properties || {};
-            const route = p.route || "-";
-            const code = p.code || "-";
-            const state = p.state || "-";
-            const distance = p.distance ?? "-";
-            const speed = p.avg_speed ?? "-";
-            layer.bindPopup(
-              `<strong>${code}</strong><br>Route: ${route}<br>State: ${state}<br>Distance: ${distance} km<br>Avg speed: ${speed} km/h`
-            );
-          }
-        }).addTo(map);
-
-        const bounds = geojsonLayer.getBounds();
-        if (bounds.isValid()) {
-          map.fitBounds(bounds, { padding: [20, 20] });
-        }
-      } catch (error) {
-      }
-    }
-
     function setView(viewName) {
       const isMap = viewName === "map";
       mapView.classList.toggle("is-hidden", !isMap);
@@ -310,11 +239,7 @@
         btn.setAttribute("aria-pressed", active ? "true" : "false");
       });
       if (isMap) {
-        loadMapData().then(() => {
-          if (map) {
-            setTimeout(() => map.invalidateSize(), 0);
-          }
-        });
+        window.dispatchEvent(new CustomEvent("shared-leaflet:refresh", { detail: { id: "roadMotorabilityLeafletMap" } }));
       }
     }
 

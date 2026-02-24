@@ -1,0 +1,93 @@
+{% extends "website/base.html" %}
+{% load static %}
+{% block body_class %}app-body{% endblock %}
+{% block content %}
+<form id="libraryReportsFilters" class="library-landing-v2" method="get" action="{% url 'library_reports' %}">
+    <aside class="library-v2-side">
+        <div class="library-v2-search">
+            <input type="text" placeholder="Search" aria-label="Search reports">
+            <button type="button" class="library-v2-search-btn" aria-label="Search reports">&#128269;</button>
+        </div>
+        <nav class="library-v2-nav" aria-label="Library sections">
+            <a href="{% url 'library_road_inventory' %}"><span aria-hidden="true">&#128193;</span> Road inventory</a>
+            <a class="is-active" href="{% url 'library_reports' %}"><span aria-hidden="true">&#128193;</span> Reports</a>
+            <a href="{% url 'library_technical_guide' %}"><span aria-hidden="true">&#128193;</span> Technical Guide</a>
+            <a href="{% url 'library_user_guide' %}"><span aria-hidden="true">&#128193;</span> User Guide</a>
+        </nav>
+    </aside>
+
+    <article class="library-v2-main">
+        <header class="library-v2-head">
+            <h1>All Reports <span>({{ page_obj.paginator.count }})</span></h1>
+            <div class="library-v2-filters">
+                <nav class="library-v2-pager library-v2-pager-top" aria-label="Reports pagination">
+                    {% if page_obj.has_previous %}
+                    <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
+                    {% else %}
+                    <span class="is-disabled">Previous</span>
+                    {% endif %}
+                    {% if page_obj.paginator.count == 0 %}
+                    <span>Page 0 of 0</span>
+                    {% else %}
+                    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                    {% endif %}
+                    {% if page_obj.has_next %}
+                    <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+                    {% else %}
+                    <span class="is-disabled">Next</span>
+                    {% endif %}
+                </nav>
+                <select name="state" id="libraryReportsStateSelect" aria-label="Select state">
+                    <option>Select state</option>
+                    {% for s in states %}
+                    <option value="{{ s.state }}" {% if selected_state == s.state %}selected{% endif %}>{{ s.state }}</option>
+                    {% endfor %}
+                </select>
+                <a class="library-v2-reset" href="{% url 'library_reports' %}">Reset</a>
+                <button type="button" aria-label="More filters">&#9776;</button>
+            </div>
+        </header>
+
+        <div class="library-v2-table-wrap">
+            <table class="library-v2-table library-v2-reports-table">
+                <thead>
+                    <tr>
+                        <th>File Name</th>
+                        <th>Type</th>
+                        <th>Road Condition</th>
+                        <th>Last Updated</th>
+                        <th>Uploaded by</th>
+                        <th>Attachments</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in report_rows %}
+                    <tr>
+                        <td>{{ row.file_name }}</td>
+                        <td>{{ row.report_type }}</td>
+                        <td><span class="library-report-chip {{ row.road_condition_class }}">{{ row.road_condition }}</span></td>
+                        <td>{{ row.last_updated }}</td>
+                        <td>{{ row.uploaded_by }}</td>
+                        <td><span class="library-attachment-cell"><span aria-hidden="true">&#128196;</span> {{ row.attachments_count }}</span></td>
+                        <td><a class="library-report-action" href="{{ row.details_url }}">&#128065; view details</a></td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="is-empty">No report rows available yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </article>
+</form>
+<script>
+  (function () {
+    const form = document.getElementById("libraryReportsFilters");
+    const stateSelect = document.getElementById("libraryReportsStateSelect");
+    if (!form || !stateSelect) return;
+    stateSelect.addEventListener("change", () => form.submit());
+  })();
+</script>
+{% endblock %}

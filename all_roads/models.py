@@ -615,3 +615,52 @@ class PhysicalInspectionAttachment(models.Model):
 
     def __str__(self):
         return self.file.name.split("/")[-1]
+
+
+class Library(models.Model):
+    TYPE_TECHNICAL_GUIDE = "technical_guide"
+    TYPE_USER_GUIDE = "user_guide"
+    TYPE_ROOT_CAUSE_ANALYSIS = "root_cause_analysis"
+    TYPE_PHYSICAL_INSPECTION = "physical_inspection"
+    TYPE_SOLUTION_DESIGN = "solution_design"
+
+    TYPE_CHOICES = [
+        (TYPE_TECHNICAL_GUIDE, "Technical Guide"),
+        (TYPE_USER_GUIDE, "User Guide"),
+        (TYPE_ROOT_CAUSE_ANALYSIS, "Root Cause Analysis"),
+        (TYPE_PHYSICAL_INSPECTION, "Physical Inspection"),
+        (TYPE_SOLUTION_DESIGN, "Solution Design"),
+    ]
+
+    FILE_TYPE_DOCUMENT = "document"
+    FILE_TYPE_SPREADSHEET = "spreadsheet"
+    FILE_TYPE_PDF = "pdf"
+    FILE_TYPE_CSV = "csv"
+    FILE_TYPE_IMAGE = "image"
+    FILE_TYPE_PRESENTATION = "presentation"
+    FILE_TYPE_GEO_DATA = "geo_data"
+    FILE_TYPE_OTHER = "other"
+
+    FILE_TYPE_CHOICES = [
+        (FILE_TYPE_DOCUMENT, "Document"),
+        (FILE_TYPE_SPREADSHEET, "Spreadsheet"),
+        (FILE_TYPE_PDF, "PDF"),
+        (FILE_TYPE_CSV, "CSV"),
+        (FILE_TYPE_IMAGE, "Image"),
+        (FILE_TYPE_PRESENTATION, "Presentation"),
+        (FILE_TYPE_GEO_DATA, "Geo Data"),
+        (FILE_TYPE_OTHER, "Other"),
+    ]
+
+    entry_type = models.CharField(max_length=32, choices=TYPE_CHOICES)
+    file_type = models.CharField(max_length=20, choices=FILE_TYPE_CHOICES)
+    name = models.CharField(max_length=128)
+    file = models.FileField(upload_to="library/files/")
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created", "-id"]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_entry_type_display()})"

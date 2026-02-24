@@ -603,7 +603,7 @@
       if (chartTitle) chartTitle.textContent = `Speed vs Position — ${segmentCode}`;
       setChartPrompt(`Loading graph for "${segmentCode}"...`);
       try {
-        const url = new URL('{% url "motorability_and_condition_subsegments" %}', window.location.origin);
+        const url = new URL('{% url "road_condition_subsegments" %}', window.location.origin);
         url.searchParams.set("segment", segmentCode);
         const resp = await fetch(url.toString(), { headers: { "X-Requested-With": "XMLHttpRequest" } });
         const data = await resp.json();

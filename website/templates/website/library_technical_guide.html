@@ -1,0 +1,51 @@
+{% extends "website/base.html" %}
+{% load static %}
+{% block body_class %}app-body{% endblock %}
+{% block content %}
+<section class="library-landing-v2">
+    <aside class="library-v2-side">
+        <form class="library-v2-search" method="get" action="{% url guide_url_name %}">
+            <input type="text" name="q" value="{{ search_query }}" placeholder="Search" aria-label="Search {{ guide_search_label }}">
+            <button type="submit" class="library-v2-search-btn" aria-label="Search {{ guide_search_label }}">&#128269;</button>
+        </form>
+        <nav class="library-v2-nav" aria-label="Library sections">
+            <a href="{% url 'library_road_inventory' %}"><span aria-hidden="true">&#128193;</span> Road inventory</a>
+            <a href="{% url 'library_reports' %}"><span aria-hidden="true">&#128193;</span> Reports</a>
+            <a class="{% if active_library_section == 'technical_guide' %}is-active{% endif %}" href="{% url 'library_technical_guide' %}"><span aria-hidden="true">&#128193;</span> Technical Guide</a>
+            <a class="{% if active_library_section == 'user_guide' %}is-active{% endif %}" href="{% url 'library_user_guide' %}"><span aria-hidden="true">&#128193;</span> User Guide</a>
+        </nav>
+    </aside>
+
+    <article class="library-v2-main">
+        <header class="library-v2-head library-tech-head">
+            <h1>Articles <span>({{ guide_documents_count }})</span></h1>
+        </header>
+
+        <section class="library-tech-grid" aria-label="{{ guide_search_label|capfirst }} articles">
+            {% for guide in guide_documents %}
+            <article class="library-tech-card">
+                <div class="library-tech-thumb" aria-hidden="true"></div>
+                <h2>
+                    <a href="{{ guide.file.url }}" target="_blank" rel="noopener noreferrer">
+                        {{ guide.name }} <span>&rarr;</span>
+                    </a>
+                </h2>
+                <p>{{ guide.get_file_type_display }}</p>
+                <p class="library-tech-actions">
+                    <a href="{{ guide.file.url }}" target="_blank" rel="noopener noreferrer">Open</a>
+                    <a href="{{ guide.file.url }}" download>Download</a>
+                </p>
+                <span class="library-tech-pages">{{ guide.created|date:"M d, Y" }}</span>
+            </article>
+            {% empty %}
+            <article class="library-tech-card">
+                <div class="library-tech-thumb" aria-hidden="true"></div>
+                <h2>No {{ guide_search_label }} documents yet</h2>
+                <p>Upload records in the Library model to populate this page.</p>
+                <span class="library-tech-pages">0 files</span>
+            </article>
+            {% endfor %}
+        </section>
+    </article>
+</section>
+{% endblock %}

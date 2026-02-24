@@ -1,0 +1,110 @@
+<div
+    id="{{ map_dom_id|default:'sharedLeafletMap' }}"
+    class="shared-leaflet-map"
+    data-map-data-url="{% url map_data_url_name|default:'segments_map_data' %}"
+></div>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<style>
+  .shared-leaflet-map {
+    width: 100%;
+    height: 749px;
+    border-radius: 12px;
+  }
+</style>
+<script>
+  (function () {
+    const mapId = "{{ map_dom_id|default:'sharedLeafletMap' }}";
+    const mapEl = document.getElementById(mapId);
+    if (!mapEl || typeof L === "undefined") return;
+
+    const dataUrl = mapEl.dataset.mapDataUrl;
+    let map = null;
+    let geojsonLayer = null;
+
+    function statusToHex(raw) {
+      const cleaned = String(raw || "").replace("#", "").trim();
+      return /^[0-9a-fA-F]{6}$/.test(cleaned) ? cleaned.toUpperCase() : "666699";
+    }
+
+    function ensureMap() {
+      if (map) return;
+      map = L.map(mapEl, {
+        zoomSnap: 0.1,
+        zoomDelta: 0.1,
+      }).setView([9.08, 8.67], 10);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "&copy; OpenStreetMap contributors"
+      }).addTo(map);
+    }
+
+    async function loadData() {
+      ensureMap();
+      const params = new URLSearchParams(window.location.search);
+      const url = new URL(dataUrl, window.location.origin);
+      params.forEach((value, key) => url.searchParams.set(key, value));
+
+      try {
+        const resp = await fetch(url.toString(), { headers: { "X-Requested-With": "XMLHttpRequest" } });
+        const data = await resp.json();
+        if (!resp.ok) return;
+
+        if (geojsonLayer) {
+          map.removeLayer(geojsonLayer);
+        }
+
+        geojsonLayer = L.geoJSON(data, {
+          style: function(feature) {
+            const color = `#${statusToHex(feature?.properties?.status)}`;
+            return { color: color, weight: 3, opacity: 0.95 };
+          },
+          pointToLayer: function(feature, latlng) {
+            return L.circleMarker(latlng, {
+              radius: 5,
+              color: `#${statusToHex(feature?.properties?.status)}`,
+              fillOpacity: 0.9,
+            });
+          },
+          onEachFeature: function(feature, layer) {
+            const p = feature.properties || {};
+            const route = p.route || "-";
+            const code = p.code || "-";
+            const state = p.state || "-";
+            const distance = p.distance ?? "-";
+            const speed = p.avg_speed ?? "-";
+            layer.bindPopup(
+              `<strong>${code}</strong><br>Route: ${route}<br>State: ${state}<br>Distance: ${distance} km<br>Avg speed: ${speed} km/h`
+            );
+          }
+        }).addTo(map);
+
+        const bounds = geojsonLayer.getBounds();
+        if (bounds.isValid()) {
+          map.fitBounds(bounds, { padding: [20, 20] });
+          // Apply an extra ~20% zoom-in after fitting all features.
+          const zoomBump = Math.log2(1.2);
+          map.setZoom(map.getZoom() + zoomBump, { animate: false });
+        }
+      } catch (error) {
+      }
+    }
+
+    async function refreshMap() {
+      await loadData();
+      if (map) {
+        setTimeout(() => map.invalidateSize(), 0);
+      }
+    }
+
+    window.addEventListener("shared-leaflet:refresh", function (event) {
+      const targetId = event?.detail?.id;
+      if (!targetId || targetId === mapId) {
+        refreshMap();
+      }
+    });
+
+    if (mapEl.offsetParent !== null) {
+      refreshMap();
+    }
+  })();
+</script>

@@ -15,6 +15,7 @@ from all_roads.models import (
     PhysicalInspectionAnalysis,
     PhysicalInspectionCharacteristic,
     PhysicalInspectionAttachment,
+    Library,
 )
 from all_roads.services import refresh_segment_and_subsegments
 from collections import defaultdict
@@ -26,6 +27,7 @@ from django.db.models.functions import Cast, Trim, Upper
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, redirect
 from django.urls import reverse
+from django.utils.timesince import timesince
 from .forms import UploadSegmentsForm, UploadSubSegmentsForm
 import csv
 import io
@@ -125,7 +127,7 @@ def road_inventory(request):
     return render(request, "website/road_inventory.html", context)
 
 
-def _build_motorability_and_condition_context(request):
+def _build_road_condition_context(request):
     qs = Segment.objects.select_related("route", "start_point", "end_point").all()
     current_view = request.GET.get("view") or "map"
     selected_road = request.GET.get("road") or ""
@@ -186,7 +188,7 @@ def _build_motorability_and_condition_context(request):
     unique_route_count = qs.values("route_id").distinct().count()
 
     return {
-        "active_page": "motorability_and_condition",
+        "active_page": "road_condition",
         "segments": page_obj.object_list,
         "page_obj": page_obj,
         "roads": roads,
@@ -207,9 +209,9 @@ def _build_motorability_and_condition_context(request):
     }
 
 
-def motorability_and_condition(request):
-    context = _build_motorability_and_condition_context(request)
-    return render(request, "website/motorability_and_condition.html", context)
+def road_condition(request):
+    context = _build_road_condition_context(request)
+    return render(request, "website/road_condition.html", context)
 
 def _filtered_segments_for_road_motorability(request):
     qs = Segment.objects.select_related("route", "start_point", "end_point").all()
@@ -309,10 +311,7 @@ def road_motorability(request):
     context = _build_road_motorability_context(request)
     return render(request, "website/road_motorability.html", context)
 
-
-def road_motorability_map_data(request):
-    filtered = _filtered_segments_for_road_motorability(request)
-    segments = filtered["qs"].order_by("route__route", "index", "code")
+def _segments_geojson_response(segments):
     features = []
 
     for seg in segments:
@@ -348,6 +347,172 @@ def road_motorability_map_data(request):
         )
 
     return JsonResponse({"type": "FeatureCollection", "features": features})
+
+
+def segments_map_data(request):
+    filtered = _filtered_segments_for_road_motorability(request)
+    segments = filtered["qs"].order_by("route__route", "index", "code")
+    return _segments_geojson_response(segments)
+
+
+def library_landing(request, active_section="road_inventory"):
+    qs = Segment.objects.select_related("route", "start_point", "end_point").all()
+    selected_route = (request.GET.get("route") or "").strip()
+    selected_state = (request.GET.get("state") or "").strip()
+    segment_code_query = (request.GET.get("segment_code") or "").strip()
+
+    if selected_route:
+        qs = qs.filter(route__route=selected_route)
+    if selected_state:
+        qs = qs.filter(state__iexact=selected_state)
+    if segment_code_query:
+        qs = qs.filter(code__icontains=segment_code_query)
+
+    qs = qs.order_by("route__route", "index", "code")
+    paginator = Paginator(qs, 50)
+    page_obj = paginator.get_page(request.GET.get("page") or 1)
+
+    qd = request.GET.copy()
+    qd.pop("page", None)
+    filters_qs = qd.urlencode()
+
+    return render(
+        request,
+        "website/library_landing.html",
+        {
+            "active_page": "library",
+            "active_library_section": active_section,
+            "segments": page_obj.object_list,
+            "page_obj": page_obj,
+            "filters_qs": filters_qs,
+            "routes": Route.objects.only("route").order_by("route"),
+            "states": State.objects.only("state").order_by("state"),
+            "selected_route": selected_route,
+            "selected_state": selected_state,
+            "segment_code_query": segment_code_query,
+        },
+    )
+
+
+def library_reports(request):
+    def _status_label_and_class(status_code):
+        if status_code in {"FF0000", "FF5050", "FF9966"}:
+            return "Intolerable", "is-intolerable"
+        if status_code in {"FFFFCC", "00CC00", "339933", "006600"}:
+            return "Tolerable", "is-tolerable"
+        return "No response", "is-neutral"
+
+    report_rows = []
+    selected_state = (request.GET.get("state") or "").strip()
+
+    rca_qs = (
+        RootCauseAnalysis.objects.select_related("subsegment", "subsegment__segment")
+        .order_by("-id")
+    )
+    if selected_state:
+        rca_qs = rca_qs.filter(subsegment__segment__state__iexact=selected_state)
+    for report in rca_qs:
+        segment = getattr(report.subsegment, "segment", None)
+        status_code = getattr(segment, "status", "666699")
+        status_label, status_class = _status_label_and_class(status_code)
+        report_rows.append(
+            {
+                "file_name": report.subsegment.code if report.subsegment else "-",
+                "report_type": "Root cause report",
+                "road_condition": status_label,
+                "road_condition_class": status_class,
+                "last_updated": "2 days",
+                "uploaded_by": "Engineer Ridwan Bankole",
+                "attachments_count": 1 if report.supporting_file else 0,
+                "details_url": f"{reverse('engineering_admin')}?mode=view&analysis={report.pk}",
+            }
+        )
+
+    physical_qs = (
+        PhysicalInspection.objects.select_related("subsegment", "subsegment__segment")
+        .prefetch_related("attachments")
+        .order_by("-updated_at", "-id")
+    )
+    if selected_state:
+        physical_qs = physical_qs.filter(subsegment__segment__state__iexact=selected_state)
+    for report in physical_qs:
+        segment = getattr(report.subsegment, "segment", None)
+        status_code = getattr(segment, "status", "666699")
+        status_label, status_class = _status_label_and_class(status_code)
+        report_rows.append(
+            {
+                "file_name": report.subsegment.code if report.subsegment else "-",
+                "report_type": "Physical inspection report",
+                "road_condition": status_label,
+                "road_condition_class": status_class,
+                "last_updated": f"{timesince(report.updated_at).split(',')[0]} ago",
+                "uploaded_by": "Engineer Ridwan Bankole",
+                "attachments_count": report.attachments.count(),
+                "details_url": f"{reverse('physical_inspection')}?mode=view&inspection={report.pk}",
+            }
+        )
+
+    report_rows.sort(key=lambda row: row["file_name"])
+    paginator = Paginator(report_rows, 50)
+    page_obj = paginator.get_page(request.GET.get("page") or 1)
+    qd = request.GET.copy()
+    qd.pop("page", None)
+    filters_qs = qd.urlencode()
+
+    return render(
+        request,
+        "website/library_reports.html",
+        {
+            "active_page": "library",
+            "active_library_section": "reports",
+            "report_rows": page_obj.object_list,
+            "page_obj": page_obj,
+            "states": State.objects.only("state").order_by("state"),
+            "selected_state": selected_state,
+            "filters_qs": filters_qs,
+        },
+    )
+
+
+def _render_library_guide(request, *, entry_type, active_section, search_label, url_name):
+    query = (request.GET.get("q") or "").strip()
+    guides_qs = Library.objects.filter(entry_type=entry_type).order_by("-created", "-id")
+    if query:
+        guides_qs = guides_qs.filter(name__icontains=query)
+
+    return render(
+        request,
+        "website/library_technical_guide.html",
+        {
+            "active_page": "library",
+            "active_library_section": active_section,
+            "guide_documents": guides_qs,
+            "guide_documents_count": guides_qs.count(),
+            "search_query": query,
+            "guide_search_label": search_label,
+            "guide_url_name": url_name,
+        },
+    )
+
+
+def library_technical_guide(request):
+    return _render_library_guide(
+        request,
+        entry_type=Library.TYPE_TECHNICAL_GUIDE,
+        active_section="technical_guide",
+        search_label="technical guide",
+        url_name="library_technical_guide",
+    )
+
+
+def library_user_guide(request):
+    return _render_library_guide(
+        request,
+        entry_type=Library.TYPE_USER_GUIDE,
+        active_section="user_guide",
+        search_label="user guide",
+        url_name="library_user_guide",
+    )
 
 
 def library(request):
@@ -494,7 +659,7 @@ def library(request):
                         RootCauseDetail.objects.filter(root_cause_analysis=analysis).delete()
 
                 return redirect(
-                    f"{reverse('library')}?mode=form&saved=1&subsegment={selected_subsegment.pk}&analysis={analysis.pk}"
+                    f"{reverse('engineering_admin')}?mode=form&saved=1&subsegment={selected_subsegment.pk}&analysis={analysis.pk}"
                 )
 
     root_cause_analyses = (
@@ -589,7 +754,7 @@ def library(request):
         request,
         "website/library.html",
         {
-            "active_page": "library",
+            "active_page": "engineering_admin",
             "active_library_tab": "root_cause",
             "library_mode": library_mode,
             "rca_error": rca_error,
@@ -629,12 +794,12 @@ def library(request):
     )
 
 
-def library_overview(request):
+def engineering_admin_overview(request):
     return render(
         request,
         "website/library.html",
         {
-            "active_page": "library",
+            "active_page": "engineering_admin",
             "active_library_tab": "overview",
         },
     )
@@ -946,7 +1111,7 @@ def physical_inspection(request):
         request,
         "website/library.html",
         {
-            "active_page": "library",
+            "active_page": "engineering_admin",
             "active_library_tab": "physical",
             "library_mode": library_mode,
             "physical_success": physical_success,
@@ -978,17 +1143,10 @@ def library_solution_design(request):
         request,
         "website/library.html",
         {
-            "active_page": "library",
+            "active_page": "engineering_admin",
             "active_library_tab": "solution",
         },
     )
-
-# def uploads(request):
-#     if request.method == "POST":
-#         # Placeholder only — real behaviour to be added when you share details
-#         # uploaded_file = request.FILES.get("segment_file")
-#         return HttpResponse("Upload received (stub). Behaviour to be defined.")
-#     return render(request, "website/uploads.html")
 
 # ---- Road Analysis with page-size selector + robust filter preservation (Point 5) ----
 
@@ -1479,155 +1637,23 @@ def _process_subsegment_upload(segment_code, start_row, end_row, fileobj):
 
     return {"created": len(cleaned_rows), "replaced": replaced, "errors": []}
 
-def uploads(request):
-    result = None
-    sub_result = None
-
-    if request.method == "POST":
-        form_type = request.POST.get("form_type")
-        if form_type == "subsegments":
-            form = UploadSegmentsForm()
-            sub_form = UploadSubSegmentsForm(request.POST, request.FILES)
-            if sub_form.is_valid():
-                sub_result = _process_subsegment_upload(
-                    sub_form.cleaned_data["segment"],
-                    sub_form.cleaned_data["start_row"],
-                    sub_form.cleaned_data["end_row"],
-                    sub_form.cleaned_data["segment_code_file"],
-                )
-            else:
-                flat_errors = []
-                for field_errors in sub_form.errors.values():
-                    flat_errors.extend(field_errors)
-                sub_result = {
-                    "created": 0,
-                    "replaced": 0,
-                    "errors": flat_errors,
-                }
-        else:
-            sub_form = UploadSubSegmentsForm()
-            form = UploadSegmentsForm(request.POST, request.FILES)
-            if form.is_valid():
-                f = form.cleaned_data["segment_file"]
-                auto_index = form.cleaned_data.get("auto_index", False)
-
-                rows, header_errors = _read_rows(f, f.name)
-                if header_errors:
-                    result = {"created": 0, "updated": 0, "skipped": 0, "errors": header_errors}
-                else:
-                    created = updated = skipped = 0
-                    errors = []
-
-                    # Index cache primed once for the whole file
-                    route_index_cache = _prime_route_max_index() if auto_index else {}
-
-                    with transaction.atomic():
-                        for row in rows:
-                            route_code = str(row["ROUTE"] or "").strip().upper()
-                            seg_code   = str(row["SEGMENT CODE"] or "").strip().upper()
-                            state      = str(row["STATE"] or "").strip()
-                            name       = str(row["SEGMENT NAME"] or "").strip()
-                            rnum       = row.get("_rownum", "?")
-
-                            if not route_code or not seg_code:
-                                skipped += 1
-                                errors.append(f"Row {rnum}: missing ROUTE or SEGMENT CODE.")
-                                continue
-
-                            # Convert to Decimal
-                            start_lat = _to_decimal(row["START_LAT"], "START_LAT", rnum, errors)
-                            start_lon = _to_decimal(row["START_LON"], "START_LON", rnum, errors)
-                            end_lat   = _to_decimal(row["END_LAT"], "END_LAT", rnum, errors)
-                            end_lon   = _to_decimal(row["END_LON"], "END_LON", rnum, errors)
-
-                            # Enforce coordinate ranges
-                            coord_bad = False
-                            if not _in_lat_range(start_lat):
-                                errors.append(f"Row {rnum}: START_LAT out of range [-90, 90].")
-                                coord_bad = True
-                            if not _in_lon_range(start_lon):
-                                errors.append(f"Row {rnum}: START_LON out of range [-180, 180].")
-                                coord_bad = True
-                            if not _in_lat_range(end_lat):
-                                errors.append(f"Row {rnum}: END_LAT out of range [-90, 90].")
-                                coord_bad = True
-                            if not _in_lon_range(end_lon):
-                                errors.append(f"Row {rnum}: END_LON out of range [-180, 180].")
-                                coord_bad = True
-
-                            if coord_bad:
-                                skipped += 1
-                                continue
-                            
-                            # Ensure Road/Route mapping (F* -> 'F'; A*/E* -> 'A')
-                            road_code = _road_code_from_route(route_code)
-                            road_obj, _ = Road.objects.get_or_create(road=road_code)
-
-                            route_obj, created_route = Route.objects.get_or_create(
-                                route=route_code,
-                                defaults={"road": road_obj, "index": ""},
-                            )
-
-                            if not created_route and route_obj.road_id != road_obj.id:
-                                route_obj.road = road_obj
-                                route_obj.save(update_fields=["road"])
-
-                            defaults = {
-                                "route": route_obj,
-                                "name": name,
-                                "state": state,
-                                "start_lat": start_lat,
-                                "start_lon": start_lon,
-                                "end_lat": end_lat,
-                                "end_lon": end_lon,
-                                "error_processing": False,
-                            }
-
-                            obj, was_created = Segment.objects.update_or_create(
-                                code=seg_code,
-                                defaults=defaults,
-                            )
-
-                            if was_created:
-                                if auto_index and not obj.index:
-                                    obj.index = _next_index_for_route(route_obj, route_index_cache)
-                                    obj.save(update_fields=["index"])
-                                created += 1
-                            else:
-                                updated += 1
-
-                    result = {"created": created, "updated": updated, "skipped": skipped, "errors": errors}
-            else:
-                result = {"created": 0, "updated": 0, "skipped": 0, "errors": ["Invalid form submission."]}
-    else:
-        form = UploadSegmentsForm()
-        sub_form = UploadSubSegmentsForm()
-
-    context = {
-        "form": form,
-        "result": result,
-        "sub_form": sub_form,
-        "sub_result": sub_result,
-        "active_page": "uploads",
-    }
-    return render(request, "website/uploads.html", context)
-
 def segment_code_search(request):
     """
     Return top matching segment codes for typeahead.
     GET /segments/search/?q=AB -> { "results": ["AB01", "AB02", ...] }
     """
     q = (request.GET.get("q") or "").strip()
+    if len(q) < 2:
+        return JsonResponse({"results": []})
     qs = Segment.objects.order_by("code")
-    if q:
-        qs = qs.filter(code__icontains=q)
+    qs = qs.filter(code__icontains=q)
     codes = list(qs.values_list("code", flat=True).distinct()[:20])  # cap results
     return JsonResponse({"results": codes})
 
 
-def motorability_and_condition_subsegments(request):
+def road_condition_subsegments(request):
     """
-    AJAX endpoint for motorability_and_condition:
+    AJAX endpoint for road_condition:
     Case-insensitive segment lookup by code, then return its subsegments.
     """
     segment_code = (request.GET.get("segment") or "").strip()

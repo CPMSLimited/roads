@@ -16,10 +16,13 @@
         <a href="{% url 'landing' %}" class="{% if active_page == 'home' %}is-active{% endif %}">Home</a>
         <a href="{% url 'road_inventory' %}" class="{% if active_page == 'inventory' %}is-active{% endif %}">Road Inventory</a>
         <a href="{% url 'road_motorability' %}" class="{% if active_page == 'road_motorability' %}is-active{% endif %}">Road Motorability</a>
-        <a href="{% url 'motorability_and_condition' %}" class="{% if active_page == 'motorability_and_condition' %}is-active{% endif %}">Motorability &amp; Condition</a>
+        <a href="{% url 'road_condition' %}" class="{% if active_page == 'road_condition' %}is-active{% endif %}">Road condition</a>
         <a href="{% url 'library' %}" class="{% if active_page == 'library' %}is-active{% endif %}">Library</a>
     </nav>
-    <a href="{% url 'uploads' %}" class="account-chip">AO.</a>
+    <a href="{% url 'engineering_admin' %}" class="account-chip" aria-label="User account">
+        <img src="{% static 'website/img/iconoir_user.svg' %}" alt="" class="account-chip-icon">
+        <p class="account-chip-initials">AO</p>
+    </a>
 </header>
 <main class="main-content">
     {% block content %}{% endblock %}
