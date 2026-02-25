@@ -18,7 +18,7 @@ Source bundle: `Ferma Platform.zip` (imported under `website/static/website/styl
   - `.library-loading` class (currently present but hidden in library empty state)
 
 ## Applied to current page
-- `website/templates/website/library.html`
+- `website/templates/website/engineering_admin.html`
   - Sidebar links now use `.sg-nav-item`
   - Action buttons now use styleguide button classes
   - Loading animation asset is wired into markup for future use

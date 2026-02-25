@@ -1,0 +1,41 @@
+{% load static %}
+{% if library_mode == "view" and solution_view_defect %}
+<form class="engineering-admin-view-shell library-view-shell" method="post" action="{{ solution_upload_action_url|default:'' }}" enctype="multipart/form-data">
+    {% csrf_token %}
+    <input type="hidden" name="mode" value="view">
+    <input type="hidden" name="defect_id" value="{{ solution_view_defect.id }}">
+    <article class="engineering-admin-view-main library-view-main">
+        <a class="library-rca-back" href="{{ solution_upload_action_url|default:'' }}">Back to Summary</a>
+        <header class="library-view-header">
+            <h1>{{ solution_view_segment_code }}</h1>
+            <p>Segment id</p>
+        </header>
+
+        <section class="library-report-table-wrap" style="margin-top:0;">
+            <div class="library-report-table-card" style="padding:20px;">
+                <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;">
+                    {% for file_item in solution_view_files %}
+                    <a href="{{ file_item.url }}" target="_blank" rel="noopener" style="display:block;border:1px solid #e5e8e7;border-radius:8px;padding:14px;background:#fff;text-decoration:none;color:inherit;">
+                        <div style="height:88px;display:flex;align-items:flex-end;">
+                            <img src="{% static file_item.icon_path %}" alt="{{ file_item.ext }} file" style="width:72px;height:72px;object-fit:contain;">
+                        </div>
+                        <h3 style="margin:12px 0 10px;font-size:13.5px;line-height:1.35;color:#1f2e2a;overflow-wrap:anywhere;word-break:break-word;">{{ file_item.name }}</h3>
+                        <div style="display:flex;justify-content:space-between;color:#96a09d;font-size:13px;">
+                            <span>{{ file_item.date_text }}</span>
+                            <span>{{ file_item.size_text|filesizeformat }}</span>
+                        </div>
+                    </a>
+                    {% empty %}
+                    <p style="color:#75827e;">No solution files uploaded yet.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+    </article>
+
+    {% url 'engineering_admin' as solution_root_cause_url %}
+    {% include "website/includes/engineering_admin/_right_pane_workflow.html" with pane_view_link_href=solution_root_cause_url pane_view_link_text="View root cause" pane_inspector_name=solution_view_engineer_name pane_segment_code=solution_view_segment_code pane_status_class=solution_view_status_class pane_status_text=solution_view_status_text pane_date_text=solution_view_defect.modified|date:"n/j/Y" pane_upload_input_id="solution-supporting-files" pane_upload_input_name="solution_files" pane_hide_draft_button=True pane_complete_button_name="command" pane_complete_button_value="mark_solution_done" pane_complete_button_label="Submit for Approval" %}
+</form>
+{% else %}
+{% include "website/includes/engineering_admin/_tab_summary.html" %}
+{% endif %}

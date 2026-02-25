@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Road, Route, Segment, State, Address, SubSegment
+from .models import Road, Route, Segment, State, Address, SubSegment, Defect
 
 # admin.site.register(Segment)
 admin.site.register(Road)
@@ -25,3 +25,24 @@ class SubSegmentAdmin(admin.ModelAdmin):
     search_fields = ("code", "segment__code", "segment__name")
     autocomplete_fields = ("segment",)  # works now because SegmentAdmin has search_fields
     ordering = ("segment", "position")
+
+
+@admin.register(Defect)
+class DefectAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "defect_ref",
+        "subsegment",
+        "workflow_status",
+        "condition",
+        "engineer",
+        "senior_engineer",
+        "closed_at",
+        "created",
+        "modified",
+    )
+    list_filter = ("workflow_status", "condition", "engineer", "senior_engineer", "closed_at")
+    search_fields = ("defect_ref", "subsegment__code", "subsegment__segment__code", "engineer__username", "senior_engineer__username")
+    autocomplete_fields = ("subsegment", "engineer", "senior_engineer")
+    readonly_fields = ("defect_ref", "created", "modified")
+    ordering = ("-modified", "-id")

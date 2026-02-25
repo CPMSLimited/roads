@@ -1,0 +1,4 @@
+<aside class="engineering-admin-view-pane library-view-pane">
+    {% include "website/includes/engineering_admin/_report_information_card.html" %}
+    {% include "website/includes/engineering_admin/_workflow_bottom_panel.html" with pane_upload_input_id=report_upload_input_id|default:"physical-supporting-files-view" pane_upload_input_name=report_upload_input_name|default:"supporting_files" pane_draft_button_type="button" pane_complete_button_type="button" %}
+</aside>

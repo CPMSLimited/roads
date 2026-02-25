@@ -1,0 +1,101 @@
+<section class="approvals-screen">
+    <div class="approvals-main">
+        <header class="approvals-kpis">
+            <article class="approvals-kpi-card">
+                <p>Total Number of Approvals</p>
+                <h2>{{ approvals_total }}</h2>
+            </article>
+            <article class="approvals-kpi-card">
+                <p>Completed</p>
+                <h2>{{ approvals_completed }}</h2>
+            </article>
+            <article class="approvals-kpi-card">
+                <p>Pending</p>
+                <h2>{{ approvals_pending }}</h2>
+            </article>
+            <article class="approvals-kpi-card">
+                <p>Rejected</p>
+                <h2>{{ approvals_rejected }}</h2>
+            </article>
+        </header>
+
+        <section class="approvals-pending-wrap">
+            <header class="approvals-pending-head">
+                <h2>Pending Approvals</h2>
+                <div class="approvals-pending-controls">
+                    <button type="button" class="approvals-priority-btn">Priority</button>
+                    <button type="button" class="approvals-filter-btn" aria-label="Filter approvals">
+                        <span></span><span></span><span></span>
+                    </button>
+                </div>
+            </header>
+
+            <div class="approvals-pending-list">
+                {% for row in pending_approvals %}
+                <article class="approvals-pending-card">
+                    <div class="approvals-pending-row">
+                        <div>
+                            <h3>{{ row.code }} <span>{{ row.priority }}</span></h3>
+                            <p>{{ row.submitted_text }}</p>
+                        </div>
+                        <div class="approvals-cost">
+                            <strong>{{ row.estimated_cost }}</strong>
+                            <small>Estimated cost</small>
+                        </div>
+                    </div>
+                    <p class="approvals-doc-links">
+                        <a href="{% url 'engineering_admin' %}">Root Cause Analysis</a>
+                        <span>&bull;</span>
+                        <a href="{% url 'physical_inspection' %}">Inspection Report</a>
+                        <span>&bull;</span>
+                        <a href="{% url 'library_solution_design' %}">Remedy Design</a>
+                    </p>
+                    <div class="approvals-actions">
+                        <button type="button" class="approvals-btn approvals-btn-reject">Reject</button>
+                        <button type="button" class="approvals-btn approvals-btn-approve">Approve</button>
+                        <button type="button" class="approvals-btn approvals-btn-review">Request review</button>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+
+    <aside class="approvals-side">
+        <section class="approvals-side-card">
+            <header>
+                <h3>Approved plans</h3>
+                <a href="#">View all</a>
+            </header>
+            {% for row in approved_plans %}
+            <article class="approvals-mini-card">
+                <div class="approvals-mini-head">
+                    <strong>{{ row.code }}</strong>
+                    <span>{{ row.age_text }}</span>
+                </div>
+                <p>Engineer: <strong>Ridwan Bankole</strong></p>
+                <p>Condition: <span class="approvals-chip approvals-chip-yellow">{{ row.condition }}</span></p>
+                <p>Speed: <strong>{{ row.speed }}</strong></p>
+            </article>
+            {% endfor %}
+        </section>
+
+        <section class="approvals-side-card">
+            <header>
+                <h3>Rejected plans</h3>
+                <a href="#">View all</a>
+            </header>
+            {% for row in rejected_plans %}
+            <article class="approvals-mini-card">
+                <div class="approvals-mini-head">
+                    <strong>{{ row.code }}</strong>
+                    <span>{{ row.age_text }}</span>
+                </div>
+                <p>Engineer: <strong>Ridwan Bankole</strong></p>
+                <p>Condition: <span class="approvals-chip approvals-chip-red">{{ row.condition }}</span></p>
+                <p>Speed: <strong>{{ row.speed }}</strong></p>
+            </article>
+            {% endfor %}
+        </section>
+    </aside>
+</section>

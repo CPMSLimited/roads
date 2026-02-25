@@ -1,0 +1,368 @@
+{% load static %}
+{% if active_library_tab != "history" %}
+<div class="library-toolbar">
+    <div class="library-kpi-grid">
+        {% if active_library_tab == "physical" or active_library_tab == "physical_2" %}
+        {% include "website/includes/sg_kpi_card.html" with label="Total Inspections" value=physical_total %}
+        {% elif active_library_tab == "solution" or active_library_tab == "history" %}
+        {% include "website/includes/sg_kpi_card.html" with label="Total Solutions" value=solution_total %}
+        {% else %}
+        {% include "website/includes/sg_kpi_card.html" with label="Total reports" value=root_cause_total %}
+        {% endif %}
+        {% if active_library_tab == "physical" or active_library_tab == "physical_2" %}
+        {% include "website/includes/sg_kpi_card.html" with label="Ongoing" value=physical_draft_count %}
+        {% elif active_library_tab == "solution" or active_library_tab == "history" %}
+        {% include "website/includes/sg_kpi_card.html" with label="Ongoing" value=solution_draft_count %}
+        {% else %}
+        {% include "website/includes/sg_kpi_card.html" with label="Ongoing" value=root_cause_draft_count %}
+        {% endif %}
+        {% if active_library_tab == "physical" or active_library_tab == "physical_2" %}
+        {% include "website/includes/sg_kpi_card.html" with label="Complete" value=physical_complete_count %}
+        {% elif active_library_tab == "solution" or active_library_tab == "history" %}
+        {% include "website/includes/sg_kpi_card.html" with label="Complete" value=solution_complete_count %}
+        {% else %}
+        {% include "website/includes/sg_kpi_card.html" with label="Complete" value=root_cause_complete_count %}
+        {% endif %}
+    </div>
+    {% if active_library_tab == "physical" or active_library_tab == "physical_2" %}
+    {% elif active_library_tab == "solution" or active_library_tab == "history" %}
+    {% else %}
+    {% if not disable_create_new_report %}
+    {% include "website/includes/sg_action_button.html" with href=library_form_href class_name="library-toolbar-action sg-btn-primary" label="Create New Report" icon_path="website/styleguide/icons/iconoir_add-circle.svg" %}
+    {% endif %}
+    {% endif %}
+</div>
+{% endif %}
+{% if active_library_tab == "solution" and solution_upload_count or active_library_tab == "history" and solution_upload_count %}
+<p class="library-rca-feedback library-rca-feedback-success">{{ solution_upload_count }} file{{ solution_upload_count|pluralize }} uploaded.</p>
+{% elif active_library_tab == "solution" and solution_upload_error or active_library_tab == "history" and solution_upload_error %}
+<p class="library-rca-feedback library-rca-feedback-error">Select at least one file to upload.</p>
+{% elif active_library_tab == "solution" and solution_done_success or active_library_tab == "history" and solution_done_success %}
+<p class="library-rca-feedback library-rca-feedback-success">Solution Design marked complete.</p>
+{% elif active_library_tab == "solution" and solution_handoff_message or active_library_tab == "history" and solution_handoff_message %}
+<p class="library-rca-feedback library-rca-feedback-success">{{ solution_handoff_message }}</p>
+{% endif %}
+
+{% if active_library_tab == "physical" and physical_total or active_library_tab == "physical_2" and physical_total %}
+<section class="library-report-table-wrap" aria-label="Existing physical inspections">
+    <article class="library-report-table-card">
+        <header class="library-report-table-head">
+            <h2>Drafts</h2>
+            <div class="library-report-controls">
+                <button type="button" class="library-report-priority">Priority</button>
+                <button type="button" class="library-report-filter" aria-label="Filter rows">
+                    <span></span><span></span><span></span>
+                </button>
+            </div>
+        </header>
+        <table class="library-report-table">
+            <thead>
+                <tr>
+                    <th>Sub-segment Code</th>
+                    <th>Status</th>
+                    <th>Condition</th>
+                    <th>Date</th>
+                    <th>Engineer-in-charge</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in physical_draft_rows %}
+                <tr>
+                    <td>{{ row.defect.subsegment.code }}</td>
+                    <td>{{ row.status_text }}</td>
+                    <td><span class="library-condition-chip is-{{ row.condition_class }}">{{ row.condition_label }}</span></td>
+                    <td>{{ row.date_text }}</td>
+                    <td>{{ row.engineer_name }}</td>
+                    <td>
+                        <a class="library-row-action" href="{{ physical_form_href }}&subsegment={{ row.defect.subsegment_id }}&defect={{ row.defect.id }}{% if row.report %}&inspection={{ row.report.pk }}{% endif %}">
+                            <img src="{% static 'website/styleguide/icons/iconoir_eye.svg' %}" alt="" role="presentation">
+                            <span>view details</span>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </article>
+
+    <article class="library-report-table-card">
+        <header class="library-report-table-head">
+            <h2>Complete Reports</h2>
+            <div class="library-report-controls">
+                <button type="button" class="library-report-priority">Priority</button>
+                <button type="button" class="library-report-filter" aria-label="Filter rows">
+                    <span></span><span></span><span></span>
+                </button>
+            </div>
+        </header>
+        <table class="library-report-table">
+            <thead>
+                <tr>
+                    <th>Sub-segment Code</th>
+                    <th>Status</th>
+                    <th>Condition</th>
+                    <th>Date</th>
+                    <th>Engineer-in-charge</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in physical_complete_rows %}
+                <tr>
+                    <td>{{ row.defect.subsegment.code }}</td>
+                    <td>{{ row.status_text }}</td>
+                    <td><span class="library-condition-chip is-{{ row.condition_class }}">{{ row.condition_label }}</span></td>
+                    <td>{{ row.date_text }}</td>
+                    <td>{{ row.engineer_name }}</td>
+                    <td>
+                        <a class="library-row-action" href="{% if row.report %}{{ physical_root_url }}?mode=view&inspection={{ row.report.pk }}{% else %}{{ physical_form_href }}&subsegment={{ row.defect.subsegment_id }}&defect={{ row.defect.id }}{% endif %}">
+                            <img src="{% static 'website/styleguide/icons/iconoir_eye.svg' %}" alt="" role="presentation">
+                            <span>view details</span>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </article>
+</section>
+{% elif active_library_tab == "history" and solution_total %}
+<section class="library-report-table-wrap" aria-label="History records">
+    <article class="library-report-table-card">
+        <header class="library-report-table-head">
+            <h2 style="font-size:110%;font-weight:700;">All Records ({{ solution_total }})</h2>
+            <div class="library-report-controls">
+                <button type="button" class="library-report-priority">Priority</button>
+                <button type="button" class="library-report-filter" aria-label="Filter rows">
+                    <span></span><span></span><span></span>
+                </button>
+            </div>
+        </header>
+        <table class="library-report-table">
+            <thead>
+                <tr>
+                    <th>Sub-segment Code</th>
+                    <th>Status</th>
+                    <th>Condition</th>
+                    <th>Date</th>
+                    <th>Engineer-in-charge</th>
+                    <th>File</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in history_rows %}
+                <tr>
+                    <td>{{ row.defect.subsegment.code }}</td>
+                    <td>{{ row.status_text }}</td>
+                    <td><span class="library-condition-chip is-{{ row.condition_class }}">{{ row.condition_label }}</span></td>
+                    <td>{{ row.date_text }}</td>
+                    <td>{{ row.engineer_name }}</td>
+                    <td>{{ row.files_count|default:0 }}</td>
+                    <td>
+                        <a class="library-row-action" href="{{ row.details_url|default:'#' }}">
+                            <img src="{% static 'website/styleguide/icons/iconoir_eye.svg' %}" alt="" role="presentation">
+                            <span>view details</span>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </article>
+</section>
+{% elif active_library_tab == "solution" and solution_total %}
+<section class="library-report-table-wrap" aria-label="Existing solution design queue">
+    <article class="library-report-table-card">
+        <header class="library-report-table-head">
+            <h2>Drafts</h2>
+            <div class="library-report-controls">
+                <button type="button" class="library-report-priority">Priority</button>
+                <button type="button" class="library-report-filter" aria-label="Filter rows">
+                    <span></span><span></span><span></span>
+                </button>
+            </div>
+        </header>
+        <table class="library-report-table">
+            <thead>
+                <tr>
+                    <th>Sub-segment Code</th>
+                    <th>Status</th>
+                    <th>Condition</th>
+                    <th>Date</th>
+                    <th>Engineer-in-charge</th>
+                    <th>File</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in solution_draft_rows %}
+                <tr>
+                    <td>{{ row.defect.subsegment.code }}</td>
+                    <td>{{ row.status_text }}</td>
+                    <td><span class="library-condition-chip is-{{ row.condition_class }}">{{ row.condition_label }}</span></td>
+                    <td>{{ row.date_text }}</td>
+                    <td>{{ row.engineer_name }}</td>
+                    <td>{{ row.files_count }}</td>
+                    <td>
+                        <a class="library-row-action" href="{{ row.details_url }}">
+                            <img src="{% static 'website/styleguide/icons/iconoir_eye.svg' %}" alt="" role="presentation">
+                            <span>view details</span>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </article>
+
+    <article class="library-report-table-card">
+        <header class="library-report-table-head">
+            <h2>Complete Reports</h2>
+            <div class="library-report-controls">
+                <button type="button" class="library-report-priority">Priority</button>
+                <button type="button" class="library-report-filter" aria-label="Filter rows">
+                    <span></span><span></span><span></span>
+                </button>
+            </div>
+        </header>
+        <table class="library-report-table">
+            <thead>
+                <tr>
+                    <th>Sub-segment Code</th>
+                    <th>Status</th>
+                    <th>Condition</th>
+                    <th>Date</th>
+                    <th>Engineer-in-charge</th>
+                    <th>File</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in solution_complete_rows %}
+                <tr>
+                    <td>{{ row.defect.subsegment.code }}</td>
+                    <td>{{ row.status_text }}</td>
+                    <td><span class="library-condition-chip is-{{ row.condition_class }}">{{ row.condition_label }}</span></td>
+                    <td>{{ row.date_text }}</td>
+                    <td>{{ row.engineer_name }}</td>
+                    <td>{{ row.files_count|default:0 }}</td>
+                    <td>
+                        <a class="library-row-action" href="{{ row.details_url|default:'#' }}">
+                            <img src="{% static 'website/styleguide/icons/iconoir_eye.svg' %}" alt="" role="presentation">
+                            <span>view details</span>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </article>
+</section>
+{% elif active_library_tab == "root_cause" and root_cause_total %}
+<section class="library-report-table-wrap" aria-label="Existing root cause analyses">
+    <article class="library-report-table-card">
+        <header class="library-report-table-head">
+            <h2>Drafts</h2>
+            <div class="library-report-controls">
+                <button type="button" class="library-report-priority">Priority</button>
+                <button type="button" class="library-report-filter" aria-label="Filter rows">
+                    <span></span><span></span><span></span>
+                </button>
+            </div>
+        </header>
+        <table class="library-report-table">
+            <thead>
+                <tr>
+                    <th>Sub-segment Code</th>
+                    <th>Status</th>
+                    <th>Condition</th>
+                    <th>Date</th>
+                    <th>Engineer-in-charge</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in draft_rows %}
+                <tr>
+                    <td>{{ row.defect.subsegment.code }}</td>
+                    <td>{{ row.status_text }}</td>
+                    <td><span class="library-condition-chip is-{{ row.condition_class }}">{{ row.condition_label }}</span></td>
+                    <td>{{ row.date_text }}</td>
+                    <td>{{ row.engineer_name }}</td>
+                    <td>
+                        {% if row.report %}
+                        <a class="library-row-action" href="{{ library_form_href }}&subsegment={{ row.defect.subsegment_id }}&analysis={{ row.report.pk }}&defect={{ row.defect.id }}">
+                            <img src="{% static 'website/styleguide/icons/iconoir_eye.svg' %}" alt="" role="presentation">
+                            <span>view details</span>
+                        </a>
+                        {% else %}
+                        <span class="library-row-action">no RCA yet</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </article>
+
+    <article class="library-report-table-card">
+        <header class="library-report-table-head">
+            <h2>Completed Reports</h2>
+            <div class="library-report-controls">
+                <button type="button" class="library-report-priority">Priority</button>
+                <button type="button" class="library-report-filter" aria-label="Filter rows">
+                    <span></span><span></span><span></span>
+                </button>
+            </div>
+        </header>
+        <table class="library-report-table">
+            <thead>
+                <tr>
+                    <th>Sub-segment Code</th>
+                    <th>Status</th>
+                    <th>Condition</th>
+                    <th>Date</th>
+                    <th>Engineer-in-charge</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in complete_rows %}
+                <tr>
+                    <td>{{ row.defect.subsegment.code }}</td>
+                    <td>{{ row.status_text }}</td>
+                    <td><span class="library-condition-chip is-{{ row.condition_class }}">{{ row.condition_label }}</span></td>
+                    <td>{{ row.date_text }}</td>
+                    <td>{{ row.engineer_name }}</td>
+                    <td>
+                        {% if row.report %}
+                        <a class="library-row-action" href="{{ library_root_url }}?mode=view&subsegment={{ row.defect.subsegment_id }}&analysis={{ row.report.pk }}&defect={{ row.defect.id }}">
+                            <img src="{% static 'website/styleguide/icons/iconoir_eye.svg' %}" alt="" role="presentation">
+                            <span>view details</span>
+                        </a>
+                        {% else %}
+                        <span class="library-row-action">no RCA yet</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </article>
+</section>
+{% else %}
+<article class="library-empty-state">
+    <h1>Your report folder is empty</h1>
+    <p>Create a new report and it will show up here.</p>
+    {% if active_library_tab == "physical" or active_library_tab == "physical_2" %}
+    {% elif active_library_tab == "solution" or active_library_tab == "history" %}
+    {% else %}
+    {% if not disable_create_new_report %}
+    {% include "website/includes/sg_action_button.html" with href=library_form_href class_name="library-empty-action sg-btn-soft" label="Create New Report" %}
+    {% endif %}
+    {% endif %}
+    <img class="library-loading is-hidden" src="{% static 'website/styleguide/ferma_platform/Loading animation.svg' %}" alt="Loading animation preview">
+</article>
+{% endif %}

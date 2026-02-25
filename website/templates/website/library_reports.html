@@ -69,8 +69,18 @@
                         <td><span class="library-report-chip {{ row.road_condition_class }}">{{ row.road_condition }}</span></td>
                         <td>{{ row.last_updated }}</td>
                         <td>{{ row.uploaded_by }}</td>
-                        <td><span class="library-attachment-cell"><span aria-hidden="true">&#128196;</span> {{ row.attachments_count }}</span></td>
-                        <td><a class="library-report-action" href="{{ row.details_url }}">&#128065; view details</a></td>
+                        <td>
+                            {% if row.attachment_url %}
+                            <a class="library-attachment-cell" href="{{ row.attachment_url }}" target="_blank" rel="noopener noreferrer" title="{{ row.attachment_name }}">
+                                <span aria-hidden="true">&#128196;</span> {{ row.attachments_count }}
+                            </a>
+                            {% else %}
+                            <span class="library-attachment-cell"><span aria-hidden="true">&#128196;</span> {{ row.attachments_count }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a class="library-report-action" href="{{ row.details_url }}">&#128065; view details</a>
+                        </td>
                     </tr>
                     {% empty %}
                     <tr>

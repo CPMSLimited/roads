@@ -123,7 +123,7 @@
                                 <table class="data-table inventory-table">
                                     <thead>
                                         <tr>
-                                            <th>Segment Code</th>
+                                            <th>Select</th>
                                             <th>Subsegment Code</th>
                                             <th>Northings</th>
                                             <th>Eastings</th>
@@ -134,8 +134,10 @@
                                     <tbody id="subsegmentTableBody">
                                         {% if subsegments %}
                                         {% for sub in subsegments %}
-                                        <tr>
-                                            <td>{{ sub.segment_code }}</td>
+                                        <tr class="subsegment-select-row" data-subsegment-code="{{ sub.code }}" data-subsegment-status="{{ sub.status|default:'666699' }}">
+                                            <td>
+                                                <input class="subsegment-select-checkbox" type="checkbox" aria-label="Select {{ sub.code }}">
+                                            </td>
                                             <td>{{ sub.code }}</td>
                                             <td>{{ sub.start_lat }}</td>
                                             <td>{{ sub.start_lon }}</td>
@@ -211,14 +213,13 @@
             <p>Flag defect locations for analysis.</p>
             <div class="analysis-code-row">
                 <span>Sub-segment Code</span>
-                <a href="#">Clear Selection</a>
+                <a href="#" id="analysisClearSelection">Clear Selection</a>
             </div>
-            <div class="analysis-chip-box">
-                <span class="analysis-chip chip-orange">{{ focus_segment.code|default:"A1LAS2" }}</span>
-                <span class="analysis-chip chip-blue">{{ segments.1.code|default:"A1LAS4" }}</span>
+            <div id="analysisSelectedSubsegments" class="analysis-chip-box">
+                <span class="analysis-chip-placeholder">No sub-segment selected</span>
             </div>
-            <button class="btn btn-solid" type="button">Save Draft</button>
-            <button class="btn btn-outline" type="button">Complete Report Template</button>
+            <p id="analysisDraftFeedback" class="analysis-draft-feedback"></p>
+            <button id="analysisSaveDraftBtn" class="btn btn-solid" type="button">Save Draft</button>
         </article>
 
         <article class="table-card side-card map-filter-results-card">
@@ -352,9 +353,14 @@
     const buttons = document.querySelectorAll(".inventory-view-btn");
     const subsegmentTableBody = document.getElementById("subsegmentTableBody");
     const subsegmentFeedback = document.getElementById("subsegmentFeedback");
+    const analysisSelectedSubsegments = document.getElementById("analysisSelectedSubsegments");
+    const analysisClearSelection = document.getElementById("analysisClearSelection");
+    const analysisSaveDraftBtn = document.getElementById("analysisSaveDraftBtn");
+    const analysisDraftFeedback = document.getElementById("analysisDraftFeedback");
     const chartTitle = document.getElementById("inventorySpeedChartTitle");
     const chartCanvas = document.getElementById("inventorySpeedChart");
     const chartPrompt = document.getElementById("inventorySpeedChartPrompt");
+    const selectedSubsegmentMap = new Map();
     let subsegmentChart = null;
     if (!form || !inlinePager || !mapView || !tableView || !rightMapPanel || !rightTablePanel || !buttons.length) return;
 
@@ -553,6 +559,130 @@
     bindFilterForm(form);
     bindFilterForm(sideForm);
 
+    function renderSelectedSubsegmentChips() {
+      if (!analysisSelectedSubsegments) return;
+      analysisSelectedSubsegments.innerHTML = "";
+      const entries = Array.from(selectedSubsegmentMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+      if (!entries.length) {
+        const empty = document.createElement("span");
+        empty.className = "analysis-chip-placeholder";
+        empty.textContent = "No sub-segment selected";
+        analysisSelectedSubsegments.appendChild(empty);
+        return;
+      }
+      entries.forEach(([code, statusHexRaw]) => {
+        const statusHex = statusToHex(statusHexRaw);
+        const r = parseInt(statusHex.slice(0, 2), 16);
+        const g = parseInt(statusHex.slice(2, 4), 16);
+        const b = parseInt(statusHex.slice(4, 6), 16);
+        const luminance = (0.299 * r) + (0.587 * g) + (0.114 * b);
+        const chip = document.createElement("span");
+        chip.className = "analysis-chip";
+        chip.style.backgroundColor = `#${statusHex}`;
+        chip.style.color = luminance > 160 ? "#1f2a27" : "#ffffff";
+        chip.textContent = code;
+        analysisSelectedSubsegments.appendChild(chip);
+      });
+    }
+
+    function setDraftFeedback(message, tone) {
+      if (!analysisDraftFeedback) return;
+      analysisDraftFeedback.textContent = message || "";
+      analysisDraftFeedback.classList.remove("is-success", "is-warning", "is-error");
+      if (tone) analysisDraftFeedback.classList.add(tone);
+    }
+
+    function syncSubsegmentSelectionUi() {
+      document.querySelectorAll(".subsegment-select-row").forEach((row) => {
+        const code = (row.dataset.subsegmentCode || "").trim();
+        const checked = code && selectedSubsegmentMap.has(code);
+        row.classList.toggle("is-selected", checked);
+        const checkbox = row.querySelector(".subsegment-select-checkbox");
+        if (checkbox) checkbox.checked = checked;
+      });
+      renderSelectedSubsegmentChips();
+    }
+
+    function toggleSubsegmentCode(code, forceChecked, statusHex) {
+      const normalized = (code || "").trim();
+      if (!normalized) return;
+      const nextChecked = typeof forceChecked === "boolean"
+        ? forceChecked
+        : !selectedSubsegmentMap.has(normalized);
+      if (nextChecked) {
+        selectedSubsegmentMap.set(normalized, statusToHex(statusHex || "666699"));
+      } else {
+        selectedSubsegmentMap.delete(normalized);
+      }
+      syncSubsegmentSelectionUi();
+    }
+
+    function bindSubsegmentRowSelection(scopeEl) {
+      if (!scopeEl) return;
+      scopeEl.querySelectorAll(".subsegment-select-row").forEach((row) => {
+        if (row.dataset.selectionBound === "1") return;
+        row.dataset.selectionBound = "1";
+        row.addEventListener("click", (event) => {
+          if (event.target.closest(".subsegment-select-checkbox")) return;
+          toggleSubsegmentCode(row.dataset.subsegmentCode, undefined, row.dataset.subsegmentStatus);
+        });
+        const checkbox = row.querySelector(".subsegment-select-checkbox");
+        if (checkbox) {
+          checkbox.addEventListener("click", (event) => event.stopPropagation());
+          checkbox.addEventListener("change", () => {
+            toggleSubsegmentCode(row.dataset.subsegmentCode, checkbox.checked, row.dataset.subsegmentStatus);
+          });
+        }
+      });
+    }
+
+    if (analysisClearSelection) {
+      analysisClearSelection.addEventListener("click", (event) => {
+        event.preventDefault();
+        selectedSubsegmentMap.clear();
+        syncSubsegmentSelectionUi();
+        setDraftFeedback("", "");
+      });
+    }
+
+    if (analysisSaveDraftBtn) {
+      analysisSaveDraftBtn.addEventListener("click", async () => {
+        const selectedCodes = Array.from(selectedSubsegmentMap.keys());
+        if (!selectedCodes.length) {
+          return;
+        }
+        setDraftFeedback("Saving draft...", "");
+        analysisSaveDraftBtn.disabled = true;
+        try {
+          const formData = new FormData();
+          selectedCodes.forEach((code) => formData.append("subsegment_codes[]", code));
+          const csrfToken =
+            document.querySelector('input[name="csrfmiddlewaretoken"]')?.value ||
+            (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] ||
+            "";
+          const response = await fetch('{% url "road_condition_save_draft" %}', {
+            method: "POST",
+            body: formData,
+            headers: csrfToken ? { "X-CSRFToken": decodeURIComponent(csrfToken) } : {},
+          });
+          const payload = await response.json();
+          if (!response.ok || payload.ok === false) {
+            setDraftFeedback(payload.message || "Could not save draft.", "is-error");
+            return;
+          }
+          if (payload.blocked_codes?.length || payload.not_found_codes?.length) {
+            setDraftFeedback(payload.message || "Saved with warnings.", "is-warning");
+          } else {
+            setDraftFeedback(payload.message || "Draft saved.", "is-success");
+          }
+        } catch (err) {
+          setDraftFeedback("Could not save draft. Please try again.", "is-error");
+        } finally {
+          analysisSaveDraftBtn.disabled = false;
+        }
+      });
+    }
+
     function subsegmentCell(row, value, clsName = "") {
       const td = document.createElement("td");
       if (clsName) td.className = clsName;
@@ -583,7 +713,16 @@
 
       rows.forEach((row) => {
         const tr = document.createElement("tr");
-        subsegmentCell(tr, row.segment_code || "-");
+        tr.className = "subsegment-select-row";
+        tr.dataset.subsegmentCode = row.code || "";
+        tr.dataset.subsegmentStatus = (row.status || "666699").replace("#", "");
+        const checkboxTd = document.createElement("td");
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.className = "subsegment-select-checkbox";
+        checkbox.setAttribute("aria-label", `Select ${row.code || "subsegment"}`);
+        checkboxTd.appendChild(checkbox);
+        tr.appendChild(checkboxTd);
         subsegmentCell(tr, row.code || "-");
         subsegmentCell(tr, row.start_lat ?? "-");
         subsegmentCell(tr, row.start_lon ?? "-");
@@ -592,6 +731,8 @@
         statusTd.dataset.status = (row.status || "666699").replace("#", "");
         subsegmentTableBody.appendChild(tr);
       });
+      bindSubsegmentRowSelection(subsegmentTableBody);
+      syncSubsegmentSelectionUi();
       applyStatusContrast();
       setSubsegmentMessage(message || (isError ? "Could not load subsegments." : `Loaded ${rows.length} subsegments.`));
       renderSubsegmentChart(rows, rows[0].segment_code || "Selected segment");
@@ -624,6 +765,8 @@
       });
     });
 
+    bindSubsegmentRowSelection(document);
+    syncSubsegmentSelectionUi();
     applyStatusContrast();
     clearSubsegmentChart("Select a segment on the right table to view the graph.");
     setView("{{ current_view|default:'map' }}");

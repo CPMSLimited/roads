@@ -1,6 +1,7 @@
 # website/views.py
 
 import logging
+import os
 
 from all_roads.models import (
     Segment,
@@ -8,18 +9,19 @@ from all_roads.models import (
     Road,
     State,
     SubSegment,
+    Defect,
     DefectType,
     RootCauseAnalysis,
     RootCauseDetail,
     PhysicalInspection,
     PhysicalInspectionAnalysis,
     PhysicalInspectionCharacteristic,
-    PhysicalInspectionAttachment,
     Library,
 )
 from all_roads.services import refresh_segment_and_subsegments
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
+from django.contrib.auth import get_user_model
 from django.core.paginator import Paginator
 from django.db import models, transaction
 from django.db.models import Sum, Count, Q, IntegerField, Max
@@ -28,6 +30,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.utils.timesince import timesince
+from django.utils import timezone
 from .forms import UploadSegmentsForm, UploadSubSegmentsForm
 import csv
 import io
@@ -46,6 +49,152 @@ STATUS_BUCKETS = {
 # ---- Pagination options (Point 5) ----
 PAGE_SIZE_DEFAULT = 25
 PAGE_SIZE_OPTIONS = [25, 50, 100]
+
+
+def _library_file_type_from_name(filename):
+    ext = os.path.splitext((filename or "").lower())[1]
+    if ext in {".doc", ".docx", ".txt", ".rtf", ".odt"}:
+        return Library.FILE_TYPE_DOCUMENT
+    if ext in {".xls", ".xlsx", ".ods"}:
+        return Library.FILE_TYPE_SPREADSHEET
+    if ext == ".pdf":
+        return Library.FILE_TYPE_PDF
+    if ext == ".csv":
+        return Library.FILE_TYPE_CSV
+    if ext in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}:
+        return Library.FILE_TYPE_IMAGE
+    if ext in {".ppt", ".pptx", ".odp"}:
+        return Library.FILE_TYPE_PRESENTATION
+    if ext in {".geojson", ".json", ".kml", ".kmz", ".shp"}:
+        return Library.FILE_TYPE_GEO_DATA
+    return Library.FILE_TYPE_OTHER
+
+
+def _get_assumed_project_user():
+    User = get_user_model()
+    existing = (
+        User.objects.filter(first_name__iexact="Amina", last_name__iexact="Bello")
+        .order_by("id")
+        .first()
+    )
+    if existing:
+        return existing
+
+    base_username = "amina.bello"
+    username = base_username
+    suffix = 1
+    while User.objects.filter(username=username).exists():
+        suffix += 1
+        username = f"{base_username}{suffix}"
+
+    create_kwargs = {"username": username}
+    if hasattr(User, "EMAIL_FIELD") and User.EMAIL_FIELD:
+        email_field = User.EMAIL_FIELD
+        create_kwargs[email_field] = f"{username}@example.com"
+
+    manager = User.objects
+    if hasattr(manager, "create_user"):
+        user = manager.create_user(password=None, **create_kwargs)
+    else:
+        user = manager.create(**create_kwargs)
+    user.first_name = "Amina"
+    user.last_name = "Bello"
+    if hasattr(user, "set_unusable_password"):
+        user.set_unusable_password()
+    user.save()
+    return user
+
+
+TERMINAL_DEFECT_STATUSES = {
+    Defect.WORKFLOW_REPAIR_ONGOING,
+    Defect.WORKFLOW_REPAIR_COMPLETE,
+}
+
+
+def _get_latest_defect(subsegment):
+    return (
+        Defect.objects.filter(subsegment=subsegment)
+        .order_by("-modified", "-id")
+        .first()
+    )
+
+
+def _defect_condition_from_subsegment(subsegment):
+    status_code = (getattr(subsegment, "status", "") or "").replace("#", "").upper()
+    if status_code == "FF0000":
+        return Defect.CONDITION_FAILED
+    if status_code in {"FF5050", "FF9966"}:
+        return Defect.CONDITION_INTOLERABLE
+    if status_code in {"FFFFCC", "00CC00", "339933", "006600"}:
+        return Defect.CONDITION_TOLERABLE
+    return Defect.CONDITION_BAD
+
+
+def _subsegment_allows_defect_creation(subsegment):
+    status_code = (getattr(subsegment, "status", "") or "").replace("#", "").upper()
+    return status_code != "666699"
+
+
+def _get_or_create_active_defect(subsegment):
+    if not _subsegment_allows_defect_creation(subsegment):
+        raise ValueError("Cannot create a defect for a sub-segment with No response status.")
+    latest = _get_latest_defect(subsegment)
+    if latest and latest.workflow_status not in TERMINAL_DEFECT_STATUSES:
+        return latest, False
+    defect = Defect.objects.create(
+        subsegment=subsegment,
+        workflow_status=Defect.WORKFLOW_DRAFT,
+        condition=_defect_condition_from_subsegment(subsegment),
+    )
+    return defect, True
+
+
+def _update_defect_status_from_rca(defect, rca_status):
+    if not defect or defect.workflow_status in TERMINAL_DEFECT_STATUSES:
+        return
+    if rca_status == RootCauseAnalysis.STATUS_COMPLETE:
+        next_status = Defect.WORKFLOW_RCA
+    else:
+        next_status = Defect.WORKFLOW_DRAFT
+    if defect.workflow_status != next_status:
+        defect.workflow_status = next_status
+        defect.save(update_fields=["workflow_status", "modified"])
+
+
+def _sync_defect_status_from_physical(defect, physical_status):
+    if not defect or defect.workflow_status in TERMINAL_DEFECT_STATUSES:
+        return
+    if physical_status == PhysicalInspection.STATUS_COMPLETE:
+        next_status = Defect.WORKFLOW_PHYSICAL
+    else:
+        next_status = Defect.WORKFLOW_RCA
+    if defect.workflow_status != next_status:
+        defect.workflow_status = next_status
+        defect.save(update_fields=["workflow_status", "modified"])
+
+
+def _ensure_physical_draft_for_defect(defect):
+    if not defect:
+        return None
+    inspection = (
+        PhysicalInspection.objects.filter(defect=defect)
+        .order_by("-updated_at", "-id")
+        .first()
+    )
+    if inspection:
+        return inspection
+    return PhysicalInspection.objects.create(
+        subsegment=defect.subsegment,
+        defect=defect,
+        status=PhysicalInspection.STATUS_DRAFT,
+    )
+
+
+def _touch_defect_modified(defect):
+    if not defect:
+        return
+    defect.modified = timezone.now()
+    defect.save(update_fields=["modified"])
 
 def landing(request):
     return render(request, "website/landing.html", {"active_page": "home"})
@@ -212,6 +361,72 @@ def _build_road_condition_context(request):
 def road_condition(request):
     context = _build_road_condition_context(request)
     return render(request, "website/road_condition.html", context)
+
+
+def road_condition_save_draft(request):
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "message": "POST method required."}, status=405)
+
+    subsegment_codes = [
+        (code or "").strip()
+        for code in request.POST.getlist("subsegment_codes[]")
+        if (code or "").strip()
+    ]
+    if not subsegment_codes:
+        return JsonResponse(
+            {"ok": True, "created_count": 0, "blocked_codes": [], "not_found_codes": [], "message": "No selected sub-segments."}
+        )
+
+    created_count = 0
+    blocked_codes = []
+    not_found_codes = []
+
+    with transaction.atomic():
+        for code in subsegment_codes:
+            subsegment = SubSegment.objects.filter(code__iexact=code).first()
+            if subsegment is None:
+                not_found_codes.append(code)
+                continue
+            if not _subsegment_allows_defect_creation(subsegment):
+                blocked_codes.append(subsegment.code)
+                continue
+
+            latest_defect = _get_latest_defect(subsegment)
+            if latest_defect and latest_defect.workflow_status not in TERMINAL_DEFECT_STATUSES:
+                blocked_codes.append(subsegment.code)
+                continue
+
+            defect = Defect.objects.create(
+                subsegment=subsegment,
+                workflow_status=Defect.WORKFLOW_DRAFT,
+                condition=_defect_condition_from_subsegment(subsegment),
+                engineer=request.user if request.user.is_authenticated else None,
+            )
+            RootCauseAnalysis.objects.create(
+                subsegment=subsegment,
+                defect=defect,
+                location=(subsegment.code or "Unknown")[:32],
+                description=RootCauseAnalysis.DESCRIPTION_OTHERS,
+                description_options=[RootCauseAnalysis.DESCRIPTION_OTHERS],
+                status=RootCauseAnalysis.STATUS_DRAFT,
+            )
+            created_count += 1
+
+    message = f"Created {created_count} draft defect record(s)."
+    if blocked_codes:
+        message += " Some sub-segments already have ongoing records."
+    if not_found_codes:
+        message += " Some sub-segments were not found."
+    return JsonResponse(
+        {
+            "ok": True,
+            "created_count": created_count,
+            "blocked_codes": blocked_codes,
+            "not_found_codes": not_found_codes,
+            "message": message,
+        }
+    )
+
 
 def _filtered_segments_for_road_motorability(request):
     qs = Segment.objects.select_related("route", "start_point", "end_point").all()
@@ -407,38 +622,63 @@ def library_reports(request):
 
     rca_qs = (
         RootCauseAnalysis.objects.select_related("subsegment", "subsegment__segment")
+        .prefetch_related("library_files")
+        .annotate(
+            library_attachments_count=Count(
+                "library_files",
+                filter=Q(library_files__entry_type=Library.TYPE_ROOT_CAUSE_ANALYSIS),
+            )
+        )
         .order_by("-id")
     )
     if selected_state:
         rca_qs = rca_qs.filter(subsegment__segment__state__iexact=selected_state)
-    for report in rca_qs:
+    for idx, report in enumerate(rca_qs):
         segment = getattr(report.subsegment, "segment", None)
         status_code = getattr(segment, "status", "666699")
         status_label, status_class = _status_label_and_class(status_code)
+        linked_file = (
+            report.library_files.filter(entry_type=Library.TYPE_ROOT_CAUSE_ANALYSIS)
+            .order_by("-created", "-id")
+            .first()
+        )
         report_rows.append(
             {
                 "file_name": report.subsegment.code if report.subsegment else "-",
                 "report_type": "Root cause report",
                 "road_condition": status_label,
                 "road_condition_class": status_class,
-                "last_updated": "2 days",
+                "last_updated": f"{timesince(report.updated_at).split(',')[0]} ago",
                 "uploaded_by": "Engineer Ridwan Bankole",
-                "attachments_count": 1 if report.supporting_file else 0,
+                "attachments_count": (report.library_attachments_count or 0),
+                "attachment_url": linked_file.file.url if linked_file else "",
+                "attachment_name": linked_file.name if linked_file else "",
                 "details_url": f"{reverse('engineering_admin')}?mode=view&analysis={report.pk}",
             }
         )
 
     physical_qs = (
         PhysicalInspection.objects.select_related("subsegment", "subsegment__segment")
-        .prefetch_related("attachments")
+        .prefetch_related("library_files")
+        .annotate(
+            library_attachments_count=Count(
+                "library_files",
+                filter=Q(library_files__entry_type=Library.TYPE_PHYSICAL_INSPECTION),
+            )
+        )
         .order_by("-updated_at", "-id")
     )
     if selected_state:
         physical_qs = physical_qs.filter(subsegment__segment__state__iexact=selected_state)
-    for report in physical_qs:
+    for idx, report in enumerate(physical_qs):
         segment = getattr(report.subsegment, "segment", None)
         status_code = getattr(segment, "status", "666699")
         status_label, status_class = _status_label_and_class(status_code)
+        linked_file = (
+            report.library_files.filter(entry_type=Library.TYPE_PHYSICAL_INSPECTION)
+            .order_by("-created", "-id")
+            .first()
+        )
         report_rows.append(
             {
                 "file_name": report.subsegment.code if report.subsegment else "-",
@@ -447,7 +687,9 @@ def library_reports(request):
                 "road_condition_class": status_class,
                 "last_updated": f"{timesince(report.updated_at).split(',')[0]} ago",
                 "uploaded_by": "Engineer Ridwan Bankole",
-                "attachments_count": report.attachments.count(),
+                "attachments_count": (report.library_attachments_count or 0),
+                "attachment_url": linked_file.file.url if linked_file else "",
+                "attachment_name": linked_file.name if linked_file else "",
                 "details_url": f"{reverse('physical_inspection')}?mode=view&inspection={report.pk}",
             }
         )
@@ -515,7 +757,7 @@ def library_user_guide(request):
     )
 
 
-def library(request):
+def engineering_admin_root_cause(request):
     mode_value = request.GET.get("mode")
     if mode_value == "form":
         library_mode = "form"
@@ -524,10 +766,16 @@ def library(request):
     else:
         library_mode = "summary"
     analysis_id = request.GET.get("analysis") or request.POST.get("analysis_id")
+    defect_id = request.GET.get("defect") or request.POST.get("defect_id")
     subsegment_id = request.GET.get("subsegment") or request.POST.get("subsegment_id")
     subsegments_qs = SubSegment.objects.select_related("segment").order_by("segment_id", "position")
+    selected_defect = None
+    if defect_id:
+        selected_defect = Defect.objects.select_related("subsegment", "engineer").filter(pk=defect_id).first()
     selected_subsegment = None
-    if subsegment_id:
+    if selected_defect:
+        selected_subsegment = selected_defect.subsegment
+    elif subsegment_id:
         selected_subsegment = subsegments_qs.filter(pk=subsegment_id).first()
     if selected_subsegment is None:
         selected_subsegment = subsegments_qs.first()
@@ -536,8 +784,25 @@ def library(request):
     if not description_options:
         description_options = list(RootCauseAnalysis.DESCRIPTION_CHOICES)
     existing_analysis = None
-    if analysis_id:
-        existing_analysis = RootCauseAnalysis.objects.prefetch_related("defect_types").filter(pk=analysis_id).first()
+    if selected_defect:
+        existing_analysis = (
+            RootCauseAnalysis.objects.prefetch_related(
+                "defect_types", "root_cause_details", "library_files"
+            )
+            .filter(defect=selected_defect)
+            .order_by("-updated_at", "-id")
+            .first()
+        )
+    elif analysis_id:
+        existing_analysis = (
+            RootCauseAnalysis.objects.prefetch_related(
+                "defect_types", "root_cause_details", "library_files"
+            )
+            .filter(pk=analysis_id)
+            .first()
+        )
+        if existing_analysis and selected_defect is None:
+            selected_defect = existing_analysis.defect
         if existing_analysis and selected_subsegment is None:
             selected_subsegment = existing_analysis.subsegment
 
@@ -561,18 +826,17 @@ def library(request):
         if not selected_descriptions and existing_analysis.description:
             selected_descriptions = [existing_analysis.description]
         rca_values["location"] = existing_analysis.location
-        detail = getattr(existing_analysis, "root_cause_detail", None)
-        if detail:
-            if detail.natural_feature == RootCauseDetail.FEATURE_SUBGRADE_PROPERTIES:
-                rca_values["subgrade_properties"] = detail.characteristic
-            elif detail.natural_feature == RootCauseDetail.FEATURE_VEGETATION:
-                rca_values["vegetation"] = detail.characteristic
-            elif detail.natural_feature == RootCauseDetail.FEATURE_TOPOGRAPHY:
-                rca_values["topography"] = detail.characteristic
-            elif detail.natural_feature == RootCauseDetail.FEATURE_DRAINAGE_CHARACTERISTICS:
-                rca_values["drainage_characteristics"] = detail.characteristic
-            elif detail.natural_feature == RootCauseDetail.FEATURE_TEMPERATURE_HUMIDITY:
-                rca_values["temp_humidity"] = detail.characteristic
+        feature_key_map = {
+            RootCauseDetail.FEATURE_SUBGRADE_PROPERTIES: "subgrade_properties",
+            RootCauseDetail.FEATURE_VEGETATION: "vegetation",
+            RootCauseDetail.FEATURE_TOPOGRAPHY: "topography",
+            RootCauseDetail.FEATURE_DRAINAGE_CHARACTERISTICS: "drainage_characteristics",
+            RootCauseDetail.FEATURE_TEMPERATURE_HUMIDITY: "temp_humidity",
+        }
+        for detail in existing_analysis.root_cause_details.all():
+            feature_key = feature_key_map.get(detail.natural_feature)
+            if feature_key:
+                rca_values[feature_key] = detail.characteristic
 
     if request.method == "POST" and library_mode == "form":
         submit_action = request.POST.get("submit_action")
@@ -607,8 +871,6 @@ def library(request):
                 feature: {value for value, _ in choices}
                 for feature, choices in RootCauseDetail.CHARACTERISTIC_CHOICES_BY_FEATURE.items()
             }
-            if len(selected_feature_pairs) > 1 and not rca_error:
-                rca_error = "Select only one root cause description option."
             invalid_choice = any(
                 value not in valid_by_feature.get(feature, set())
                 for feature, value in selected_feature_pairs
@@ -616,90 +878,140 @@ def library(request):
             if invalid_choice and not rca_error:
                 rca_error = "One or more selected characteristic values are invalid."
             if not rca_error:
-                with transaction.atomic():
-                    location_value = (
-                        (rca_values["location"] or "").strip()
-                        or (selected_subsegment.code or "")[:32]
-                        or "Unknown"
-                    )
-                    if existing_analysis:
-                        analysis = existing_analysis
-                        analysis.subsegment = selected_subsegment
-                        analysis.location = location_value[:32]
-                        analysis.description = selected_primary_description
-                        analysis.description_options = selected_descriptions
-                        analysis.status = status_value
+                if selected_defect and selected_defect.subsegment_id == selected_subsegment.id:
+                    defect_for_analysis = selected_defect
+                else:
+                    try:
+                        defect_for_analysis, _ = _get_or_create_active_defect(selected_subsegment)
+                    except ValueError as exc:
+                        rca_error = str(exc)
+                if not rca_error:
+                    with transaction.atomic():
+                        location_value = (
+                            (rca_values["location"] or "").strip()
+                            or (selected_subsegment.code or "")[:32]
+                            or "Unknown"
+                        )
+                        if existing_analysis:
+                            analysis = existing_analysis
+                            analysis.subsegment = selected_subsegment
+                            analysis.defect = defect_for_analysis
+                            analysis.location = location_value[:32]
+                            analysis.description = selected_primary_description
+                            analysis.description_options = selected_descriptions
+                            analysis.status = status_value
+                            analysis.save()
+                        else:
+                            analysis = RootCauseAnalysis.objects.create(
+                                subsegment=selected_subsegment,
+                                defect=defect_for_analysis,
+                                location=location_value[:32],
+                                description=selected_primary_description,
+                                description_options=selected_descriptions,
+                                status=status_value,
+                            )
                         if supporting_file:
-                            analysis.supporting_file = supporting_file
-                        analysis.save()
-                    else:
-                        analysis = RootCauseAnalysis.objects.create(
-                            subsegment=selected_subsegment,
-                            location=location_value[:32],
-                            description=selected_primary_description,
-                            description_options=selected_descriptions,
-                            status=status_value,
-                            supporting_file=supporting_file,
+                            Library.objects.create(
+                                entry_type=Library.TYPE_ROOT_CAUSE_ANALYSIS,
+                                file_type=_library_file_type_from_name(supporting_file.name),
+                                name=os.path.basename(supporting_file.name),
+                                file=supporting_file,
+                                defect=defect_for_analysis,
+                                root_cause_analysis=analysis,
+                            )
+                        selected_defect_types = list(
+                            defect_type_qs.filter(code__in=selected_descriptions)
                         )
-                    selected_defect_types = list(
-                        defect_type_qs.filter(code__in=selected_descriptions)
-                    )
-                    analysis.defect_types.set(selected_defect_types)
-                    if selected_feature_pairs:
-                        feature, value = selected_feature_pairs[0]
-                        RootCauseDetail.objects.update_or_create(
-                            root_cause_analysis=analysis,
-                            defaults={
-                                "natural_feature": feature,
-                                "characteristic": value,
-                                "root_cause_analysis_text": "",
-                            },
-                        )
-                    elif existing_analysis:
-                        RootCauseDetail.objects.filter(root_cause_analysis=analysis).delete()
+                        analysis.defect_types.set(selected_defect_types)
+                        selected_features = set()
+                        for feature, value in selected_feature_pairs:
+                            RootCauseDetail.objects.update_or_create(
+                                root_cause_analysis=analysis,
+                                natural_feature=feature,
+                                defaults={
+                                    "characteristic": value,
+                                    "root_cause_analysis_text": "",
+                                },
+                            )
+                            selected_features.add(feature)
+                        if selected_features:
+                            analysis.root_cause_details.exclude(
+                                natural_feature__in=selected_features
+                            ).delete()
+                        else:
+                            analysis.root_cause_details.all().delete()
+                        _update_defect_status_from_rca(defect_for_analysis, status_value)
+                        _touch_defect_modified(defect_for_analysis)
 
-                return redirect(
-                    f"{reverse('engineering_admin')}?mode=form&saved=1&subsegment={selected_subsegment.pk}&analysis={analysis.pk}"
-                )
+                    if status_value == RootCauseAnalysis.STATUS_COMPLETE:
+                        _ensure_physical_draft_for_defect(defect_for_analysis)
+                    return redirect(reverse("engineering_admin"))
 
     root_cause_analyses = (
-        RootCauseAnalysis.objects.select_related("subsegment", "subsegment__segment", "root_cause_detail")
-        .prefetch_related("defect_types")
-        .order_by("-id")
+        RootCauseAnalysis.objects.select_related("subsegment", "subsegment__segment", "defect")
+        .prefetch_related("defect_types", "root_cause_details", "library_files")
+        .order_by("-updated_at", "-id")
     )
-    root_cause_total = root_cause_analyses.count()
-    root_cause_draft_count = root_cause_analyses.filter(status=RootCauseAnalysis.STATUS_DRAFT).count()
-    root_cause_complete_count = root_cause_analyses.filter(status=RootCauseAnalysis.STATUS_COMPLETE).count()
+    rca_table_statuses = [Defect.WORKFLOW_DRAFT, Defect.WORKFLOW_RCA]
+    defects_qs = (
+        Defect.objects.select_related("subsegment", "subsegment__segment", "engineer")
+        .filter(workflow_status__in=rca_table_statuses)
+        .order_by("-modified", "-id")
+    )
+    root_cause_total = defects_qs.count()
+    root_cause_draft_count = defects_qs.filter(workflow_status=Defect.WORKFLOW_DRAFT).count()
+    root_cause_complete_count = defects_qs.filter(workflow_status=Defect.WORKFLOW_RCA).count()
     description_label_map = dict(description_options)
+    latest_analysis_by_defect = {}
+    for report in root_cause_analyses:
+        if report.defect_id and report.defect_id not in latest_analysis_by_defect:
+            latest_analysis_by_defect[report.defect_id] = report
+
     draft_rows = []
     complete_rows = []
-    for report in root_cause_analyses[:100]:
-        selected_values = list(report.defect_types.values_list("code", flat=True))
-        if not selected_values:
-            selected_values = report.description_options or []
-        selected_labels = [description_label_map.get(value) for value in selected_values if value in description_label_map]
-        defect_text = ", ".join(label.lower() for label in selected_labels if label) or report.get_description_display()
-        condition_label = "Intolerable" if report.pk % 3 == 0 else "Tolerable"
-        condition_class = "intolerable" if condition_label == "Intolerable" else "tolerable"
+    condition_map = {
+        Defect.CONDITION_TOLERABLE: ("Tolerable", "tolerable"),
+        Defect.CONDITION_INTOLERABLE: ("Intolerable", "intolerable"),
+        Defect.CONDITION_FAILED: ("Intolerable", "intolerable"),
+        Defect.CONDITION_BAD: ("No response", "neutral"),
+    }
+    for defect in defects_qs[:100]:
+        report = latest_analysis_by_defect.get(defect.id)
+        if report:
+            selected_values = list(report.defect_types.values_list("code", flat=True))
+            if not selected_values:
+                selected_values = report.description_options or []
+            selected_labels = [description_label_map.get(value) for value in selected_values if value in description_label_map]
+            defect_text = ", ".join(label.lower() for label in selected_labels if label) or report.get_description_display()
+            date_text = f"{timesince(report.updated_at).split(',')[0]} ago"
+        else:
+            defect_text = "not specified"
+            date_text = f"{timesince(defect.modified).split(',')[0]} ago"
+        condition_label, condition_class = condition_map.get(defect.condition, ("No response", "neutral"))
+        engineer_name = "Unassigned"
+        if defect.engineer:
+            full_name = f"{defect.engineer.first_name} {defect.engineer.last_name}".strip()
+            engineer_name = full_name or defect.engineer.get_username()
         row = {
+            "defect": defect,
             "report": report,
             "defect_text": defect_text,
+            "status_text": defect.get_workflow_status_display(),
             "condition_label": condition_label,
             "condition_class": condition_class,
-            "engineer_name": "Engineer Ridwan Bankole",
+            "engineer_name": engineer_name,
+            "date_text": date_text,
         }
-        if report.status == RootCauseAnalysis.STATUS_COMPLETE:
-            complete_rows.append(row)
-        else:
+        if defect.workflow_status == Defect.WORKFLOW_DRAFT:
             draft_rows.append(row)
-
-    for idx, row in enumerate(draft_rows):
-        row["date_text"] = "27/12/2025" if idx == 0 else "5 days"
-    for idx, row in enumerate(complete_rows):
-        row["date_text"] = "2 days" if idx == 0 else "5 days"
+        else:
+            complete_rows.append(row)
 
     if library_mode == "view" and existing_analysis is None:
-        existing_analysis = root_cause_analyses.filter(status=RootCauseAnalysis.STATUS_COMPLETE).first()
+        if selected_defect:
+            existing_analysis = latest_analysis_by_defect.get(selected_defect.id)
+        if existing_analysis is None and complete_rows:
+            existing_analysis = complete_rows[0].get("report")
 
     view_defect_text = ""
     view_feature_values = {
@@ -719,22 +1031,26 @@ def library(request):
         selected_labels = [description_label_map.get(value) for value in selected_values if value in description_label_map]
         view_defect_text = ", ".join(selected_labels) or existing_analysis.get_description_display()
 
-        detail = getattr(existing_analysis, "root_cause_detail", None)
-        if detail:
+        feature_key_map = {
+            RootCauseDetail.FEATURE_SUBGRADE_PROPERTIES: "subgrade_properties",
+            RootCauseDetail.FEATURE_VEGETATION: "vegetation",
+            RootCauseDetail.FEATURE_TOPOGRAPHY: "topography",
+            RootCauseDetail.FEATURE_DRAINAGE_CHARACTERISTICS: "drainage_characteristics",
+            RootCauseDetail.FEATURE_TEMPERATURE_HUMIDITY: "temp_humidity",
+        }
+        for detail in existing_analysis.root_cause_details.all():
             characteristic_value = detail.get_characteristic_display()
-            feature_key_map = {
-                RootCauseDetail.FEATURE_SUBGRADE_PROPERTIES: "subgrade_properties",
-                RootCauseDetail.FEATURE_VEGETATION: "vegetation",
-                RootCauseDetail.FEATURE_TOPOGRAPHY: "topography",
-                RootCauseDetail.FEATURE_DRAINAGE_CHARACTERISTICS: "drainage_characteristics",
-                RootCauseDetail.FEATURE_TEMPERATURE_HUMIDITY: "temp_humidity",
-            }
             feature_key = feature_key_map.get(detail.natural_feature)
             if feature_key:
                 view_feature_values[feature_key] = characteristic_value
 
-        if existing_analysis.supporting_file:
-            supporting_documents = [existing_analysis.supporting_file.name.split("/")[-1]]
+        rca_attachments = list(
+            existing_analysis.library_files.filter(
+                entry_type=Library.TYPE_ROOT_CAUSE_ANALYSIS
+            ).order_by("-created", "-id")
+        )
+        if rca_attachments:
+            supporting_documents = [item.file.name.split("/")[-1] for item in rca_attachments]
         else:
             code = existing_analysis.subsegment.code if existing_analysis.subsegment else "A1LAS2-01"
             supporting_documents = [f"{code} Root Cause.jpg", f"{code} Root Cause.jpg"]
@@ -752,7 +1068,7 @@ def library(request):
 
     return render(
         request,
-        "website/library.html",
+        "website/engineering_admin.html",
         {
             "active_page": "engineering_admin",
             "active_library_tab": "root_cause",
@@ -761,6 +1077,7 @@ def library(request):
             "rca_success": rca_success,
             "subsegments": subsegments_qs[:300],
             "selected_subsegment": selected_subsegment,
+            "selected_defect": selected_defect,
             "description_options": description_options,
             "selected_descriptions": selected_descriptions,
             "subgrade_options": RootCauseDetail.CHARACTERISTIC_CHOICES_BY_FEATURE[
@@ -797,7 +1114,7 @@ def library(request):
 def engineering_admin_overview(request):
     return render(
         request,
-        "website/library.html",
+        "website/engineering_admin.html",
         {
             "active_page": "engineering_admin",
             "active_library_tab": "overview",
@@ -806,6 +1123,11 @@ def engineering_admin_overview(request):
 
 
 def physical_inspection(request):
+    active_physical_tab = (
+        "physical_2"
+        if getattr(getattr(request, "resolver_match", None), "url_name", "") == "physical_inspection_2"
+        else "physical"
+    )
     mode_value = request.GET.get("mode") or request.POST.get("mode")
     if mode_value == "form":
         library_mode = "form"
@@ -841,12 +1163,36 @@ def physical_inspection(request):
         ]
     ]
 
+    selected_subsegment = None
+    selected_subsegment_id = request.GET.get("subsegment") or request.POST.get("subsegment_id")
+    if selected_subsegment_id:
+        selected_subsegment = SubSegment.objects.filter(pk=selected_subsegment_id).first()
+
+    selected_defect = None
+    selected_defect_id = request.GET.get("defect") or request.POST.get("defect_id")
+    if selected_defect_id:
+        selected_defect = (
+            Defect.objects.select_related("subsegment", "subsegment__segment", "engineer")
+            .filter(pk=selected_defect_id)
+            .first()
+        )
+        if selected_defect and selected_subsegment is None:
+            selected_subsegment = selected_defect.subsegment
+
     existing_inspection = None
     if inspection_id:
         existing_inspection = (
             PhysicalInspection.objects.select_related("subsegment", "subsegment__segment")
             .prefetch_related("defect_types", "analysis_rows__characteristics")
             .filter(pk=inspection_id)
+            .first()
+        )
+    elif selected_defect:
+        existing_inspection = (
+            PhysicalInspection.objects.select_related("subsegment", "subsegment__segment")
+            .prefetch_related("defect_types", "analysis_rows__characteristics")
+            .filter(defect=selected_defect)
+            .order_by("-updated_at", "-id")
             .first()
         )
 
@@ -878,6 +1224,8 @@ def physical_inspection(request):
             first = bridges_row.characteristics.first()
             if first:
                 physical_values["bridges"] = first.value or first.characteristic
+    elif request.method != "POST" and library_mode == "form" and selected_subsegment:
+        physical_values["segment_id"] = selected_subsegment.code
 
     if request.method == "POST" and library_mode == "form":
         submit_action = request.POST.get("submit_action")
@@ -914,47 +1262,57 @@ def physical_inspection(request):
                     physical_error = "Invalid bridges value."
 
         if not physical_error:
-            with transaction.atomic():
-                if existing_inspection:
-                    inspection = existing_inspection
-                    inspection.subsegment = selected_subsegment
-                    inspection.status = status_value
-                    inspection.save()
-                    inspection.analysis_rows.all().delete()
-                else:
-                    inspection = PhysicalInspection.objects.create(
-                        subsegment=selected_subsegment,
-                        status=status_value,
-                    )
-                inspection.defect_types.set(
-                    DefectType.objects.filter(code__in=selected_defects, is_active=True)
-                )
-
-                if physical_values["horizontal_alignment"]:
-                    horizontal_row = PhysicalInspectionAnalysis.objects.create(
-                        inspection=inspection,
-                        consideration_type=PhysicalInspectionAnalysis.CONSIDERATION_DESIGN,
-                        option=PhysicalInspectionAnalysis.OPTION_HORIZONTAL_ALIGNMENT,
-                        option_description=(request.POST.get("horizontal_alignment_description", "") or "").strip(),
-                    )
-                    PhysicalInspectionCharacteristic.objects.create(
-                        analysis=horizontal_row,
-                        characteristic=physical_values["horizontal_alignment"],
-                        value=physical_values["horizontal_alignment"],
+            if selected_defect and selected_defect.subsegment_id == selected_subsegment.id:
+                defect_for_inspection = selected_defect
+            else:
+                try:
+                    defect_for_inspection, _ = _get_or_create_active_defect(selected_subsegment)
+                except ValueError as exc:
+                    physical_error = str(exc)
+            if not physical_error:
+                with transaction.atomic():
+                    if existing_inspection:
+                        inspection = existing_inspection
+                        inspection.subsegment = selected_subsegment
+                        inspection.defect = defect_for_inspection
+                        inspection.status = status_value
+                        inspection.save()
+                        inspection.analysis_rows.all().delete()
+                    else:
+                        inspection = PhysicalInspection.objects.create(
+                            subsegment=selected_subsegment,
+                            defect=defect_for_inspection,
+                            status=status_value,
+                        )
+                    inspection.defect_types.set(
+                        DefectType.objects.filter(code__in=selected_defects, is_active=True)
                     )
 
-                if physical_values["vertical_alignment"]:
-                    vertical_row = PhysicalInspectionAnalysis.objects.create(
-                        inspection=inspection,
-                        consideration_type=PhysicalInspectionAnalysis.CONSIDERATION_DESIGN,
-                        option=PhysicalInspectionAnalysis.OPTION_VERTICAL_ALIGNMENT,
-                        option_description=(request.POST.get("vertical_alignment_description", "") or "").strip(),
-                    )
-                    PhysicalInspectionCharacteristic.objects.create(
-                        analysis=vertical_row,
-                        characteristic=physical_values["vertical_alignment"],
-                        value=physical_values["vertical_alignment"],
-                    )
+                    if physical_values["horizontal_alignment"]:
+                        horizontal_row = PhysicalInspectionAnalysis.objects.create(
+                            inspection=inspection,
+                            consideration_type=PhysicalInspectionAnalysis.CONSIDERATION_DESIGN,
+                            option=PhysicalInspectionAnalysis.OPTION_HORIZONTAL_ALIGNMENT,
+                            option_description=(request.POST.get("horizontal_alignment_description", "") or "").strip(),
+                        )
+                        PhysicalInspectionCharacteristic.objects.create(
+                            analysis=horizontal_row,
+                            characteristic=physical_values["horizontal_alignment"],
+                            value=physical_values["horizontal_alignment"],
+                        )
+
+                    if physical_values["vertical_alignment"]:
+                        vertical_row = PhysicalInspectionAnalysis.objects.create(
+                            inspection=inspection,
+                            consideration_type=PhysicalInspectionAnalysis.CONSIDERATION_DESIGN,
+                            option=PhysicalInspectionAnalysis.OPTION_VERTICAL_ALIGNMENT,
+                            option_description=(request.POST.get("vertical_alignment_description", "") or "").strip(),
+                        )
+                        PhysicalInspectionCharacteristic.objects.create(
+                            analysis=vertical_row,
+                            characteristic=physical_values["vertical_alignment"],
+                            value=physical_values["vertical_alignment"],
+                        )
 
                 carriage_row = PhysicalInspectionAnalysis.objects.create(
                     inspection=inspection,
@@ -984,61 +1342,105 @@ def physical_inspection(request):
                     )
 
                 for upload in request.FILES.getlist("supporting_files"):
-                    PhysicalInspectionAttachment.objects.create(
-                        inspection=inspection,
+                    Library.objects.create(
+                        entry_type=Library.TYPE_PHYSICAL_INSPECTION,
+                        file_type=_library_file_type_from_name(upload.name),
+                        name=os.path.basename(upload.name),
                         file=upload,
+                        defect=defect_for_inspection,
+                        physical_inspection=inspection,
                     )
+                _sync_defect_status_from_physical(defect_for_inspection, status_value)
+                _touch_defect_modified(defect_for_inspection)
 
-            return redirect(
-                f"{reverse('physical_inspection')}?mode=form&saved=1&inspection={inspection.pk}"
-            )
+                return redirect(
+                    reverse("physical_inspection_2" if active_physical_tab == "physical_2" else "physical_inspection")
+                )
 
     physical_inspections = (
         PhysicalInspection.objects.select_related("subsegment", "subsegment__segment")
-        .prefetch_related("defect_types", "attachments", "analysis_rows__characteristics")
+        .prefetch_related("defect_types", "library_files", "analysis_rows__characteristics")
         .order_by("-id")
     )
-    physical_total = physical_inspections.count()
-    physical_draft_count = physical_inspections.filter(
-        status=PhysicalInspection.STATUS_DRAFT
-    ).count()
-    physical_complete_count = physical_inspections.filter(
-        status=PhysicalInspection.STATUS_COMPLETE
-    ).count()
+    physical_table_statuses = [Defect.WORKFLOW_RCA, Defect.WORKFLOW_PHYSICAL]
+    physical_table_defects_qs = (
+        Defect.objects.select_related("subsegment", "subsegment__segment", "engineer")
+        .filter(workflow_status__in=physical_table_statuses)
+        .order_by("-modified", "-id")
+    )
+    if active_physical_tab == "physical_2":
+        physical_draft_defects_qs = Defect.objects.none()
+        physical_complete_defects_qs = physical_table_defects_qs.filter(
+            workflow_status=Defect.WORKFLOW_PHYSICAL
+        )
+    else:
+        physical_draft_defects_qs = physical_table_defects_qs.filter(
+            workflow_status=Defect.WORKFLOW_RCA
+        )
+        physical_complete_defects_qs = physical_table_defects_qs.filter(
+            workflow_status=Defect.WORKFLOW_PHYSICAL
+        )
+    physical_draft_count = physical_draft_defects_qs.count()
+    physical_complete_count = physical_complete_defects_qs.count()
+    physical_total = physical_draft_count + physical_complete_count
     defect_label_map = dict(defect_options)
+    latest_inspection_by_defect = {}
+    for report in physical_inspections:
+        if report.defect_id and report.defect_id not in latest_inspection_by_defect:
+            latest_inspection_by_defect[report.defect_id] = report
     physical_draft_rows = []
     physical_complete_rows = []
-    for report in physical_inspections[:100]:
-        selected_codes = list(report.defect_types.values_list("code", flat=True))
-        selected_labels = [defect_label_map.get(code) for code in selected_codes if code in defect_label_map]
-        defect_text = ", ".join((label or "").lower() for label in selected_labels if label)
-        if not defect_text:
-            defect_text = "not specified"
+    condition_map = {
+        Defect.CONDITION_TOLERABLE: ("Tolerable", "tolerable"),
+        Defect.CONDITION_INTOLERABLE: ("Intolerable", "intolerable"),
+        Defect.CONDITION_FAILED: ("Intolerable", "intolerable"),
+        Defect.CONDITION_BAD: ("No response", "neutral"),
+    }
+    for defect in physical_draft_defects_qs[:100]:
+        report = latest_inspection_by_defect.get(defect.id)
+        date_text = f"{timesince(defect.modified).split(',')[0]} ago"
 
-        segment_status_code = getattr(getattr(report.subsegment, "segment", None), "status", "")
-        if segment_status_code in {"FF0000", "FF5050", "FF9966"}:
-            condition_label = "Intolerable"
-            condition_class = "intolerable"
-        else:
-            condition_label = "Tolerable"
-            condition_class = "tolerable"
+        condition_label, condition_class = condition_map.get(
+            defect.condition, ("No response", "neutral")
+        )
+        engineer_name = "Unassigned"
+        if defect.engineer:
+            full_name = f"{defect.engineer.first_name} {defect.engineer.last_name}".strip()
+            engineer_name = full_name or defect.engineer.get_username()
 
-        row = {
-            "report": report,
-            "defect_text": defect_text,
-            "condition_label": condition_label,
-            "condition_class": condition_class,
-            "engineer_name": "Engineer Ridwan Bankole",
-        }
-        if report.status == PhysicalInspection.STATUS_COMPLETE:
-            physical_complete_rows.append(row)
-        else:
-            physical_draft_rows.append(row)
+        physical_draft_rows.append(
+            {
+                "defect": defect,
+                "report": report,
+                "status_text": defect.get_workflow_status_display(),
+                "condition_label": condition_label,
+                "condition_class": condition_class,
+                "engineer_name": engineer_name,
+                "date_text": date_text,
+            }
+        )
 
-    for idx, row in enumerate(physical_draft_rows):
-        row["date_text"] = "2 days" if idx == 0 else "5 days"
-    for idx, row in enumerate(physical_complete_rows):
-        row["date_text"] = "5 days" if idx == 0 else "5 days"
+    for defect in physical_complete_defects_qs[:100]:
+        report = latest_inspection_by_defect.get(defect.id)
+        condition_label, condition_class = condition_map.get(
+            defect.condition, ("No response", "neutral")
+        )
+        engineer_name = "Unassigned"
+        if defect.engineer:
+            full_name = f"{defect.engineer.first_name} {defect.engineer.last_name}".strip()
+            engineer_name = full_name or defect.engineer.get_username()
+
+        physical_complete_rows.append(
+            {
+                "defect": defect,
+                "report": report,
+                "status_text": defect.get_workflow_status_display(),
+                "condition_label": condition_label,
+                "condition_class": condition_class,
+                "engineer_name": engineer_name,
+                "date_text": f"{timesince(defect.modified).split(',')[0]} ago",
+            }
+        )
 
     current_physical_view = existing_inspection if library_mode == "view" else None
     if library_mode == "view" and current_physical_view is None:
@@ -1092,7 +1494,11 @@ def physical_inspection(request):
         selected_labels = [defect_label_map.get(code) for code in selected_codes if code in defect_label_map]
         physical_view_defect_text = ", ".join(label for label in selected_labels if label) or "Not provided"
 
-        attachments = list(current_physical_view.attachments.all())
+        attachments = list(
+            current_physical_view.library_files.filter(
+                entry_type=Library.TYPE_PHYSICAL_INSPECTION
+            ).order_by("-created", "-id")
+        )
         if attachments:
             physical_supporting_documents = [item.file.name.split("/")[-1] for item in attachments]
         else:
@@ -1109,15 +1515,16 @@ def physical_inspection(request):
 
     return render(
         request,
-        "website/library.html",
+        "website/engineering_admin.html",
         {
             "active_page": "engineering_admin",
-            "active_library_tab": "physical",
+            "active_library_tab": active_physical_tab,
             "library_mode": library_mode,
             "physical_success": physical_success,
             "physical_error": physical_error,
             "physical_values": physical_values,
             "current_physical_inspection": existing_inspection,
+            "selected_physical_defect": selected_defect,
             "physical_defect_options": defect_options,
             "physical_horizontal_alignment_options": horizontal_alignment_options,
             "physical_vertical_alignment_options": vertical_alignment_options,
@@ -1138,13 +1545,262 @@ def physical_inspection(request):
     )
 
 
-def library_solution_design(request):
+def engineering_admin_solution_design(request):
+    is_history_tab = getattr(getattr(request, "resolver_match", None), "url_name", "") == "library_history"
+    active_solution_tab = "history" if is_history_tab else "solution"
+    active_solution_route = "library_history" if is_history_tab else "library_solution_design"
+    history_engineer = _get_assumed_project_user() if is_history_tab else None
+    mode_value = request.GET.get("mode") or request.POST.get("mode")
+    if mode_value == "view":
+        library_mode = "view"
+    else:
+        library_mode = "summary"
+
+    selected_defect = None
+    selected_defect_id = request.GET.get("defect") or request.POST.get("defect_id")
+    if selected_defect_id:
+        selected_defect_qs = Defect.objects.select_related("subsegment", "subsegment__segment", "engineer").filter(
+            pk=selected_defect_id
+        )
+        if history_engineer:
+            selected_defect_qs = selected_defect_qs.filter(engineer=history_engineer)
+        selected_defect = selected_defect_qs.first()
+
+    if request.method == "POST":
+        if request.POST.get("command") == "mark_solution_done":
+            defect_id = request.POST.get("defect_id")
+            defect_qs = Defect.objects.filter(
+                pk=defect_id,
+                workflow_status=Defect.WORKFLOW_PHYSICAL,
+            )
+            if history_engineer:
+                defect_qs = defect_qs.filter(engineer=history_engineer)
+            defect = defect_qs.first()
+            if defect:
+                defect.workflow_status = Defect.WORKFLOW_SOLUTION
+                defect.save(update_fields=["workflow_status", "modified"])
+                redirect_url = f"{reverse(active_solution_route)}?sd_done=1"
+                if defect_id:
+                    redirect_url += f"&mode=view&defect={defect_id}"
+                return redirect(redirect_url)
+            redirect_url = f"{reverse(active_solution_route)}?sd_done=0"
+            if defect_id:
+                redirect_url += f"&mode=view&defect={defect_id}"
+            return redirect(redirect_url)
+
+        files = request.FILES.getlist("solution_files")
+        uploaded_by = _get_assumed_project_user()
+        defect_for_upload = None
+        defect_id = request.POST.get("defect_id")
+        if defect_id:
+            defect_for_upload_qs = Defect.objects.filter(pk=defect_id)
+            if history_engineer:
+                defect_for_upload_qs = defect_for_upload_qs.filter(engineer=history_engineer)
+            defect_for_upload = defect_for_upload_qs.first()
+        created_count = 0
+        for uploaded_file in files:
+            if not uploaded_file:
+                continue
+            Library.objects.create(
+                entry_type=Library.TYPE_SOLUTION_DESIGN,
+                file_type=_library_file_type_from_name(uploaded_file.name),
+                name=os.path.basename(uploaded_file.name),
+                file=uploaded_file,
+                defect=defect_for_upload,
+                uploaded_by=uploaded_by,
+            )
+            created_count += 1
+        if created_count:
+            redirect_url = f"{reverse(active_solution_route)}?uploaded={created_count}"
+            if defect_for_upload:
+                redirect_url += f"&mode=view&defect={defect_for_upload.pk}"
+            return redirect(redirect_url)
+        redirect_url = f"{reverse(active_solution_route)}?upload_error=1"
+        if defect_for_upload:
+            redirect_url += f"&mode=view&defect={defect_for_upload.pk}"
+        return redirect(redirect_url)
+
+    solution_defects_qs = Defect.objects.select_related(
+        "subsegment", "subsegment__segment", "engineer"
+    ).order_by("-modified", "-id")
+    if history_engineer:
+        solution_defects_qs = solution_defects_qs.filter(engineer=history_engineer)
+    else:
+        solution_table_statuses = [Defect.WORKFLOW_PHYSICAL, Defect.WORKFLOW_SOLUTION]
+        solution_defects_qs = solution_defects_qs.filter(workflow_status__in=solution_table_statuses)
+    solution_defect_ids = list(solution_defects_qs.values_list("id", flat=True))
+    solution_file_counts = dict(
+        Library.objects.filter(
+            entry_type=Library.TYPE_SOLUTION_DESIGN,
+            defect_id__in=solution_defect_ids,
+        )
+        .values("defect_id")
+        .annotate(total=Count("id"))
+        .values_list("defect_id", "total")
+    )
+    condition_map = {
+        Defect.CONDITION_TOLERABLE: ("Tolerable", "tolerable"),
+        Defect.CONDITION_INTOLERABLE: ("Intolerable", "intolerable"),
+        Defect.CONDITION_FAILED: ("Intolerable", "intolerable"),
+        Defect.CONDITION_BAD: ("No response", "neutral"),
+    }
+    solution_draft_rows = []
+    solution_complete_rows = []
+    history_rows = []
+    for defect in solution_defects_qs[:100]:
+        condition_label, condition_class = condition_map.get(
+            defect.condition, ("No response", "neutral")
+        )
+        engineer_name = "Unassigned"
+        if defect.engineer:
+            full_name = f"{defect.engineer.first_name} {defect.engineer.last_name}".strip()
+            engineer_name = full_name or defect.engineer.get_username()
+        row = {
+            "defect": defect,
+            "status_text": defect.get_workflow_status_display(),
+            "condition_label": condition_label,
+            "condition_class": condition_class,
+            "engineer_name": engineer_name,
+            "date_text": f"{timesince(defect.modified).split(',')[0]} ago",
+            "files_count": solution_file_counts.get(defect.id, 0),
+            "details_url": f"{reverse(active_solution_route)}?mode=view&defect={defect.pk}",
+        }
+        if defect.workflow_status == Defect.WORKFLOW_SOLUTION:
+            solution_complete_rows.append(row)
+        else:
+            solution_draft_rows.append(row)
+        if history_engineer:
+            history_rows.append(row)
+
+    solution_view_files = []
+    solution_view_status_text = "No response"
+    solution_view_status_class = "neutral"
+    solution_view_engineer_name = "Unassigned"
+    solution_view_segment_code = ""
+    if selected_defect:
+        solution_view_segment_code = selected_defect.subsegment.code if selected_defect.subsegment else ""
+        condition_label, condition_class = condition_map.get(
+            selected_defect.condition, ("No response", "neutral")
+        )
+        solution_view_status_text = condition_label
+        solution_view_status_class = condition_class
+        if selected_defect.engineer:
+            full_name = f"{selected_defect.engineer.first_name} {selected_defect.engineer.last_name}".strip()
+            solution_view_engineer_name = full_name or selected_defect.engineer.get_username()
+        for item in (
+            Library.objects.filter(
+                entry_type=Library.TYPE_SOLUTION_DESIGN,
+                defect=selected_defect,
+            )
+            .order_by("-created", "-id")
+        ):
+            filename = item.name or item.file.name.split("/")[-1]
+            ext = os.path.splitext(filename)[1].replace(".", "").upper() or "FILE"
+            icon_path = "website/styleguide/icons/sg-file-doc.svg"
+            if item.file_type == Library.FILE_TYPE_PDF:
+                icon_path = "website/styleguide/icons/sg-file-pdf.svg"
+            elif item.file_type == Library.FILE_TYPE_SPREADSHEET:
+                icon_path = "website/styleguide/icons/sg-file-xls.svg"
+            elif item.file_type == Library.FILE_TYPE_PRESENTATION:
+                icon_path = "website/styleguide/icons/sg-file-ppt.svg"
+            solution_view_files.append(
+                {
+                    "id": item.pk,
+                    "url": item.file.url if item.file else "#",
+                    "name": filename,
+                    "ext": ext[:6],
+                    "icon_path": icon_path,
+                    "date_text": item.created.strftime("%m/%d/%Y"),
+                    "size_text": item.file.size if item.file else 0,
+                }
+            )
+
     return render(
         request,
-        "website/library.html",
+        "website/engineering_admin.html",
         {
             "active_page": "engineering_admin",
-            "active_library_tab": "solution",
+            "active_library_tab": active_solution_tab,
+            "library_mode": library_mode,
+            "solution_upload_action_url": reverse(active_solution_route),
+            "solution_upload_count": int(request.GET.get("uploaded", "0") or 0),
+            "solution_upload_error": request.GET.get("upload_error") == "1",
+            "solution_done_success": request.GET.get("sd_done") == "1",
+            "solution_total": solution_defects_qs.count(),
+            "solution_draft_count": (
+                solution_defects_qs.exclude(workflow_status=Defect.WORKFLOW_SOLUTION).count()
+                if history_engineer
+                else solution_defects_qs.filter(workflow_status=Defect.WORKFLOW_PHYSICAL).count()
+            ),
+            "solution_complete_count": solution_defects_qs.filter(workflow_status=Defect.WORKFLOW_SOLUTION).count(),
+            "solution_draft_rows": solution_draft_rows,
+            "solution_complete_rows": solution_complete_rows,
+            "history_rows": history_rows,
+            "solution_view_defect": selected_defect,
+            "solution_view_segment_code": solution_view_segment_code,
+            "solution_view_status_text": solution_view_status_text,
+            "solution_view_status_class": solution_view_status_class,
+            "solution_view_engineer_name": solution_view_engineer_name,
+            "solution_view_files": solution_view_files,
+            "solution_handoff_message": (
+                f"Physical Inspection complete for {selected_defect.subsegment.code}. Upload Solution Design files."
+                if selected_defect and request.GET.get("from") == "physical"
+                else ""
+            ),
+        },
+    )
+
+
+def engineering_admin_approvals(request):
+    pending_approvals = [
+        {
+            "code": "A1LAS2-04",
+            "priority": "High Priority",
+            "submitted_text": "Submitted 2 days ago by Engineer Ridwan Bankole",
+            "estimated_cost": "N45,000,000",
+            "condition": "Under Repair",
+            "speed": "33km/hr",
+        },
+        {
+            "code": "A1LAS2-05",
+            "priority": "High Priority",
+            "submitted_text": "Submitted 2 days ago by Engineer Ridwan Bankole",
+            "estimated_cost": "N45,000,000",
+            "condition": "Under Repair",
+            "speed": "33km/hr",
+        },
+        {
+            "code": "A1LAS2-08",
+            "priority": "High Priority",
+            "submitted_text": "Submitted 2 days ago by Engineer Ridwan Bankole",
+            "estimated_cost": "N45,000,000",
+            "condition": "Under Review",
+            "speed": "33km/hr",
+        },
+    ]
+    approved_plans = [
+        {"code": "A1LAS2_03", "age_text": "3 Months ago", "condition": "Under Repair", "speed": "33km/hr"},
+        {"code": "A1LAS2_03", "age_text": "3 Months ago", "condition": "Under Repair", "speed": "33km/hr"},
+        {"code": "A1LAS2_03", "age_text": "3 Months ago", "condition": "Under Repair", "speed": "33km/hr"},
+    ]
+    rejected_plans = [
+        {"code": "A1LAS2_03", "age_text": "3 Months ago", "condition": "Under Review", "speed": "33km/hr"},
+        {"code": "A1LAS2_03", "age_text": "3 Months ago", "condition": "Under Review", "speed": "33km/hr"},
+    ]
+
+    return render(
+        request,
+        "website/engineering_admin.html",
+        {
+            "active_page": "engineering_admin",
+            "active_library_tab": "approvals",
+            "approvals_total": 4,
+            "approvals_completed": 1,
+            "approvals_pending": 1,
+            "approvals_rejected": 2,
+            "pending_approvals": pending_approvals,
+            "approved_plans": approved_plans,
+            "rejected_plans": rejected_plans,
         },
     )
 

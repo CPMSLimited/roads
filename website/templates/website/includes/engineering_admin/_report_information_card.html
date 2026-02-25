@@ -1,0 +1,21 @@
+{% load static %}
+<article class="library-view-card">
+    <header class="library-view-card-head">
+        <h3>Report Information</h3>
+        {% if report_link_href and report_link_text %}
+        <a class="library-view-map-link" href="{{ report_link_href }}">
+            <img src="{% static 'website/styleguide/icons/iconoir_eye.svg' %}" alt="" role="presentation">
+            <span>{{ report_link_text }}</span>
+        </a>
+        {% endif %}
+    </header>
+    <dl class="library-view-info-list">
+        <div><dt>Inspector:</dt><dd>{{ report_inspector_name }}</dd></div>
+        {% if report_segment_code %}
+        <div><dt>Segment:</dt><dd>{{ report_segment_code }}</dd></div>
+        {% endif %}
+        <div><dt>Design Speed:</dt><dd>{{ report_design_speed|default:"33km/hr" }}</dd></div>
+        <div><dt>Status:</dt><dd><span class="library-view-status is-{{ report_status_class }}">{{ report_status_text }}</span></dd></div>
+        <div><dt>Date:</dt><dd>{{ report_date_text }}</dd></div>
+    </dl>
+</article>

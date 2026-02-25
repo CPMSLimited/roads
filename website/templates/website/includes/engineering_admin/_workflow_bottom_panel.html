@@ -1,0 +1,27 @@
+{% load static %}
+<section class="library-view-docs">
+    <h3>Upload supporting information</h3>
+    <input id="{{ pane_upload_input_id }}" class="library-upload-input" type="file" name="{{ pane_upload_input_name }}" multiple>
+    <label for="{{ pane_upload_input_id }}" class="library-physical-upload-box">
+        <span class="library-physical-upload-icon" aria-hidden="true">
+            <img src="{% static 'website/styleguide/icons/bytesize_upload.svg' %}" alt="" role="presentation">
+        </span>
+        <span>Drag &amp; drop files here</span>
+        <small>Upload photos, documents or reference material</small>
+    </label>
+</section>
+
+{% if not pane_hide_draft_button %}
+<button type="{{ pane_draft_button_type|default:'submit' }}"{% if pane_draft_button_name %} name="{{ pane_draft_button_name }}"{% endif %}{% if pane_draft_button_value %} value="{{ pane_draft_button_value }}"{% endif %} class="library-physical-save">
+    <span class="library-physical-btn-icon" aria-hidden="true">
+        <img src="{% static 'website/styleguide/icons/iconoir_save-floppy-disk.svg' %}" alt="" role="presentation">
+    </span>
+    <span>{{ pane_draft_button_label|default:"Save Draft" }}</span>
+</button>
+{% endif %}
+<button type="{{ pane_complete_button_type|default:'submit' }}"{% if pane_complete_button_name %} name="{{ pane_complete_button_name }}"{% endif %}{% if pane_complete_button_value %} value="{{ pane_complete_button_value }}"{% endif %} class="library-physical-complete">
+    <span class="library-physical-btn-icon" aria-hidden="true">
+        <img src="{% static 'website/styleguide/icons/iconoir_check.svg' %}" alt="" role="presentation">
+    </span>
+    <span>{{ pane_complete_button_label|default:"Mark as Complete" }}</span>
+</button>

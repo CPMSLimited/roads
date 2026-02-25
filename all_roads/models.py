@@ -1,8 +1,47 @@
 from decimal import Decimal
 
+from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.utils import timezone
+
+
+def get_default_amina_bello_user_id():
+    User = get_user_model()
+    existing = (
+        User.objects.filter(first_name__iexact="Amina", last_name__iexact="Bello")
+        .order_by("id")
+        .first()
+    )
+    if existing:
+        return existing.pk
+
+    username_field = getattr(User, "USERNAME_FIELD", "username")
+    base_username = "amina.bello"
+    username = base_username
+    suffix = 1
+    while User.objects.filter(**{username_field: username}).exists():
+        suffix += 1
+        username = f"{base_username}{suffix}"
+
+    create_kwargs = {username_field: username}
+    if getattr(User, "EMAIL_FIELD", ""):
+        create_kwargs[User.EMAIL_FIELD] = f"{username}@example.com"
+
+    manager = User.objects
+    if hasattr(manager, "create_user"):
+        user = manager.create_user(password=None, **create_kwargs)
+    else:
+        user = manager.create(**create_kwargs)
+    user.first_name = "Amina"
+    user.last_name = "Bello"
+    if hasattr(user, "set_unusable_password"):
+        user.set_unusable_password()
+    user.save()
+    return user.pk
+
 
 class Road(models.Model):
     road = models.CharField(max_length=5, unique=True)
@@ -185,6 +224,100 @@ class DefectType(models.Model):
         return self.label
 
 
+class Defect(models.Model):
+    WORKFLOW_DRAFT = "draft"
+    WORKFLOW_RCA = "rca"
+    WORKFLOW_PHYSICAL = "physical_inspection"
+    WORKFLOW_SOLUTION = "solution_design"
+    WORKFLOW_REPAIR_ONGOING = "repair_ongoing"
+    WORKFLOW_REPAIR_COMPLETE = "repair_complete"
+
+    WORKFLOW_STATUS_CHOICES = [
+        (WORKFLOW_DRAFT, "Draft"),
+        (WORKFLOW_RCA, "RCA"),
+        (WORKFLOW_PHYSICAL, "Physical Inspection"),
+        (WORKFLOW_SOLUTION, "Solution Design"),
+        (WORKFLOW_REPAIR_ONGOING, "Repair ongoing"),
+        (WORKFLOW_REPAIR_COMPLETE, "Repair complete"),
+    ]
+
+    CONDITION_TOLERABLE = "tolerable"
+    CONDITION_INTOLERABLE = "intolerable"
+    CONDITION_BAD = "bad"
+    CONDITION_FAILED = "failed"
+
+    CONDITION_CHOICES = [
+        (CONDITION_TOLERABLE, "Tolerable"),
+        (CONDITION_INTOLERABLE, "Intolerable"),
+        (CONDITION_FAILED, "Failed"),
+        (CONDITION_BAD, "Bad"),
+    ]
+
+    subsegment = models.ForeignKey(
+        SubSegment,
+        on_delete=models.CASCADE,
+        related_name="defects",
+    )
+    defect_ref = models.CharField(max_length=64, unique=True, null=True, blank=True, editable=False)
+    engineer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        default=get_default_amina_bello_user_id,
+        related_name="assigned_defects",
+    )
+    senior_engineer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_defects",
+    )
+    workflow_status = models.CharField(
+        max_length=32,
+        choices=WORKFLOW_STATUS_CHOICES,
+        default=WORKFLOW_DRAFT,
+    )
+    condition = models.CharField(
+        max_length=24,
+        choices=CONDITION_CHOICES,
+    )
+    created = models.DateTimeField(auto_now_add=True)
+    modified = models.DateTimeField(auto_now=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+    closure_note = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-modified", "-id"]
+
+    def __str__(self):
+        return f"{self.defect_ref or self.subsegment.code} - {self.get_workflow_status_display()}"
+
+    def save(self, *args, **kwargs):
+        if not self.defect_ref and self.subsegment_id:
+            self.defect_ref = self._generate_defect_ref()
+        super().save(*args, **kwargs)
+
+    def _generate_defect_ref(self):
+        base_code = (self.subsegment.code or "SUBSEG").upper()
+        date_part = timezone.now().strftime("%Y%m%d")
+        prefix = f"{base_code}-{date_part}-"
+        last_ref = (
+            Defect.objects.filter(defect_ref__startswith=prefix)
+            .order_by("-defect_ref")
+            .values_list("defect_ref", flat=True)
+            .first()
+        )
+        seq = 1
+        if last_ref:
+            try:
+                seq = int(last_ref.rsplit("-", 1)[-1]) + 1
+            except (TypeError, ValueError):
+                seq = 1
+        return f"{prefix}{seq:03d}"
+
+
 class RootCauseAnalysis(models.Model):
     DESCRIPTION_PAVEMENT = "pavement"
     DESCRIPTION_SHOULDERS = "shoulders"
@@ -218,11 +351,19 @@ class RootCauseAnalysis(models.Model):
         on_delete=models.CASCADE,
         related_name="root_cause_analyses",
     )
+    defect = models.ForeignKey(
+        Defect,
+        on_delete=models.CASCADE,
+        related_name="root_cause_analyses",
+        null=True,
+        blank=True,
+    )
     location = models.CharField(max_length=32)
     description = models.CharField(max_length=32, choices=DESCRIPTION_CHOICES)
     description_options = models.JSONField(default=list, blank=True)
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_DRAFT)
-    supporting_file = models.FileField(upload_to="root_cause/supporting/", blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     defect_types = models.ManyToManyField(
         DefectType,
         blank=True,
@@ -321,10 +462,10 @@ class RootCauseDetail(models.Model):
         for choice in choices
     ]
 
-    root_cause_analysis = models.OneToOneField(
+    root_cause_analysis = models.ForeignKey(
         RootCauseAnalysis,
         on_delete=models.CASCADE,
-        related_name="root_cause_detail",
+        related_name="root_cause_details",
     )
     natural_feature = models.CharField(max_length=40, choices=NATURAL_FEATURE_CHOICES)
     characteristic = models.CharField(max_length=40, choices=CHARACTERISTIC_CHOICES)
@@ -332,6 +473,12 @@ class RootCauseDetail(models.Model):
 
     class Meta:
         ordering = ["id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["root_cause_analysis", "natural_feature"],
+                name="uq_rootcausedetail_analysis_feature",
+            ),
+        ]
 
     def __str__(self):
         return (
@@ -365,6 +512,13 @@ class PhysicalInspection(models.Model):
         SubSegment,
         on_delete=models.CASCADE,
         related_name="physical_inspections",
+    )
+    defect = models.ForeignKey(
+        Defect,
+        on_delete=models.CASCADE,
+        related_name="physical_inspections",
+        null=True,
+        blank=True,
     )
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_DRAFT)
     defect_types = models.ManyToManyField(
@@ -601,22 +755,6 @@ class PhysicalInspectionCharacteristic(models.Model):
             )
 
 
-class PhysicalInspectionAttachment(models.Model):
-    inspection = models.ForeignKey(
-        PhysicalInspection,
-        on_delete=models.CASCADE,
-        related_name="attachments",
-    )
-    file = models.FileField(upload_to="physical_inspection/supporting/")
-    uploaded_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["id"]
-
-    def __str__(self):
-        return self.file.name.split("/")[-1]
-
-
 class Library(models.Model):
     TYPE_TECHNICAL_GUIDE = "technical_guide"
     TYPE_USER_GUIDE = "user_guide"
@@ -656,6 +794,34 @@ class Library(models.Model):
     file_type = models.CharField(max_length=20, choices=FILE_TYPE_CHOICES)
     name = models.CharField(max_length=128)
     file = models.FileField(upload_to="library/files/")
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="uploaded_library_files",
+    )
+    defect = models.ForeignKey(
+        "Defect",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="library_files",
+    )
+    root_cause_analysis = models.ForeignKey(
+        "RootCauseAnalysis",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="library_files",
+    )
+    physical_inspection = models.ForeignKey(
+        "PhysicalInspection",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="library_files",
+    )
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 

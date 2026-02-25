@@ -1,0 +1,174 @@
+{% load static %}
+{% if library_mode == "view" and current_analysis %}
+<section class="engineering-admin-view-shell library-view-shell">
+    <article class="engineering-admin-view-main library-view-main">
+        <a class="library-rca-back" href="{% url 'engineering_admin' %}">Back to Summary</a>
+        <header class="library-view-header">
+            <h1>{{ current_analysis.subsegment.code }}</h1>
+            <p>Detailed Analysis Report</p>
+        </header>
+
+        <section class="library-view-section">
+            <h2>Defects Description</h2>
+            <p>Select the position of the defect</p>
+            <div class="library-view-value">{{ view_defect_text }}</div>
+        </section>
+
+        <section class="library-view-section">
+            <h2>Root Cause Description</h2>
+            <p>Select the natural features and their natural characteristics</p>
+            <div class="library-view-field">
+                <label>Subgrade Properties</label>
+                <div class="library-view-value">{{ view_feature_values.subgrade_properties }}</div>
+            </div>
+            <div class="library-view-field">
+                <label>Vegetation</label>
+                <div class="library-view-value">{{ view_feature_values.vegetation }}</div>
+            </div>
+            <div class="library-view-field">
+                <label>Topography</label>
+                <div class="library-view-value">{{ view_feature_values.topography }}</div>
+            </div>
+            <div class="library-view-field">
+                <label>Drainage Characteristics</label>
+                <div class="library-view-value">{{ view_feature_values.drainage_characteristics }}</div>
+            </div>
+            <div class="library-view-field">
+                <label>Temperature and Humidity</label>
+                <div class="library-view-value">{{ view_feature_values.temp_humidity }}</div>
+            </div>
+        </section>
+    </article>
+
+    <aside class="engineering-admin-view-pane library-view-pane">
+        <article class="library-view-card">
+            <header class="library-view-card-head">
+                <h3>Report Information</h3>
+                <a class="library-view-map-link" href="#"><img src="{% static 'website/styleguide/icons/iconoir_eye.svg' %}" alt="" role="presentation"><span>View on Map</span></a>
+            </header>
+            <dl class="library-view-info-list">
+                <div><dt>Inspector:</dt><dd>Engineer Ridwan Bankole</dd></div>
+                <div><dt>Segment:</dt><dd>{{ current_analysis.subsegment.code }}</dd></div>
+                <div><dt>Design Speed:</dt><dd>33km/hr</dd></div>
+                <div><dt>Status:</dt><dd><span class="library-view-status is-{{ view_segment_status_class }}">{{ view_segment_status_text }}</span></dd></div>
+                <div><dt>Date:</dt><dd>1/8/2025</dd></div>
+            </dl>
+        </article>
+
+        <section class="library-view-docs">
+            <h3>Supporting Documents</h3>
+            {% for doc_name in supporting_documents %}
+            <article class="library-view-doc-row">
+                <span class="library-view-doc-check">✓</span>
+                <span>{{ doc_name }}</span>
+            </article>
+            {% endfor %}
+        </section>
+
+        <button type="button" class="library-view-export">Export Report</button>
+        <a class="library-view-edit" href="{{ library_form_href }}&subsegment={{ current_analysis.subsegment_id }}&analysis={{ current_analysis.pk }}&defect={{ current_analysis.defect_id }}">Edit Report</a>
+    </aside>
+</section>
+{% elif library_mode == "form" %}
+<form class="engineering-admin-rca-shell library-rca-shell" method="post" action="{{ library_form_href }}" enctype="multipart/form-data">
+    {% csrf_token %}
+    {% if current_analysis %}
+    <input type="hidden" name="analysis_id" value="{{ current_analysis.pk }}">
+    {% endif %}
+    {% if current_analysis and current_analysis.defect_id %}
+    <input type="hidden" name="defect_id" value="{{ current_analysis.defect_id }}">
+    {% elif selected_defect %}
+    <input type="hidden" name="defect_id" value="{{ selected_defect.id }}">
+    {% endif %}
+    <input type="hidden" name="subsegment_id" value="{% if selected_subsegment %}{{ selected_subsegment.pk }}{% endif %}">
+    <input type="hidden" name="location" value="{% if selected_subsegment %}{{ selected_subsegment.code }}{% endif %}">
+    <article class="library-rca-main">
+        <a class="library-rca-back" href="{% url 'engineering_admin' %}">Back to Summary</a>
+        <header class="library-rca-header">
+            <h1>{% if selected_subsegment %}{{ selected_subsegment.code }}{% else %}Root Cause Analysis{% endif %}</h1>
+            <p>Detailed analysis report</p>
+        </header>
+        {% if rca_error %}
+        <p class="library-rca-feedback library-rca-feedback-error">{{ rca_error }}</p>
+        {% elif rca_success %}
+        <p class="library-rca-feedback library-rca-feedback-success">Root cause analysis saved.</p>
+        {% endif %}
+
+        <section class="library-rca-section">
+            <h2>Defect description</h2>
+            <p>Select the position of the defect</p>
+            <div class="library-rca-check-grid" role="group" aria-label="Defect description options">
+                {% for value, label in description_options %}
+                <label class="library-rca-check-item" for="rca-desc-{{ value }}">
+                    <input
+                        id="rca-desc-{{ value }}"
+                        type="checkbox"
+                        name="description_options"
+                        value="{{ value }}"
+                        {% if value in selected_descriptions %}checked{% endif %}
+                    >
+                    <span>{{ label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="library-rca-section">
+            <h2>Root cause description</h2>
+            <p>Select the natural features and their characteristics</p>
+            <div class="library-rca-field">
+                <label for="rca-subgrade-properties">Subgrade Properties</label>
+                <select id="rca-subgrade-properties" class="library-rca-select" name="subgrade_properties" aria-label="Subgrade Properties">
+                    <option value="">Select value</option>
+                    {% for value, label in subgrade_options %}
+                    <option value="{{ value }}" {% if rca_values.subgrade_properties == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="library-rca-field">
+                <label for="rca-vegetation">Vegetation</label>
+                <select id="rca-vegetation" class="library-rca-select" name="vegetation" aria-label="Vegetation">
+                    <option value="">Select value</option>
+                    {% for value, label in vegetation_options %}
+                    <option value="{{ value }}" {% if rca_values.vegetation == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="library-rca-field">
+                <label for="rca-topography">Topography</label>
+                <select id="rca-topography" class="library-rca-select" name="topography" aria-label="Topography">
+                    <option value="">Select value</option>
+                    {% for value, label in topography_options %}
+                    <option value="{{ value }}" {% if rca_values.topography == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="library-rca-field">
+                <label for="rca-drainage">Drainage Characteristics</label>
+                <select id="rca-drainage" class="library-rca-select" name="drainage_characteristics" aria-label="Drainage Characteristics">
+                    <option value="">Select value</option>
+                    {% for value, label in drainage_options %}
+                    <option value="{{ value }}" {% if rca_values.drainage_characteristics == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="library-rca-field">
+                <label for="rca-temp-humidity">Temperature &amp; Humidity</label>
+                <select id="rca-temp-humidity" class="library-rca-select" name="temp_humidity" aria-label="Temperature and Humidity">
+                    <option value="">Select value</option>
+                    {% for value, label in temperature_humidity_options %}
+                    <option value="{{ value }}" {% if rca_values.temp_humidity == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </section>
+
+    </article>
+
+    <aside class="library-rca-pane" aria-label="Supporting information upload">
+        {% include "website/includes/engineering_admin/_workflow_bottom_panel.html" with pane_upload_input_id="library-supporting-files" pane_upload_input_name="supporting_file" pane_draft_button_name="submit_action" pane_draft_button_value="draft" pane_draft_button_label="Save draft" pane_complete_button_name="submit_action" pane_complete_button_value="complete" pane_complete_button_label="Mark as complete" %}
+    </aside>
+</form>
+{% else %}
+{% include "website/includes/engineering_admin/_tab_summary.html" %}
+{% endif %}

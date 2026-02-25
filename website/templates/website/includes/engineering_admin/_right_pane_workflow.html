@@ -1,0 +1,5 @@
+{% load static %}
+<aside class="library-physical-pane">
+    {% include "website/includes/engineering_admin/_report_information_card.html" with report_inspector_name=pane_inspector_name|default:"Engineer Ridwan Bankole" report_segment_code=pane_segment_code report_design_speed=pane_design_speed|default:"33km/hr" report_status_class=pane_status_class|default:"intolerable" report_status_text=pane_status_text|default:"Intolerable" report_date_text=pane_date_text|default:"1/8/2025" report_link_href=pane_view_link_href report_link_text=pane_view_link_text %}
+    {% include "website/includes/engineering_admin/_workflow_bottom_panel.html" %}
+</aside>

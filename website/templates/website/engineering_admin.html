@@ -1,0 +1,90 @@
+{% extends "website/base.html" %}
+{% load static %}
+{% block body_class %}app-body library-body{% endblock %}
+{% block content %}
+{% url 'engineering_admin' as library_root_url %}
+{% url 'physical_inspection' as physical_root_url %}
+{% with library_form_href=library_root_url|add:'?mode=form' physical_form_href=physical_root_url|add:'?mode=form' %}
+<section class="engineering-admin-screen library-screen">
+    <aside class="engineering-admin-side library-side">
+        <nav class="engineering-admin-side-nav library-side-nav" aria-label="Library workflow navigation">
+            {% if active_library_tab == "overview" %}
+            {% include "website/includes/sg_nav_item.html" with url_name="engineering_admin_overview" icon_key="overview" label="Overview" is_active=True %}
+            {% else %}
+            {% include "website/includes/sg_nav_item.html" with url_name="engineering_admin_overview" icon_key="overview" label="Overview" %}
+            {% endif %}
+            {% if active_library_tab == "root_cause" %}
+            {% include "website/includes/sg_nav_item.html" with url_name="engineering_admin" icon_key="root_cause" label="Root Cause Analysis" is_active=True %}
+            {% else %}
+            {% include "website/includes/sg_nav_item.html" with url_name="engineering_admin" icon_key="root_cause" label="Root Cause Analysis" %}
+            {% endif %}
+            {% if active_library_tab == "physical" %}
+            {% include "website/includes/sg_nav_item.html" with url_name="physical_inspection" icon_key="physical" label="Physical Inspection" is_active=True %}
+            {% else %}
+            {% include "website/includes/sg_nav_item.html" with url_name="physical_inspection" icon_key="physical" label="Physical Inspection" %}
+            {% endif %}
+            {% if active_library_tab == "solution" %}
+            {% include "website/includes/sg_nav_item.html" with url_name="library_solution_design" icon_key="solution" label="Solution Design" is_active=True %}
+            {% else %}
+            {% include "website/includes/sg_nav_item.html" with url_name="library_solution_design" icon_key="solution" label="Solution Design" %}
+            {% endif %}
+            {% if active_library_tab == "history" %}
+            {% include "website/includes/sg_nav_item.html" with url_name="library_history" icon_key="solution" label="Archive" is_active=True %}
+            {% else %}
+            {% include "website/includes/sg_nav_item.html" with url_name="library_history" icon_key="solution" label="Archive" %}
+            {% endif %}
+            {% if active_library_tab == "approvals" %}
+            {% include "website/includes/sg_nav_item.html" with url_name="library_approvals" icon_key="approvals" label="Approvals" is_active=True %}
+            {% else %}
+            {% include "website/includes/sg_nav_item.html" with url_name="library_approvals" icon_key="approvals" label="Approvals" %}
+            {% endif %}
+        </nav>
+
+        <div class="engineering-admin-side-actions library-side-actions">
+            {% if active_library_tab != "approvals" %}
+            {% include "website/includes/sg_action_button.html" with url_name="engineering_admin" class_name="sg-btn-outline" label="Update Route Info" icon_path="website/styleguide/icons/iconoir_upload.svg" %}
+            {% endif %}
+            {% include "website/includes/sg_action_button.html" with url_name="road_condition" class_name="sg-btn-primary" label="Run Updates" %}
+        </div>
+    </aside>
+
+    <section class="engineering-admin-main library-main">
+        {% if active_library_tab == "physical" %}
+        {% include "website/includes/engineering_admin/_tab_physical.html" %}
+        {% elif active_library_tab == "solution" or active_library_tab == "history" %}
+        {% include "website/includes/engineering_admin/_tab_solution.html" %}
+        {% elif active_library_tab == "root_cause" %}
+        {% include "website/includes/engineering_admin/_tab_root_cause.html" %}
+        {% elif active_library_tab == "approvals" %}
+        {% include "website/includes/engineering_admin/_tab_approvals.html" %}
+        {% else %}
+        {% include "website/includes/engineering_admin/_tab_overview.html" %}
+        {% endif %}
+    </section>
+</section>
+{% endwith %}
+{% if active_library_tab == "solution" or active_library_tab == "history" %}
+<form id="solution-upload-form" method="post" action="{{ solution_upload_action_url|default:'' }}" enctype="multipart/form-data" class="is-hidden">
+    {% csrf_token %}
+    <input id="solution-upload-input" type="file" name="solution_files" multiple>
+</form>
+<script>
+  (function () {
+    const uploadInput = document.getElementById("solution-upload-input");
+    const uploadForm = document.getElementById("solution-upload-form");
+    const triggers = document.querySelectorAll(".js-solution-upload-trigger");
+    if (!uploadInput || !uploadForm || !triggers.length) return;
+    triggers.forEach((trigger) => {
+      trigger.addEventListener("click", function (event) {
+        event.preventDefault();
+        uploadInput.click();
+      });
+    });
+    uploadInput.addEventListener("change", function () {
+      if (!uploadInput.files || uploadInput.files.length === 0) return;
+      uploadForm.submit();
+    });
+  })();
+</script>
+{% endif %}
+{% endblock %}
