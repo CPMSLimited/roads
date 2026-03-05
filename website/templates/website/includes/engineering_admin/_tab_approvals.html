@@ -1,29 +1,17 @@
 <section class="approvals-screen">
     <div class="approvals-main">
         <header class="approvals-kpis">
-            <article class="approvals-kpi-card">
-                <p>Total Number of Approvals</p>
-                <h2>{{ approvals_total }}</h2>
-            </article>
-            <article class="approvals-kpi-card">
-                <p>Completed</p>
-                <h2>{{ approvals_completed }}</h2>
-            </article>
-            <article class="approvals-kpi-card">
-                <p>Pending</p>
-                <h2>{{ approvals_pending }}</h2>
-            </article>
-            <article class="approvals-kpi-card">
-                <p>Rejected</p>
-                <h2>{{ approvals_rejected }}</h2>
-            </article>
+            {% include "website/includes/sg_kpi_card.html" with label="Total Approvals" value=approvals_total %}
+            {% include "website/includes/sg_kpi_card.html" with label="Approved" value=approvals_completed %}
+            {% include "website/includes/sg_kpi_card.html" with label="Pending" value=approvals_pending %}
+            {% include "website/includes/sg_kpi_card.html" with label="Rejected" value=approvals_rejected %}
         </header>
 
         <section class="approvals-pending-wrap">
             <header class="approvals-pending-head">
                 <h2>Pending Approvals</h2>
                 <div class="approvals-pending-controls">
-                    <button type="button" class="approvals-priority-btn">Priority</button>
+                    {% include "website/includes/sg_action_button.html" with button_type="button" class_name="approvals-priority-btn" label="Priority" %}
                     <button type="button" class="approvals-filter-btn" aria-label="Filter approvals">
                         <span></span><span></span><span></span>
                     </button>
@@ -39,22 +27,25 @@
                             <p>{{ row.submitted_text }}</p>
                         </div>
                         <div class="approvals-cost">
-                            <strong>{{ row.estimated_cost }}</strong>
-                            <small>Estimated cost</small>
+                            <strong>{{ row.condition }}</strong>
+                            <small>Condition</small>
+                            <small>Speed: {{ row.speed }}</small>
                         </div>
                     </div>
                     <p class="approvals-doc-links">
-                        <a href="{% url 'engineering_admin' %}">Root Cause Analysis</a>
+                        <a href="{{ row.rca_detail_url }}">Root Cause Analysis</a>
                         <span>&bull;</span>
-                        <a href="{% url 'physical_inspection' %}">Inspection Report</a>
+                        <a href="{{ row.inspection_detail_url }}">Inspection Report</a>
                         <span>&bull;</span>
-                        <a href="{% url 'library_solution_design' %}">Remedy Design</a>
+                        <a href="{{ row.remedy_detail_url }}">Remedy Design</a>
                     </p>
-                    <div class="approvals-actions">
-                        <button type="button" class="approvals-btn approvals-btn-reject">Reject</button>
-                        <button type="button" class="approvals-btn approvals-btn-approve">Approve</button>
-                        <button type="button" class="approvals-btn approvals-btn-review">Request review</button>
-                    </div>
+                    <form class="approvals-actions" method="post" action="{% url 'library_approvals' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="defect_id" value="{{ row.defect_id }}">
+                        {% include "website/includes/sg_action_button.html" with button_type="submit" button_name="action" button_value="reject" class_name="approvals-btn approvals-btn-reject" onclick="return confirm('Reject this plan?')" label="Reject" %}
+                        {% include "website/includes/sg_action_button.html" with button_type="submit" button_name="action" button_value="approve" class_name="approvals-btn approvals-btn-approve" onclick="return confirm('Approve this plan?')" label="Approve" %}
+                        {% include "website/includes/sg_action_button.html" with button_type="submit" button_name="action" button_value="review" class_name="approvals-btn approvals-btn-review" onclick="return confirm('Request review for this plan?')" label="Request review" %}
+                    </form>
                 </article>
                 {% endfor %}
             </div>
@@ -73,7 +64,7 @@
                     <strong>{{ row.code }}</strong>
                     <span>{{ row.age_text }}</span>
                 </div>
-                <p>Engineer: <strong>Ridwan Bankole</strong></p>
+                <p>Engineer: <strong>{{ row.engineer_name }}</strong></p>
                 <p>Condition: <span class="approvals-chip approvals-chip-yellow">{{ row.condition }}</span></p>
                 <p>Speed: <strong>{{ row.speed }}</strong></p>
             </article>
@@ -91,7 +82,7 @@
                     <strong>{{ row.code }}</strong>
                     <span>{{ row.age_text }}</span>
                 </div>
-                <p>Engineer: <strong>Ridwan Bankole</strong></p>
+                <p>Engineer: <strong>{{ row.engineer_name }}</strong></p>
                 <p>Condition: <span class="approvals-chip approvals-chip-red">{{ row.condition }}</span></p>
                 <p>Speed: <strong>{{ row.speed }}</strong></p>
             </article>

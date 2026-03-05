@@ -2,7 +2,7 @@
 {% if library_mode == "view" and current_physical_view %}
 <section class="engineering-admin-view-shell library-view-shell">
     <article class="engineering-admin-view-main library-view-main">
-        <a class="library-rca-back" href="{% url 'physical_inspection_2' %}">Back to Summary</a>
+        <a class="library-rca-back" href="{{ back_link_href }}">{{ back_link_text }}</a>
         <header class="library-view-header">
             <h1>{{ current_physical_view.subsegment.code }}</h1>
             <p>Detailed Analysis Report</p>

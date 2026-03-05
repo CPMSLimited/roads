@@ -2,7 +2,7 @@
 {% if library_mode == "view" and current_physical_view %}
 <section class="engineering-admin-view-shell library-view-shell">
     <article class="engineering-admin-view-main library-view-main">
-        <a class="library-rca-back" href="{% url 'physical_inspection' %}">Back to Summary</a>
+        <a class="library-rca-back" href="{{ back_link_href }}">{{ back_link_text }}</a>
         <header class="library-view-header">
             <h1>{{ current_physical_view.subsegment.code }}</h1>
             <p>Detailed Analysis Report</p>
@@ -45,6 +45,17 @@
 
     {% url 'physical_inspection' as physical_edit_url %}
     {% include "website/includes/engineering_admin/_view_details_right_pane.html" with report_inspector_name="Engineer Ridwan Bankole" report_segment_code=current_physical_view.subsegment.code report_status_class=physical_view_segment_status_class report_status_text=physical_view_segment_status_text report_date_text="1/8/2025" report_supporting_documents=physical_supporting_documents report_edit_href=physical_edit_url|add:"?mode=form&inspection="|add:current_physical_view.pk|stringformat:"s" %}
+</section>
+{% elif library_mode == "view" and physical_error %}
+<section class="engineering-admin-view-shell library-view-shell">
+    <article class="engineering-admin-view-main library-view-main">
+        <a class="library-rca-back" href="{{ back_link_href }}">{{ back_link_text }}</a>
+        <header class="library-view-header">
+            <h1>Inspection Report</h1>
+            <p>Detailed Analysis Report</p>
+        </header>
+        <p class="library-rca-feedback library-rca-feedback-error">{{ physical_error }}</p>
+    </article>
 </section>
 {% elif library_mode == "form" %}
 <form class="engineering-admin-physical-shell library-physical-shell" method="post" action="{% url 'physical_inspection' %}?mode=form" enctype="multipart/form-data">

@@ -1,4 +1,15 @@
 :root {
+  --font-family-base: "Manrope", "Segoe UI", sans-serif;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.375rem;
+  --line-height-base: 1.45;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
   --bg: #eff1f0;
   --surface: #ffffff;
   --panel: #e8edeb;
@@ -17,9 +28,32 @@
 
 body {
   margin: 0;
-  font-family: "Manrope", "Segoe UI", sans-serif;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-base);
+  font-weight: var(--font-weight-regular);
   color: var(--text);
   background: var(--bg);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  line-height: 1.25;
+  font-weight: var(--font-weight-semibold);
+}
+
+h1 { font-size: var(--font-size-xl); }
+h2 { font-size: var(--font-size-lg); }
+h3 { font-size: var(--font-size-md); }
+
+p, li, label, td, th, input, select, textarea, button {
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-base);
+}
+
+small {
+  font-size: var(--font-size-xs);
 }
 
 a {
@@ -41,10 +75,26 @@ a {
 .brand-mark {
   width: 46px;
   height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.brand-mark-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.brand-mark-ring {
+  display: none;
+  width: 100%;
+  height: 100%;
   border-radius: 999px;
   border: 2px solid #212926;
   background: #d8c35e;
-  display: grid;
   place-items: center;
   font-size: 0.76rem;
   font-weight: 800;
@@ -58,7 +108,7 @@ a {
 
 .main-nav a {
   color: #68716f;
-  font-size: 0.79rem;
+  font-size: 1.027rem;
 }
 
 .main-nav a.is-active {
@@ -553,9 +603,10 @@ a {
 }
 
 .btn {
+  height: 48px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  padding: 11px 18px;
+  padding: 0 18px;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
@@ -571,9 +622,9 @@ a {
   border-color: #c8d3cf;
   background: #e4ebe8;
   color: #42514d;
-  width: 46px;
-  min-width: 46px;
-  padding: 11px;
+  width: 48px;
+  min-width: 48px;
+  padding: 0;
 }
 
 .landing-hero {
@@ -632,7 +683,6 @@ a {
 }
 
 .landing-body .hero-copy .btn-solid {
-  height: 52px;
   padding: 0 24px;
   font-size: 0.95rem;
 }
@@ -825,7 +875,6 @@ a {
 }
 
 .landing-body .cta-side .btn {
-  height: 48px;
   min-width: 170px;
 }
 
@@ -1648,7 +1697,6 @@ a {
 
 .analysis-card .btn {
   width: 100%;
-  height: 46px;
 }
 
 .cycles-card .cycle-list li {
@@ -1938,7 +1986,6 @@ a {
 
 .library-side-actions .btn,
 .engineering-admin-side-actions .btn {
-  min-height: 48px;
   border-radius: 4px;
   font-size: 0.86rem;
   padding: 10px 14px;
@@ -2000,7 +2047,6 @@ a {
 }
 
 .library-toolbar-action {
-  height: 48px;
   border: 1px solid #fff;
   border-radius: 5px;
   background: #506560;
@@ -2059,7 +2105,6 @@ a {
 
 .library-empty-action {
   width: 280px;
-  min-height: 56px;
   border: 0;
   border-radius: 4px;
   background: #e0ebe8;
@@ -2108,7 +2153,6 @@ a {
 
 .library-report-priority {
   width: 168px;
-  height: 36px;
   border: 1px solid #c1c6c4;
   border-radius: 4px;
   background: #fff;
@@ -2125,7 +2169,7 @@ a {
   content: "";
   position: absolute;
   right: 13px;
-  top: 13px;
+  top: 18px;
   width: 8px;
   height: 8px;
   border-right: 1.5px solid #535b58;
@@ -2476,7 +2520,6 @@ a {
 
 .library-view-export,
 .library-view-edit {
-  min-height: 48px;
   width: 100%;
   border-radius: 4px;
   display: inline-flex;
@@ -2485,7 +2528,7 @@ a {
   gap: 10px;
   font-size: 0.86rem;
   font-weight: 500;
-  padding: 10px 14px;
+  padding: 0 14px;
   text-decoration: none;
 }
 
@@ -2658,7 +2701,6 @@ a {
 
 .library-physical-save,
 .library-physical-complete {
-  min-height: 56px;
   border-radius: 4px;
   border: 1px solid #506560;
   width: 100%;
@@ -2670,21 +2712,6 @@ a {
   justify-content: center;
   gap: 10px;
   cursor: pointer;
-}
-
-.library-physical-btn-icon {
-  width: 18px;
-  height: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.library-physical-btn-icon img {
-  width: 18px;
-  height: 18px;
-  display: block;
 }
 
 .library-physical-save {
@@ -2924,7 +2951,6 @@ a {
 
 .library-pane-btn {
   width: 100%;
-  height: 48px;
   border-radius: 4px;
   border: 0;
   display: inline-flex;
@@ -3205,27 +3231,6 @@ a {
   margin-bottom: 12px;
 }
 
-.approvals-kpi-card {
-  background: #f5f7f6;
-  border: 1px solid #d7ddda;
-  border-radius: 4px;
-  padding: 10px 14px;
-  text-align: center;
-}
-
-.approvals-kpi-card p {
-  margin: 0 0 4px;
-  color: #6e7a77;
-  font-size: 0.86rem;
-}
-
-.approvals-kpi-card h2 {
-  margin: 0;
-  font-size: 2rem;
-  line-height: 1.1;
-  color: #263633;
-}
-
 .approvals-pending-wrap {
   background: #eef1ef;
   border: 1px solid #d7ddda;
@@ -3242,7 +3247,7 @@ a {
 
 .approvals-pending-head h2 {
   margin: 0;
-  font-size: 1.55rem;
+  font-size: 1.1rem;
 }
 
 .approvals-pending-controls {
@@ -3252,7 +3257,6 @@ a {
 }
 
 .approvals-priority-btn {
-  height: 42px;
   min-width: 148px;
   background: #f4f6f5;
   border: 1px solid #bdc6c2;
@@ -3299,11 +3303,11 @@ a {
 
 .approvals-pending-row h3 {
   margin: 0;
-  font-size: 2rem;
+  font-size: 1.15rem;
 }
 
 .approvals-pending-row h3 span {
-  font-size: 1.2rem;
+  font-size: 0.85rem;
   font-weight: 500;
   color: #cf4e4c;
   background: #f9e2e1;
@@ -3315,7 +3319,7 @@ a {
 .approvals-pending-row p {
   margin: 8px 0 0;
   color: #687775;
-  font-size: 1.2rem;
+  font-size: 0.92rem;
 }
 
 .approvals-cost {
@@ -3324,13 +3328,13 @@ a {
 
 .approvals-cost strong {
   display: block;
-  font-size: 2.8rem;
+  font-size: 1.3rem;
   color: #263532;
 }
 
 .approvals-cost small {
   color: #7a8683;
-  font-size: 1.15rem;
+  font-size: 0.85rem;
 }
 
 .approvals-doc-links {
@@ -3343,7 +3347,7 @@ a {
 
 .approvals-doc-links a {
   color: #66abff;
-  font-size: 1.25rem;
+  font-size: 0.92rem;
 }
 
 .approvals-doc-links span {
@@ -3357,9 +3361,9 @@ a {
 }
 
 .approvals-btn {
-  height: 56px;
+  padding: 0;
   border-radius: 4px;
-  font-size: 1.4rem;
+  font-size: 0.95rem;
   border: 1px solid #5c6f69;
   background: #fff;
   color: #2d3d39;
@@ -3399,12 +3403,12 @@ a {
 
 .approvals-side-card h3 {
   margin: 0;
-  font-size: 1.65rem;
+  font-size: 1.1rem;
 }
 
 .approvals-side-card header a {
   color: #0e8fe1;
-  font-size: 1.2rem;
+  font-size: 0.9rem;
 }
 
 .approvals-mini-card {
@@ -3423,18 +3427,18 @@ a {
 }
 
 .approvals-mini-head strong {
-  font-size: 1.85rem;
+  font-size: 1.1rem;
   font-weight: 500;
 }
 
 .approvals-mini-head span {
   color: #7c8683;
-  font-size: 1.25rem;
+  font-size: 0.85rem;
 }
 
 .approvals-mini-card p {
   margin: 8px 0;
-  font-size: 1.2rem;
+  font-size: 0.9rem;
   color: #5f6f6b;
 }
 

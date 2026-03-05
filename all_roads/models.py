@@ -229,6 +229,8 @@ class Defect(models.Model):
     WORKFLOW_RCA = "rca"
     WORKFLOW_PHYSICAL = "physical_inspection"
     WORKFLOW_SOLUTION = "solution_design"
+    WORKFLOW_APPROVED = "approved"
+    WORKFLOW_REJECTED = "rejected"
     WORKFLOW_REPAIR_ONGOING = "repair_ongoing"
     WORKFLOW_REPAIR_COMPLETE = "repair_complete"
 
@@ -237,6 +239,8 @@ class Defect(models.Model):
         (WORKFLOW_RCA, "RCA"),
         (WORKFLOW_PHYSICAL, "Physical Inspection"),
         (WORKFLOW_SOLUTION, "Solution Design"),
+        (WORKFLOW_APPROVED, "Approved"),
+        (WORKFLOW_REJECTED, "Rejected"),
         (WORKFLOW_REPAIR_ONGOING, "Repair ongoing"),
         (WORKFLOW_REPAIR_COMPLETE, "Repair complete"),
     ]
@@ -279,6 +283,7 @@ class Defect(models.Model):
         choices=WORKFLOW_STATUS_CHOICES,
         default=WORKFLOW_DRAFT,
     )
+    review = models.BooleanField(default=False)
     condition = models.CharField(
         max_length=24,
         choices=CONDITION_CHOICES,

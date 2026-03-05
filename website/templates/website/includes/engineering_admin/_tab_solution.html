@@ -4,8 +4,9 @@
     {% csrf_token %}
     <input type="hidden" name="mode" value="view">
     <input type="hidden" name="defect_id" value="{{ solution_view_defect.id }}">
+    <input type="hidden" name="origin" value="{{ origin_key|default:'' }}">
     <article class="engineering-admin-view-main library-view-main">
-        <a class="library-rca-back" href="{{ solution_upload_action_url|default:'' }}">Back to Summary</a>
+        <a class="library-rca-back" href="{{ back_link_href }}">{{ back_link_text }}</a>
         <header class="library-view-header">
             <h1>{{ solution_view_segment_code }}</h1>
             <p>Segment id</p>

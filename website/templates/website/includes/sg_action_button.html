@@ -1,21 +1,21 @@
 {% load static %}
 {% if url_name %}
 {% url url_name as resolved_href %}
-<a href="{{ resolved_href }}" class="btn {{ class_name }}">
+<a href="{{ resolved_href }}" class="btn {{ class_name }}"{% if button_id %} id="{{ button_id }}"{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}>
     {% if icon_path %}
     <span class="sg-btn-icon" aria-hidden="true"><img src="{% static icon_path %}" alt="" role="presentation"></span>
     {% endif %}
     <span>{{ label }}</span>
 </a>
 {% elif href %}
-<a href="{{ href }}" class="btn {{ class_name }}">
+<a href="{{ href }}" class="btn {{ class_name }}"{% if button_id %} id="{{ button_id }}"{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}>
     {% if icon_path %}
     <span class="sg-btn-icon" aria-hidden="true"><img src="{% static icon_path %}" alt="" role="presentation"></span>
     {% endif %}
     <span>{{ label }}</span>
 </a>
 {% else %}
-<button type="{{ button_type|default:'button' }}" class="{{ class_name }}">
+<button type="{{ button_type|default:'button' }}" class="btn {{ class_name }}"{% if button_id %} id="{{ button_id }}"{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% if button_name %} name="{{ button_name }}"{% endif %}{% if button_value %} value="{{ button_value }}"{% endif %}{% if onclick %} onclick="{{ onclick }}"{% endif %}{% if button_form %} form="{{ button_form }}"{% endif %}{% if is_disabled %} disabled{% endif %}>
     {% if icon_path %}
     <span class="sg-btn-icon" aria-hidden="true"><img src="{% static icon_path %}" alt="" role="presentation"></span>
     {% endif %}

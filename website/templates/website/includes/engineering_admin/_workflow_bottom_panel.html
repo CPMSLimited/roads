@@ -12,16 +12,6 @@
 </section>
 
 {% if not pane_hide_draft_button %}
-<button type="{{ pane_draft_button_type|default:'submit' }}"{% if pane_draft_button_name %} name="{{ pane_draft_button_name }}"{% endif %}{% if pane_draft_button_value %} value="{{ pane_draft_button_value }}"{% endif %} class="library-physical-save">
-    <span class="library-physical-btn-icon" aria-hidden="true">
-        <img src="{% static 'website/styleguide/icons/iconoir_save-floppy-disk.svg' %}" alt="" role="presentation">
-    </span>
-    <span>{{ pane_draft_button_label|default:"Save Draft" }}</span>
-</button>
+{% include "website/includes/sg_action_button.html" with button_type=pane_draft_button_type|default:"submit" button_name=pane_draft_button_name button_value=pane_draft_button_value class_name="library-physical-save" icon_path="website/styleguide/icons/iconoir_save-floppy-disk.svg" label=pane_draft_button_label|default:"Save Draft" %}
 {% endif %}
-<button type="{{ pane_complete_button_type|default:'submit' }}"{% if pane_complete_button_name %} name="{{ pane_complete_button_name }}"{% endif %}{% if pane_complete_button_value %} value="{{ pane_complete_button_value }}"{% endif %} class="library-physical-complete">
-    <span class="library-physical-btn-icon" aria-hidden="true">
-        <img src="{% static 'website/styleguide/icons/iconoir_check.svg' %}" alt="" role="presentation">
-    </span>
-    <span>{{ pane_complete_button_label|default:"Mark as Complete" }}</span>
-</button>
+{% include "website/includes/sg_action_button.html" with button_type=pane_complete_button_type|default:"submit" button_name=pane_complete_button_name button_value=pane_complete_button_value class_name="library-physical-complete" icon_path="website/styleguide/icons/iconoir_check.svg" label=pane_complete_button_label|default:"Mark as Complete" %}

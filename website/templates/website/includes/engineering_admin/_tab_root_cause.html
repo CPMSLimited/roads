@@ -2,7 +2,7 @@
 {% if library_mode == "view" and current_analysis %}
 <section class="engineering-admin-view-shell library-view-shell">
     <article class="engineering-admin-view-main library-view-main">
-        <a class="library-rca-back" href="{% url 'engineering_admin' %}">Back to Summary</a>
+        <a class="library-rca-back" href="{{ back_link_href }}">{{ back_link_text }}</a>
         <header class="library-view-header">
             <h1>{{ current_analysis.subsegment.code }}</h1>
             <p>Detailed Analysis Report</p>
@@ -65,8 +65,8 @@
             {% endfor %}
         </section>
 
-        <button type="button" class="library-view-export">Export Report</button>
-        <a class="library-view-edit" href="{{ library_form_href }}&subsegment={{ current_analysis.subsegment_id }}&analysis={{ current_analysis.pk }}&defect={{ current_analysis.defect_id }}">Edit Report</a>
+        {% include "website/includes/sg_action_button.html" with button_type="button" class_name="library-view-export" label="Export Report" %}
+        <a class="btn library-view-edit" href="{{ library_form_href }}&subsegment={{ current_analysis.subsegment_id }}&analysis={{ current_analysis.pk }}&defect={{ current_analysis.defect_id }}">Edit Report</a>
     </aside>
 </section>
 {% elif library_mode == "form" %}

@@ -196,6 +196,20 @@ def _touch_defect_modified(defect):
     defect.modified = timezone.now()
     defect.save(update_fields=["modified"])
 
+
+def _resolve_origin_back_link(origin, default_label, default_href):
+    origin_map = {
+        "approvals": ("Approvals", reverse("library_approvals")),
+        "root_cause": ("Root Cause Analysis", reverse("engineering_admin")),
+        "physical": ("Physical Inspection", reverse("physical_inspection")),
+        "solution": ("Solution Design", reverse("library_solution_design")),
+        "history": ("Archive", reverse("library_history")),
+        "archive": ("Archive", reverse("library_history")),
+        "overview": ("Overview", reverse("engineering_admin_overview")),
+    }
+    label, href = origin_map.get(origin, (default_label, default_href))
+    return f"Back to {label}", href
+
 def landing(request):
     return render(request, "website/landing.html", {"active_page": "home"})
 
@@ -758,6 +772,10 @@ def library_user_guide(request):
 
 
 def engineering_admin_root_cause(request):
+    origin_key = request.GET.get("origin") or request.POST.get("origin") or ""
+    back_link_text, back_link_href = _resolve_origin_back_link(
+        origin_key, "Root Cause Analysis", reverse("engineering_admin")
+    )
     mode_value = request.GET.get("mode")
     if mode_value == "form":
         library_mode = "form"
@@ -1071,7 +1089,10 @@ def engineering_admin_root_cause(request):
         "website/engineering_admin.html",
         {
             "active_page": "engineering_admin",
-            "active_library_tab": "root_cause",
+            "active_library_tab": "approvals" if origin_key == "approvals" else "root_cause",
+            "active_content_tab": "root_cause",
+            "back_link_text": back_link_text,
+            "back_link_href": back_link_href,
             "library_mode": library_mode,
             "rca_error": rca_error,
             "rca_success": rca_success,
@@ -1127,6 +1148,12 @@ def physical_inspection(request):
         "physical_2"
         if getattr(getattr(request, "resolver_match", None), "url_name", "") == "physical_inspection_2"
         else "physical"
+    )
+    origin_key = request.GET.get("origin") or request.POST.get("origin") or ""
+    default_physical_route = "physical_inspection_2" if active_physical_tab == "physical_2" else "physical_inspection"
+    default_physical_label = "Physical Inspection" if active_physical_tab == "physical" else "Physical 2"
+    back_link_text, back_link_href = _resolve_origin_back_link(
+        origin_key, default_physical_label, reverse(default_physical_route)
     )
     mode_value = request.GET.get("mode") or request.POST.get("mode")
     if mode_value == "form":
@@ -1443,7 +1470,14 @@ def physical_inspection(request):
         )
 
     current_physical_view = existing_inspection if library_mode == "view" else None
-    if library_mode == "view" and current_physical_view is None:
+    if (
+        library_mode == "view"
+        and current_physical_view is None
+        and origin_key == "approvals"
+        and selected_defect is not None
+    ):
+        physical_error = "No Physical Inspection report available for this defect."
+    elif library_mode == "view" and current_physical_view is None:
         current_physical_view = physical_inspections.filter(
             status=PhysicalInspection.STATUS_COMPLETE
         ).first()
@@ -1518,7 +1552,10 @@ def physical_inspection(request):
         "website/engineering_admin.html",
         {
             "active_page": "engineering_admin",
-            "active_library_tab": active_physical_tab,
+            "active_library_tab": "approvals" if origin_key == "approvals" else active_physical_tab,
+            "active_content_tab": active_physical_tab,
+            "back_link_text": back_link_text,
+            "back_link_href": back_link_href,
             "library_mode": library_mode,
             "physical_success": physical_success,
             "physical_error": physical_error,
@@ -1550,6 +1587,11 @@ def engineering_admin_solution_design(request):
     active_solution_tab = "history" if is_history_tab else "solution"
     active_solution_route = "library_history" if is_history_tab else "library_solution_design"
     history_engineer = _get_assumed_project_user() if is_history_tab else None
+    origin_key = request.GET.get("origin") or request.POST.get("origin") or ""
+    default_solution_label = "Archive" if is_history_tab else "Solution Design"
+    back_link_text, back_link_href = _resolve_origin_back_link(
+        origin_key, default_solution_label, reverse(active_solution_route)
+    )
     mode_value = request.GET.get("mode") or request.POST.get("mode")
     if mode_value == "view":
         library_mode = "view"
@@ -1582,10 +1624,14 @@ def engineering_admin_solution_design(request):
                 redirect_url = f"{reverse(active_solution_route)}?sd_done=1"
                 if defect_id:
                     redirect_url += f"&mode=view&defect={defect_id}"
+                if origin_key:
+                    redirect_url += f"&origin={origin_key}"
                 return redirect(redirect_url)
             redirect_url = f"{reverse(active_solution_route)}?sd_done=0"
             if defect_id:
                 redirect_url += f"&mode=view&defect={defect_id}"
+            if origin_key:
+                redirect_url += f"&origin={origin_key}"
             return redirect(redirect_url)
 
         files = request.FILES.getlist("solution_files")
@@ -1614,10 +1660,14 @@ def engineering_admin_solution_design(request):
             redirect_url = f"{reverse(active_solution_route)}?uploaded={created_count}"
             if defect_for_upload:
                 redirect_url += f"&mode=view&defect={defect_for_upload.pk}"
+            if origin_key:
+                redirect_url += f"&origin={origin_key}"
             return redirect(redirect_url)
         redirect_url = f"{reverse(active_solution_route)}?upload_error=1"
         if defect_for_upload:
             redirect_url += f"&mode=view&defect={defect_for_upload.pk}"
+        if origin_key:
+            redirect_url += f"&origin={origin_key}"
         return redirect(redirect_url)
 
     solution_defects_qs = Defect.objects.select_related(
@@ -1663,7 +1713,7 @@ def engineering_admin_solution_design(request):
             "engineer_name": engineer_name,
             "date_text": f"{timesince(defect.modified).split(',')[0]} ago",
             "files_count": solution_file_counts.get(defect.id, 0),
-            "details_url": f"{reverse(active_solution_route)}?mode=view&defect={defect.pk}",
+            "details_url": f"{reverse(active_solution_route)}?mode=view&defect={defect.pk}&origin={active_solution_tab}",
         }
         if defect.workflow_status == Defect.WORKFLOW_SOLUTION:
             solution_complete_rows.append(row)
@@ -1720,7 +1770,11 @@ def engineering_admin_solution_design(request):
         "website/engineering_admin.html",
         {
             "active_page": "engineering_admin",
-            "active_library_tab": active_solution_tab,
+            "active_library_tab": "approvals" if origin_key == "approvals" else active_solution_tab,
+            "active_content_tab": active_solution_tab,
+            "back_link_text": back_link_text,
+            "back_link_href": back_link_href,
+            "origin_key": origin_key,
             "library_mode": library_mode,
             "solution_upload_action_url": reverse(active_solution_route),
             "solution_upload_count": int(request.GET.get("uploaded", "0") or 0),
@@ -1752,40 +1806,147 @@ def engineering_admin_solution_design(request):
 
 
 def engineering_admin_approvals(request):
-    pending_approvals = [
-        {
-            "code": "A1LAS2-04",
-            "priority": "High Priority",
-            "submitted_text": "Submitted 2 days ago by Engineer Ridwan Bankole",
-            "estimated_cost": "N45,000,000",
-            "condition": "Under Repair",
-            "speed": "33km/hr",
-        },
-        {
-            "code": "A1LAS2-05",
-            "priority": "High Priority",
-            "submitted_text": "Submitted 2 days ago by Engineer Ridwan Bankole",
-            "estimated_cost": "N45,000,000",
-            "condition": "Under Repair",
-            "speed": "33km/hr",
-        },
-        {
-            "code": "A1LAS2-08",
-            "priority": "High Priority",
-            "submitted_text": "Submitted 2 days ago by Engineer Ridwan Bankole",
-            "estimated_cost": "N45,000,000",
-            "condition": "Under Review",
-            "speed": "33km/hr",
-        },
-    ]
+    if request.method == "POST":
+        is_ajax = request.headers.get("x-requested-with") == "XMLHttpRequest"
+        action = request.POST.get("action")
+        defect_id = request.POST.get("defect_id")
+        defect = Defect.objects.filter(
+            pk=defect_id,
+            workflow_status=Defect.WORKFLOW_SOLUTION,
+        ).first()
+        if defect and action in {"approve", "reject", "review"}:
+            if action == "approve":
+                defect.workflow_status = Defect.WORKFLOW_APPROVED
+                defect.save(update_fields=["workflow_status", "modified"])
+            elif action == "reject":
+                defect.workflow_status = Defect.WORKFLOW_REJECTED
+                defect.save(update_fields=["workflow_status", "modified"])
+            elif action == "review":
+                senior_engineer = (
+                    request.user
+                    if getattr(request.user, "is_authenticated", False)
+                    else _get_assumed_project_user()
+                )
+                defect.workflow_status = Defect.WORKFLOW_DRAFT
+                defect.review = True
+                defect.senior_engineer = senior_engineer
+                defect.save(update_fields=["workflow_status", "review", "senior_engineer", "modified"])
+        if is_ajax:
+            pending_count = Defect.objects.filter(workflow_status=Defect.WORKFLOW_SOLUTION).count()
+            approved_count = Defect.objects.filter(workflow_status=Defect.WORKFLOW_APPROVED).count()
+            rejected_count = Defect.objects.filter(workflow_status=Defect.WORKFLOW_REJECTED).count()
+            return JsonResponse(
+                {
+                    "ok": bool(defect and action in {"approve", "reject", "review"}),
+                    "action": action or "",
+                    "defect_id": defect_id,
+                    "counts": {
+                        "total": pending_count + approved_count + rejected_count,
+                        "pending": pending_count,
+                        "approved": approved_count,
+                        "rejected": rejected_count,
+                    },
+                    "message": (
+                        "Approval updated."
+                        if defect and action in {"approve", "reject", "review"}
+                        else "Approval update failed."
+                    ),
+                },
+                status=200 if defect and action in {"approve", "reject", "review"} else 400,
+            )
+        return redirect(reverse("library_approvals"))
+
+    def _priority_from_condition(defect_condition):
+        if defect_condition in {Defect.CONDITION_FAILED, Defect.CONDITION_INTOLERABLE}:
+            return "High Priority"
+        if defect_condition == Defect.CONDITION_TOLERABLE:
+            return "Medium Priority"
+        return "Low Priority"
+
+    def _speed_text(defect):
+        subsegment = getattr(defect, "subsegment", None)
+        if not subsegment or subsegment.avg_speed is None:
+            return "Not available"
+        return f"{subsegment.avg_speed}km/hr"
+
+    pending_defects_qs = (
+        Defect.objects.select_related("subsegment", "subsegment__segment", "engineer")
+        .filter(workflow_status=Defect.WORKFLOW_SOLUTION)
+        .order_by("-modified", "-id")
+    )
+    approved_defects_qs = (
+        Defect.objects.select_related("subsegment", "subsegment__segment", "engineer")
+        .filter(workflow_status=Defect.WORKFLOW_APPROVED)
+        .order_by("-modified", "-id")
+    )
+    rejected_defects_qs = (
+        Defect.objects.select_related("subsegment", "subsegment__segment", "engineer")
+        .filter(workflow_status=Defect.WORKFLOW_REJECTED)
+        .order_by("-modified", "-id")
+    )
+
+    pending_approvals = []
+    pending_defect_ids = list(pending_defects_qs.values_list("id", flat=True))
+    latest_physical_by_defect = {}
+    for inspection in (
+        PhysicalInspection.objects.filter(defect_id__in=pending_defect_ids)
+        .only("id", "defect_id")
+        .order_by("defect_id", "-updated_at", "-id")
+    ):
+        if inspection.defect_id not in latest_physical_by_defect:
+            latest_physical_by_defect[inspection.defect_id] = inspection.id
+    for defect in pending_defects_qs:
+        engineer_name = "Unassigned"
+        if defect.engineer:
+            full_name = f"{defect.engineer.first_name} {defect.engineer.last_name}".strip()
+            engineer_name = full_name or defect.engineer.get_username()
+        rca_url = f"{reverse('engineering_admin')}?mode=view&defect={defect.id}&origin=approvals"
+        remedy_url = f"{reverse('library_solution_design')}?mode=view&defect={defect.id}&origin=approvals"
+        inspection_id = latest_physical_by_defect.get(defect.id)
+        if inspection_id:
+            inspection_url = f"{reverse('physical_inspection')}?mode=view&inspection={inspection_id}&origin=approvals"
+        else:
+            inspection_url = f"{reverse('physical_inspection')}?mode=view&defect={defect.id}&origin=approvals"
+        pending_approvals.append(
+            {
+                "defect_id": defect.id,
+                "code": defect.subsegment.code if defect.subsegment else defect.defect_ref or "-",
+                "priority": _priority_from_condition(defect.condition),
+                "submitted_text": f"Submitted {timesince(defect.modified).split(',')[0]} ago by {engineer_name}",
+                "condition": defect.get_condition_display(),
+                "speed": _speed_text(defect),
+                "rca_detail_url": rca_url,
+                "inspection_detail_url": inspection_url,
+                "remedy_detail_url": remedy_url,
+            }
+        )
     approved_plans = [
-        {"code": "A1LAS2_03", "age_text": "3 Months ago", "condition": "Under Repair", "speed": "33km/hr"},
-        {"code": "A1LAS2_03", "age_text": "3 Months ago", "condition": "Under Repair", "speed": "33km/hr"},
-        {"code": "A1LAS2_03", "age_text": "3 Months ago", "condition": "Under Repair", "speed": "33km/hr"},
+        {
+            "code": defect.subsegment.code if defect.subsegment else defect.defect_ref or "-",
+            "age_text": f"{timesince(defect.modified).split(',')[0]} ago",
+            "engineer_name": (
+                (f"{defect.engineer.first_name} {defect.engineer.last_name}".strip() or defect.engineer.get_username())
+                if defect.engineer
+                else "Unassigned"
+            ),
+            "condition": defect.get_condition_display(),
+            "speed": _speed_text(defect),
+        }
+        for defect in approved_defects_qs[:100]
     ]
     rejected_plans = [
-        {"code": "A1LAS2_03", "age_text": "3 Months ago", "condition": "Under Review", "speed": "33km/hr"},
-        {"code": "A1LAS2_03", "age_text": "3 Months ago", "condition": "Under Review", "speed": "33km/hr"},
+        {
+            "code": defect.subsegment.code if defect.subsegment else defect.defect_ref or "-",
+            "age_text": f"{timesince(defect.modified).split(',')[0]} ago",
+            "engineer_name": (
+                (f"{defect.engineer.first_name} {defect.engineer.last_name}".strip() or defect.engineer.get_username())
+                if defect.engineer
+                else "Unassigned"
+            ),
+            "condition": defect.get_condition_display(),
+            "speed": _speed_text(defect),
+        }
+        for defect in rejected_defects_qs[:100]
     ]
 
     return render(
@@ -1794,10 +1955,10 @@ def engineering_admin_approvals(request):
         {
             "active_page": "engineering_admin",
             "active_library_tab": "approvals",
-            "approvals_total": 4,
-            "approvals_completed": 1,
-            "approvals_pending": 1,
-            "approvals_rejected": 2,
+            "approvals_total": pending_defects_qs.count() + approved_defects_qs.count() + rejected_defects_qs.count(),
+            "approvals_completed": approved_defects_qs.count(),
+            "approvals_pending": pending_defects_qs.count(),
+            "approvals_rejected": rejected_defects_qs.count(),
             "pending_approvals": pending_approvals,
             "approved_plans": approved_plans,
             "rejected_plans": rejected_plans,

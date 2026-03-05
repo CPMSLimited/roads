@@ -10,6 +10,7 @@
 <body class="{% block body_class %}{% endblock %}">
 <header class="top-nav">
     <a href="{% url 'landing' %}" class="brand-mark" aria-label="FERMA home">
+        <img src="{% static 'website/img/ferma_logo.png' %}" alt="FERMA logo" class="brand-mark-logo">
         <span class="brand-mark-ring">FR</span>
     </a>
     <nav class="main-nav" aria-label="Primary navigation">
@@ -28,5 +29,97 @@
     {% block content %}{% endblock %}
 </main>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  (function () {
+    if (window.__topNavAjaxBound) return;
+    window.__topNavAjaxBound = true;
+
+    const headerSelector = "header.top-nav";
+    const mainSelector = "main.main-content";
+
+    async function executeScriptsSequentially(scripts) {
+      for (const oldScript of scripts) {
+        const newScript = document.createElement("script");
+        for (const attr of oldScript.attributes) {
+          newScript.setAttribute(attr.name, attr.value);
+        }
+
+        if (oldScript.src) {
+          await new Promise((resolve, reject) => {
+            newScript.onload = resolve;
+            newScript.onerror = reject;
+            document.body.appendChild(newScript);
+          });
+        } else {
+          newScript.textContent = oldScript.textContent;
+          document.body.appendChild(newScript);
+          newScript.remove();
+        }
+      }
+    }
+
+    async function swapTopNavPage(url, pushStateEntry) {
+      window.__topNavAjaxNavigating = true;
+      try {
+        const response = await fetch(url, { credentials: "same-origin" });
+        if (!response.ok) {
+          throw new Error("Unable to load page.");
+        }
+        const html = await response.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
+
+        const nextHeader = doc.querySelector(headerSelector);
+        const nextMain = doc.querySelector(mainSelector);
+        const currentHeader = document.querySelector(headerSelector);
+        const currentMain = document.querySelector(mainSelector);
+        if (!nextHeader || !nextMain || !currentHeader || !currentMain) {
+          window.location.href = url;
+          return;
+        }
+
+        const nextScripts = Array.from(nextMain.querySelectorAll("script"));
+        currentHeader.replaceWith(nextHeader);
+        currentMain.replaceWith(nextMain);
+        document.body.className = doc.body.className;
+        if (doc.title) document.title = doc.title;
+
+        if (pushStateEntry) {
+          window.history.pushState({ ajaxTopNav: true }, "", url);
+        }
+
+        await executeScriptsSequentially(nextScripts);
+
+        const path = new URL(url, window.location.origin).pathname;
+        if (path === "{% url 'road_inventory' %}") {
+          window.dispatchEvent(new CustomEvent("shared-leaflet:refresh", { detail: { id: "roadInventoryLeafletMap" } }));
+        } else if (path === "{% url 'road_motorability' %}") {
+          window.dispatchEvent(new CustomEvent("shared-leaflet:refresh", { detail: { id: "roadMotorabilityLeafletMap" } }));
+        }
+      } finally {
+        window.__topNavAjaxNavigating = false;
+      }
+    }
+
+    document.addEventListener("click", function (event) {
+      const link = event.target.closest(".top-nav a");
+      if (!link) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      if (link.target && link.target !== "_self") return;
+      if (link.hasAttribute("download")) return;
+      if (link.origin !== window.location.origin) return;
+      event.preventDefault();
+      swapTopNavPage(link.href, true).catch(function () {
+        window.location.href = link.href;
+      });
+    });
+
+    window.addEventListener("popstate", function () {
+      swapTopNavPage(window.location.href, false).catch(function () {
+        window.location.reload();
+      });
+    });
+  })();
+</script>
 </body>
 </html>

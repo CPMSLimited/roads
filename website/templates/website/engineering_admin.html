@@ -49,13 +49,13 @@
     </aside>
 
     <section class="engineering-admin-main library-main">
-        {% if active_library_tab == "physical" %}
+        {% if active_content_tab|default:active_library_tab == "physical" or active_content_tab|default:active_library_tab == "physical_2" %}
         {% include "website/includes/engineering_admin/_tab_physical.html" %}
-        {% elif active_library_tab == "solution" or active_library_tab == "history" %}
+        {% elif active_content_tab|default:active_library_tab == "solution" or active_content_tab|default:active_library_tab == "history" %}
         {% include "website/includes/engineering_admin/_tab_solution.html" %}
-        {% elif active_library_tab == "root_cause" %}
+        {% elif active_content_tab|default:active_library_tab == "root_cause" %}
         {% include "website/includes/engineering_admin/_tab_root_cause.html" %}
-        {% elif active_library_tab == "approvals" %}
+        {% elif active_content_tab|default:active_library_tab == "approvals" %}
         {% include "website/includes/engineering_admin/_tab_approvals.html" %}
         {% else %}
         {% include "website/includes/engineering_admin/_tab_overview.html" %}
@@ -63,28 +63,155 @@
     </section>
 </section>
 {% endwith %}
-{% if active_library_tab == "solution" or active_library_tab == "history" %}
+{% if active_content_tab|default:active_library_tab == "solution" or active_content_tab|default:active_library_tab == "history" %}
 <form id="solution-upload-form" method="post" action="{{ solution_upload_action_url|default:'' }}" enctype="multipart/form-data" class="is-hidden">
     {% csrf_token %}
     <input id="solution-upload-input" type="file" name="solution_files" multiple>
 </form>
+{% endif %}
 <script>
   (function () {
-    const uploadInput = document.getElementById("solution-upload-input");
-    const uploadForm = document.getElementById("solution-upload-form");
-    const triggers = document.querySelectorAll(".js-solution-upload-trigger");
-    if (!uploadInput || !uploadForm || !triggers.length) return;
-    triggers.forEach((trigger) => {
-      trigger.addEventListener("click", function (event) {
-        event.preventDefault();
-        uploadInput.click();
+    if (window.__engineeringAdminAjaxBound) {
+      if (typeof window.__engineeringAdminBindSolutionUpload === "function") {
+        window.__engineeringAdminBindSolutionUpload();
+      }
+      return;
+    }
+    window.__engineeringAdminAjaxBound = true;
+
+    const rootSelector = ".engineering-admin-screen";
+    let lastSolutionInput = null;
+
+    function bindSolutionUpload() {
+      const input = document.getElementById("solution-upload-input");
+      const form = document.getElementById("solution-upload-form");
+      if (!input || !form || input === lastSolutionInput) return;
+      lastSolutionInput = input;
+      input.addEventListener("change", function () {
+        if (!input.files || input.files.length === 0) return;
+        form.submit();
+      });
+    }
+
+    function updateApprovalKpis(counts) {
+      if (!counts) return;
+      const values = document.querySelectorAll(".approvals-kpis .library-kpi-card strong");
+      if (values.length < 4) return;
+      values[0].textContent = counts.total;
+      values[1].textContent = counts.approved;
+      values[2].textContent = counts.pending;
+      values[3].textContent = counts.rejected;
+    }
+
+    async function swapEngineeringAdmin(url, pushStateEntry) {
+      const response = await fetch(url, {
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+      });
+      if (!response.ok) {
+        throw new Error("Unable to load page.");
+      }
+      const html = await response.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+      const nextScreen = doc.querySelector(rootSelector);
+      const currentScreen = document.querySelector(rootSelector);
+      if (!nextScreen || !currentScreen) {
+        window.location.href = url;
+        return;
+      }
+
+      currentScreen.replaceWith(nextScreen);
+
+      const currentUploadForm = document.getElementById("solution-upload-form");
+      if (currentUploadForm) currentUploadForm.remove();
+      const nextUploadForm = doc.getElementById("solution-upload-form");
+      if (nextUploadForm) {
+        const insertedScreen = document.querySelector(rootSelector);
+        if (insertedScreen && insertedScreen.parentNode) {
+          insertedScreen.insertAdjacentElement("afterend", nextUploadForm);
+        }
+      }
+
+      if (pushStateEntry) {
+        window.history.pushState({ ajaxNav: true }, "", url);
+      }
+      if (doc.title) {
+        document.title = doc.title;
+      }
+      bindSolutionUpload();
+    }
+    window.__engineeringAdminBindSolutionUpload = bindSolutionUpload;
+
+    document.addEventListener("click", function (event) {
+      const trigger = event.target.closest(".js-solution-upload-trigger");
+      if (trigger) {
+        const uploadInput = document.getElementById("solution-upload-input");
+        if (uploadInput) {
+          event.preventDefault();
+          uploadInput.click();
+        }
+        return;
+      }
+
+      const navLink = event.target.closest(".engineering-admin-side-nav a");
+      if (!navLink) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      if (navLink.target && navLink.target !== "_self") return;
+      if (navLink.origin !== window.location.origin) return;
+      event.preventDefault();
+      swapEngineeringAdmin(navLink.href, true).catch(function () {
+        window.location.href = navLink.href;
       });
     });
-    uploadInput.addEventListener("change", function () {
-      if (!uploadInput.files || uploadInput.files.length === 0) return;
-      uploadForm.submit();
+
+    document.addEventListener("submit", function (event) {
+      const form = event.target.closest("form.approvals-actions");
+      if (!form) return;
+      event.preventDefault();
+
+      const submitter = event.submitter;
+      if (!submitter) return;
+
+      const formData = new FormData(form);
+      formData.set("action", submitter.value || "");
+      const csrfTokenInput = form.querySelector('input[name="csrfmiddlewaretoken"]');
+      const csrfToken = csrfTokenInput ? csrfTokenInput.value : "";
+
+      const buttons = Array.from(form.querySelectorAll("button"));
+      buttons.forEach(function (btn) { btn.disabled = true; });
+
+      fetch(form.action, {
+        method: "POST",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          "X-CSRFToken": csrfToken,
+        },
+        body: new URLSearchParams(formData),
+      })
+        .then(async function (res) {
+          const payload = await res.json();
+          if (!res.ok || !payload.ok) {
+            throw new Error(payload.message || "Action failed.");
+          }
+          const card = form.closest(".approvals-pending-card");
+          if (card) card.remove();
+          updateApprovalKpis(payload.counts);
+        })
+        .catch(function (err) {
+          alert(err && err.message ? err.message : "Unable to process approval action.");
+          buttons.forEach(function (btn) { btn.disabled = false; });
+        });
     });
+
+    window.addEventListener("popstate", function () {
+      if (window.__topNavAjaxNavigating) return;
+      if (!document.querySelector(rootSelector)) return;
+      swapEngineeringAdmin(window.location.href, false).catch(function () {
+        window.location.reload();
+      });
+    });
+
+    bindSolutionUpload();
   })();
 </script>
-{% endif %}
 {% endblock %}
