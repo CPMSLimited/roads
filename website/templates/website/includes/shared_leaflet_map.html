@@ -15,6 +15,7 @@
 <script>
   (function () {
     const mapId = "{{ map_dom_id|default:'sharedLeafletMap' }}";
+    const mapTheme = "{{ map_theme|default:'default' }}";
     const mapEl = document.getElementById(mapId);
     if (!mapEl || typeof L === "undefined") return;
 
@@ -25,6 +26,16 @@
     function statusToHex(raw) {
       const cleaned = String(raw || "").replace("#", "").trim();
       return /^[0-9a-fA-F]{6}$/.test(cleaned) ? cleaned.toUpperCase() : "666699";
+    }
+
+    function featureColorHex(feature) {
+      if (mapTheme === "inventory") {
+        const routeCode = String(feature?.properties?.route || "").trim().toUpperCase();
+        if (routeCode.startsWith("A")) return "6495ED";
+        if (routeCode.startsWith("F")) return "DC143C";
+        return "808080";
+      }
+      return statusToHex(feature?.properties?.status);
     }
 
     function ensureMap() {
@@ -52,13 +63,13 @@
 
         geojsonLayer = L.geoJSON(data, {
           style: function(feature) {
-            const color = `#${statusToHex(feature?.properties?.status)}`;
+            const color = `#${featureColorHex(feature)}`;
             return { color: color, weight: 3, opacity: 0.95 };
           },
           pointToLayer: function(feature, latlng) {
             return L.circleMarker(latlng, {
               radius: 5,
-              color: `#${statusToHex(feature?.properties?.status)}`,
+              color: `#${featureColorHex(feature)}`,
               fillOpacity: 0.9,
             });
           },
