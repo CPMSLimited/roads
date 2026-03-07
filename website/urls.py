@@ -6,6 +6,7 @@ urlpatterns = [
     path("segments/map-data/", views.segments_map_data, name="segments_map_data"),
     path("road-motorability/", views.road_motorability, name="road_motorability"),
     path("road-inventory/", views.road_inventory, name="road_inventory"),
+    path("road-inventory/route-details/", views.road_inventory_route_details, name="road_inventory_route_details"),
     path("road-condition/", views.road_condition, name="road_condition"),
     path("road-condition/save-draft/", views.road_condition_save_draft, name="road_condition_save_draft"),
     path("library/", views.library_landing, name="library"),

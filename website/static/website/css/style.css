@@ -151,6 +151,22 @@ a {
 
 .main-content { min-height: calc(100vh - 56px); }
 
+.page-title-bar:empty {
+  display: none;
+}
+
+.page-title-bar {
+  padding: 16px 20px 8px;
+}
+
+.page-title-bar h1 {
+  margin: 0;
+  font-size: clamp(1.4rem, 2.2vw, 1.9rem);
+  line-height: 1.2;
+  font-weight: 600;
+  color: #2a3734;
+}
+
 .library-landing {
   padding: 28px;
   display: grid;
@@ -635,7 +651,7 @@ a {
   display: grid;
   place-items: center;
   background:
-    linear-gradient(180deg, rgba(235, 242, 239, 0.92) 0%, rgba(232, 236, 224, 0.86) 38%, rgba(186, 177, 133, 0.45) 100%),
+    linear-gradient(180deg, rgba(235, 242, 239, 0.62) 0%, rgba(232, 236, 224, 0.48) 38%, rgba(186, 177, 133, 0.20) 100%),
     var(--hero-image);
   background-size: cover;
   background-position: center center;
@@ -648,7 +664,7 @@ a {
   right: 0;
   bottom: 0;
   height: 55%;
-  background: linear-gradient(180deg, rgba(231, 236, 219, 0) 0%, rgba(218, 220, 188, 0.38) 50%, rgba(188, 180, 136, 0.52) 100%);
+  background: linear-gradient(180deg, rgba(231, 236, 219, 0) 0%, rgba(218, 220, 188, 0.22) 50%, rgba(188, 180, 136, 0.28) 100%);
 }
 
 .hero-copy {
@@ -673,6 +689,7 @@ a {
   line-height: 1.12;
   letter-spacing: -0.03em;
 }
+
 
 .hero-copy p {
   margin: 0 auto 24px;
@@ -714,11 +731,15 @@ a {
   padding-right: max(20px, calc((100vw - 1220px) / 2 + 20px));
 }
 
+.assets-block h2,
+.offer-text h2 {
+  font-size: 2.5rem;
+  letter-spacing: -0.03em;
+}
+
 .assets-block h2 {
   margin: 0 0 8px;
   text-align: center;
-  font-size: 3rem;
-  letter-spacing: -0.03em;
 }
 
 .section-subtitle {
@@ -794,7 +815,6 @@ a {
 .offer-text h2 {
   margin: 0 0 20px;
   text-align: left;
-  font-size: 3rem;
 }
 
 .offer-text ul {
@@ -806,34 +826,37 @@ a {
 }
 
 .offer-text li {
-  padding-left: 22px;
+  padding-left: 44px;
   position: relative;
   display: grid;
   gap: 5px;
 }
 
 .offer-text li::before {
-  content: "✶";
+  content: "";
   position: absolute;
   left: 0;
-  top: 1px;
-  color: #46544f;
+  top: -1px;
+  width: 32px;
+  height: 32px;
+  background: url("../img/asterisk-rounded.svg") center / contain no-repeat;
 }
 
 .offer-text strong {
   font-size: 1.6rem;
+  font-weight: 500;
 }
 
 .offer-text span {
   color: #6d7b76;
-  font-size: 0.84rem;
-  line-height: 1.45;
+  font-size: 0.86rem;
+  line-height: 1.5;
 }
 
 .offer-image {
   min-height: 560px;
   border-radius: 14px;
-  background: linear-gradient(160deg, #a9aeb1 0%, #d8d8d5 45%, #8c908c 100%);
+  background: url("../img/what-we-offer-right.png") center / cover no-repeat;
 }
 
 .landing-cta {
@@ -851,8 +874,9 @@ a {
 
 .cta-main h2 {
   margin: 0 0 14px;
-  font-size: clamp(1.7rem, 2.2vw, 2.35rem);
+  font-size: clamp(1.275rem, 1.65vw, 1.7625rem);
   line-height: 1.14;
+  font-weight: 300;
 }
 
 .cta-main p {
@@ -876,6 +900,15 @@ a {
 
 .landing-body .cta-side .btn {
   min-width: 170px;
+}
+
+.cta-visit-link {
+  gap: 8px;
+}
+
+.cta-visit-link img {
+  width: 18px;
+  height: 18px;
 }
 
 .site-footer {
@@ -902,20 +935,20 @@ a {
 }
 
 .footer-left small {
-  font-size: 0.75rem;
+  font-size: 0.825rem;
 }
 
 .footer-nav {
   display: flex;
   gap: 16px;
-  font-size: 0.78rem;
+  font-size: 0.858rem;
 }
 
 .footer-contact {
   display: grid;
   justify-items: end;
   gap: 4px;
-  font-size: 0.76rem;
+  font-size: 0.836rem;
 }
 
 .footer-contact span:last-child {
@@ -1113,7 +1146,7 @@ a {
   text-align: center;
 }
 
-.kpi-card span { display: block; color: #67726f; margin-bottom: 7px; font-size: 0.67rem; }
+.kpi-card span { display: block; color: #67726f; margin-bottom: 7px; font-size: 0.82rem; }
 .kpi-card strong { font-size: 1.93rem; line-height: 1; }
 
 .kpi-good { border-color: #58b364; }
@@ -1305,6 +1338,10 @@ a {
 .kpi-grid-status {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.new-inventory-main .kpi-grid-status {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .kpi-grid-status .kpi-card {
@@ -1580,6 +1617,14 @@ a {
   overflow: auto;
 }
 
+#inventoryTableView .inventory-route-row {
+  cursor: pointer;
+}
+
+#inventoryTableView .inventory-route-row:hover td {
+  background: #eaf1ee;
+}
+
 .inventory-status-cell {
   text-align: center;
   font-weight: 700;
@@ -1600,11 +1645,11 @@ a {
 }
 
 .route-info-card h2 {
-  font-size: 0.475rem;
+  font-size: 1.2rem;
 }
 
 .new-inventory-side .report-list-card .section-head h2 {
-  font-size: 0.45rem;
+  font-size: 1.2rem;
 }
 
 .route-info-card strong {
@@ -1660,6 +1705,10 @@ a {
 
 .segment-select-row:hover td {
   background: #eef4f2;
+}
+
+.segment-select-row.is-active td {
+  background: #e0ede8;
 }
 
 .subsegment-select-row {

@@ -53,6 +53,7 @@ class Route(models.Model):
     road = models.ForeignKey(Road, db_column='road', on_delete=models.CASCADE)
     route = models.CharField(max_length=10, unique=True)
     index = models.CharField(max_length=2, blank=True)
+    details = models.TextField(blank=True, default="")
 
     def __str__(self):
         return self.route

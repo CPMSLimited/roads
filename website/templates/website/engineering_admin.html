@@ -1,6 +1,7 @@
 {% extends "website/base.html" %}
 {% load static %}
 {% block body_class %}app-body library-body{% endblock %}
+{% block page_title %}<h1>Admin</h1>{% endblock %}
 {% block content %}
 {% url 'engineering_admin' as library_root_url %}
 {% url 'physical_inspection' as physical_root_url %}

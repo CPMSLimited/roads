@@ -248,8 +248,8 @@ def _build_inventory_context(request, active_page="inventory"):
     routes = Route.objects.only("route").order_by("route")
     states = State.objects.only("state").order_by("state").values_list("state", flat=True)
 
-    paginator = Paginator(qs.order_by("route__route", "index", "code"), 50)
-    page_obj = paginator.get_page(request.GET.get("page") or 1)
+    route_ids = qs.values_list("route_id", flat=True).distinct()
+    table_qs = Route.objects.filter(id__in=route_ids).only("route", "details").order_by("route")
     filters = {}
     if current_view:
         filters["view"] = current_view
@@ -264,11 +264,33 @@ def _build_inventory_context(request, active_page="inventory"):
     all_rows = list(qs.order_by("route__route", "code")[:12])
     focus_segment = all_rows[0] if all_rows else None
     unique_route_count = qs.values("route_id").distinct().count()
+    selected_route_obj = Route.objects.filter(route=selected_route).only("route", "details").first() if selected_route else None
+    selected_route_segment_count = (
+        Segment.objects.filter(route__route=selected_route).count() if selected_route else None
+    )
+
+    segment_summary = {
+        "route": selected_route_obj.route if selected_route_obj else "",
+        "length": "-",
+        "start_name": "",
+        "end_name": "",
+        "start_point": "",
+        "end_point": "",
+        "passes_through": (selected_route_obj.details or "") if selected_route_obj else "",
+        "number_of_segments": selected_route_segment_count if selected_route_obj else "",
+    }
+    selected_route_segments = (
+        Segment.objects.select_related("route")
+        .filter(route__route=selected_route)
+        .order_by("index", "code")
+        if selected_route
+        else Segment.objects.none()
+    )
 
     return {
         "active_page": active_page,
-        "segments": page_obj.object_list,
-        "page_obj": page_obj,
+        "segments": qs.order_by("route__route", "index", "code")[:50],
+        "route_rows": table_qs,
         "roads": roads,
         "routes": routes,
         "states": list(states),
@@ -281,6 +303,9 @@ def _build_inventory_context(request, active_page="inventory"):
         "segment_length_total": "----",
         "focus_segment": focus_segment,
         "report_rows": all_rows[:3],
+        "segment_summary": segment_summary,
+        "show_segment_summary": bool(selected_route_obj),
+        "selected_route_segments": selected_route_segments,
         **metrics,
     }
 
@@ -347,8 +372,6 @@ def _build_road_condition_context(request):
 
     metrics = _overview_metrics(qs)
     all_rows = list(qs.order_by("route__route", "code")[:12])
-    focus_segment = all_rows[0] if all_rows else None
-    unique_route_count = qs.values("route_id").distinct().count()
 
     return {
         "active_page": "road_condition",
@@ -364,9 +387,6 @@ def _build_road_condition_context(request):
         "selected_speed": selected_speed,
         "current_view": current_view,
         "filters_qs": urlencode(filters),
-        "number_routes": unique_route_count,
-        "segment_length_total": "----",
-        "focus_segment": focus_segment,
         "report_rows": all_rows[:3],
         **metrics,
     }
@@ -2466,6 +2486,46 @@ def segment_code_search(request):
     qs = qs.filter(code__icontains=q)
     codes = list(qs.values_list("code", flat=True).distinct()[:20])  # cap results
     return JsonResponse({"results": codes})
+
+
+def road_inventory_route_details(request):
+    route_code = (request.GET.get("route") or "").strip()
+    if not route_code:
+        return JsonResponse({"ok": False, "message": "Route is required."}, status=400)
+
+    route_obj = Route.objects.filter(route=route_code).only("route", "details").first()
+    if not route_obj:
+        return JsonResponse({"ok": False, "message": f'Route "{route_code}" was not found.'}, status=404)
+
+    seg_qs = Segment.objects.filter(route__route=route_code).order_by("index", "code")
+    rows = [
+        {
+            "code": seg.code,
+            "state": seg.state or "-",
+            "name": seg.name or "-",
+            "start_point": seg.start_point.name if seg.start_point_id and seg.start_point and seg.start_point.name else "-",
+            "end_point": seg.end_point.name if seg.end_point_id and seg.end_point and seg.end_point.name else "-",
+            "distance": str(seg.distance) if seg.distance is not None else "-",
+        }
+        for seg in seg_qs.select_related("start_point", "end_point")
+    ]
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "summary": {
+                "route": route_obj.route,
+                "length": "-",
+                "start_name": "",
+                "end_name": "",
+                "start_point": "",
+                "end_point": "",
+                "passes_through": route_obj.details or "",
+                "number_of_segments": len(rows),
+            },
+            "segments": rows,
+        }
+    )
 
 
 def road_condition_subsegments(request):

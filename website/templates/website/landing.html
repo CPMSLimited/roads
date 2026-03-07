@@ -63,14 +63,16 @@
 <section class="landing-cta">
     <div class="cta-main">
         <h2>To increase efficiency and enhance safety through preventive road maintenance</h2>
-        <p>Over 100 roads currently rehabilitated</p>
     </div>
     <div class="cta-side">
         <p>
             By increasing the effectiveness and efficiency of preventive road maintenance, we ensure
             the safety of all road users and proper resource allocation.
         </p>
-        <a href="{% url 'road_condition' %}" class="btn btn-light">Visit FERMA</a>
+        <a href="https://ferma.gov.ng/" class="btn btn-light cta-visit-link" target="_blank" rel="noopener noreferrer">
+            Visit FERMA
+            <img src="{% static 'website/img/arrow-outward-rounded.svg' %}" alt="" aria-hidden="true">
+        </a>
     </div>
 </section>
 
@@ -82,16 +84,9 @@
         </a>
         <small>&copy; 2026 Federal Roads Maintenance Agency. All rights reserved.</small>
     </div>
-    <nav class="footer-nav" aria-label="Footer navigation">
-        <a href="{% url 'landing' %}">Home</a>
-        <a href="{% url 'road_inventory' %}">Road Inventory</a>
-        <a href="{% url 'road_condition' %}">Road condition</a>
-        <a href="{% url 'library' %}">Library</a>
-    </nav>
     <div class="footer-contact">
-        <span>Phone number: +1 (555) 123-4567</span>
-        <span>Email: info@fermadashboard.org</span>
-        <span><a href="#">Terms of Service</a> <a href="#">Privacy Policy</a></span>
+        <span>Emergency: 09060001490</span>
+        <span>Whatsapp: 08181994447</span>
     </div>
 </footer>
 {% endblock %}

@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CPMS Ferma</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'website/img/favicon-32.png' %}">
     <link rel="stylesheet" href="{% static 'website/css/style.css' %}">
 </head>
 <body class="{% block body_class %}{% endblock %}">
@@ -26,6 +27,7 @@
     </a>
 </header>
 <main class="main-content">
+    <section class="page-title-bar">{% block page_title %}{% endblock %}</section>
     {% block content %}{% endblock %}
 </main>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>

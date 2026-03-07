@@ -1,12 +1,13 @@
 {% extends "website/base.html" %}
 {% load static %}
 {% block body_class %}app-body{% endblock %}
+{% block page_title %}<h1>Road Inventory</h1>{% endblock %}
 {% block content %}
 <section class="new-inventory-page">
     <div class="new-inventory-main">
         <div class="kpi-grid kpi-grid-four">
             <article class="kpi-card">
-                <span>Total length of road (km)</span>
+                <span>Total length (km)</span>
                 <strong>{{ total_length }}</strong>
             </article>
             <article class="kpi-card">
@@ -14,37 +15,17 @@
                 <strong>{{ number_routes }}</strong>
             </article>
             <article class="kpi-card">
-                <span>Length of segment</span>
-                <strong>{{ segment_length_total }}</strong>
-            </article>
-            <article class="kpi-card">
                 <span>Number of segments</span>
                 <strong>{{ total_segments }}</strong>
+            </article>
+            <article class="kpi-card">
+                <span></span>
+                <strong></strong>
             </article>
         </div>
 
         <div class="inventory-tools-row">
             <div class="inventory-tools-layout">
-                <nav id="inventoryInlinePager" class="pager inventory-inline-pager" aria-label="Inventory table pagination">
-                    {% if page_obj.has_previous %}
-                    <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
-                    {% else %}
-                    <span class="is-disabled">Previous</span>
-                    {% endif %}
-
-                    {% if page_obj.paginator.count == 0 %}
-                    <span>Page 0 of 0</span>
-                    {% else %}
-                    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
-                    {% endif %}
-
-                    {% if page_obj.has_next %}
-                    <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
-                    {% else %}
-                    <span class="is-disabled">Next</span>
-                    {% endif %}
-                </nav>
-
                 <form id="inventoryFiltersForm" class="toolbar-filters inventory-tools-controls" method="get">
                     <input type="hidden" name="view" id="inventoryViewInput" value="{{ current_view|default:'map' }}">
                 <label class="inventory-field">
@@ -97,36 +78,18 @@
                     <thead>
                         <tr>
                             <th>Route</th>
-                            <th>Code</th>
-                            <th>Name</th>
-                            <th>State</th>
-                            <th>Start name</th>
-                            <th>Northings</th>
-                            <th>Eastings</th>
-                            <th>End name</th>
-                            <th>Northings 2</th>
-                            <th>Eastings 2</th>
-                            <th>Distance(km)</th>
+                            <th>Details</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for seg in segments %}
-                        <tr>
-                            <td>{{ seg.route.route }}</td>
-                            <td>{{ seg.code }}</td>
-                            <td>{{ seg.name|default:"-" }}</td>
-                            <td>{{ seg.state|default:"-" }}</td>
-                            <td>{{ seg.start_point.name|default:"-" }}</td>
-                            <td>{{ seg.start_lat }}</td>
-                            <td>{{ seg.start_lon }}</td>
-                            <td>{{ seg.end_point.name|default:"-" }}</td>
-                            <td>{{ seg.end_lat }}</td>
-                            <td>{{ seg.end_lon }}</td>
-                            <td>{{ seg.distance }}</td>
+                        {% for route in route_rows %}
+                        <tr data-route="{{ route.route }}" class="inventory-route-row">
+                            <td>{{ route.route }}</td>
+                            <td>{{ route.details|default:"-" }}</td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="11" class="is-empty">No routes found for the selected filter.</td>
+                            <td colspan="2" class="is-empty">No routes found for the selected filter.</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -137,45 +100,103 @@
     </div>
 
     <aside class="new-inventory-side">
-        <div class="kpi-grid kpi-grid-status">
-            <article class="kpi-card kpi-good"><span>Good</span><strong>{{ counts.good }}</strong></article>
-            <article class="kpi-card kpi-blue"><span>Tolerable</span><strong>{{ counts.tolerable }}</strong></article>
-            <article class="kpi-card kpi-orange"><span>Intolerable</span><strong>{{ counts.intolerable }}</strong></article>
-            <article class="kpi-card kpi-red"><span>Failed</span><strong>{{ counts.failed }}</strong></article>
-        </div>
-
         <article class="table-card side-card route-info-card">
-            <h2>Route info</h2>
-            {% if focus_segment %}
-            <p><strong>Name:</strong> {{ focus_segment.route.route }}</p>
-            <p><strong>Total length:</strong> {{ total_length }} km</p>
-            <p><strong>Alignment:</strong> Inter-City</p>
-            <p><strong>Description:</strong> {{ focus_segment.start_point.name|default:"-" }} - {{ focus_segment.end_point.name|default:"-" }}</p>
-            {% else %}
-            <p>No route data available.</p>
-            {% endif %}
+            <h2>Segment summary</h2>
+            <p id="segmentSummaryPrompt"{% if show_segment_summary %} class="is-hidden"{% endif %}>Select a segment to view its summary.</p>
+            <p><strong>Route:</strong> <span id="segmentSummaryRoute">{{ segment_summary.route }}</span></p>
+            <p><strong>Length:</strong> <span id="segmentSummaryLength">{{ segment_summary.length }}</span></p>
+            <p><strong>Start name:</strong> <span id="segmentSummaryStartName">{{ segment_summary.start_name }}</span></p>
+            <p><strong>End name:</strong> <span id="segmentSummaryEndName">{{ segment_summary.end_name }}</span></p>
+            <p><strong>Start point:</strong> <span id="segmentSummaryStartPoint">{{ segment_summary.start_point }}</span></p>
+            <p><strong>End point:</strong> <span id="segmentSummaryEndPoint">{{ segment_summary.end_point }}</span></p>
+            <p><strong>Passes through:</strong> <span id="segmentSummaryPassesThrough">{{ segment_summary.passes_through }}</span></p>
+            <p><strong>Number of segments:</strong> <span id="segmentSummaryCount">{{ segment_summary.number_of_segments }}</span></p>
         </article>
 
         <article class="table-card side-card report-list-card">
             <header class="section-head">
-                <h2>Reports</h2>
-                <a href="#" class="mini-link">View all</a>
+                <h2>Segment details</h2>
             </header>
-            <ul class="cycle-list">
-                {% for row in report_rows %}
-                <li>
-                    <div>
-                        <h3>{{ row.route.route }} {{ row.name|default:"Lagos-Ibadan" }}</h3>
-                        <p>Stage: {% if forloop.first %}Remedy Design{% else %}Physical Inspection{% endif %}</p>
-                    </div>
-                    <span class="status-chip {% if forloop.first %}status-mid-lite{% elif forloop.counter == 2 %}status-progress{% else %}status-ok-lite{% endif %}">
-                        {% if forloop.first %}Pending Approval{% elif forloop.counter == 2 %}In Progress{% else %}Completed{% endif %}
-                    </span>
-                </li>
-                {% empty %}
-                <li><p>No reports available.</p></li>
-                {% endfor %}
-            </ul>
+            <div class="workspace-table-wrap side-results-wrap">
+                <h3>Segment Identity</h3>
+                <table class="data-table inventory-table side-results-table">
+                    <thead>
+                        <tr>
+                            <th>Segment code</th>
+                            <th>State</th>
+                            <th>Segment name</th>
+                            <th>Start point</th>
+                            <th>End point</th>
+                            <th>No</th>
+                        </tr>
+                    </thead>
+                    <tbody id="segmentIdentityBody">
+                        {% if selected_route %}
+                            {% for seg in selected_route_segments %}
+                            <tr>
+                                <td>{{ seg.code }}</td>
+                                <td>{{ seg.state|default:"-" }}</td>
+                                <td>-</td>
+                                <td>-</td>
+                                <td>-</td>
+                                <td>{{ forloop.counter }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="is-empty">No segments found for the selected route.</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="is-empty">Select a route to view segment details.</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="workspace-table-wrap side-results-wrap">
+                <h3>Segment Characteristics</h3>
+                <table class="data-table inventory-table side-results-table">
+                    <thead>
+                        <tr>
+                            <th>Segment code</th>
+                            <th>Length</th>
+                            <th>Settlement type</th>
+                            <th>Carriages</th>
+                            <th>Lanes</th>
+                            <th>Pavement type</th>
+                            <th>Junctions</th>
+                            <th>Culverts</th>
+                            <th>Bridges</th>
+                        </tr>
+                    </thead>
+                    <tbody id="segmentCharacteristicsBody">
+                        {% if selected_route %}
+                            {% for seg in selected_route_segments %}
+                            <tr>
+                                <td>{{ seg.code }}</td>
+                                <td>-</td>
+                                <td>-</td>
+                                <td>-</td>
+                                <td>-</td>
+                                <td>-</td>
+                                <td>-</td>
+                                <td>-</td>
+                                <td>-</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="9" class="is-empty">No segments found for the selected route.</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                        <tr>
+                            <td colspan="9" class="is-empty">Select a route to view segment details.</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
         </article>
     </aside>
 </section>
@@ -183,17 +204,15 @@
   (function () {
     const form = document.getElementById("inventoryFiltersForm");
     const viewInput = document.getElementById("inventoryViewInput");
-    const inlinePager = document.getElementById("inventoryInlinePager");
     const mapView = document.getElementById("inventoryMapView");
     const tableView = document.getElementById("inventoryTableView");
     const buttons = document.querySelectorAll(".inventory-view-btn");
-    if (!form || !viewInput || !inlinePager || !mapView || !tableView || !buttons.length) return;
+    if (!form || !viewInput || !mapView || !tableView || !buttons.length) return;
 
     function setView(viewName) {
       const isMap = viewName === "map";
       mapView.classList.toggle("is-hidden", !isMap);
       tableView.classList.toggle("is-hidden", isMap);
-      inlinePager.classList.toggle("is-invisible", isMap);
       viewInput.value = viewName;
       buttons.forEach((btn) => {
         const active = btn.dataset.viewTarget === viewName;
@@ -226,6 +245,19 @@
     const roadSelect = form.querySelector('select[name="road"]');
     const routeSelect = form.querySelector('select[name="route"]');
     const stateSelect = form.querySelector('select[name="state"]');
+    const routeRows = document.querySelectorAll("#inventoryTableView .inventory-route-row");
+    const routeDetailsUrl = "{% url 'road_inventory_route_details' %}";
+    const summaryPrompt = document.getElementById("segmentSummaryPrompt");
+    const summaryRoute = document.getElementById("segmentSummaryRoute");
+    const summaryLength = document.getElementById("segmentSummaryLength");
+    const summaryStartName = document.getElementById("segmentSummaryStartName");
+    const summaryEndName = document.getElementById("segmentSummaryEndName");
+    const summaryStartPoint = document.getElementById("segmentSummaryStartPoint");
+    const summaryEndPoint = document.getElementById("segmentSummaryEndPoint");
+    const summaryPassesThrough = document.getElementById("segmentSummaryPassesThrough");
+    const summaryCount = document.getElementById("segmentSummaryCount");
+    const segmentIdentityBody = document.getElementById("segmentIdentityBody");
+    const segmentCharacteristicsBody = document.getElementById("segmentCharacteristicsBody");
 
     function resetOtherFilters(changedSelect) {
       if (!roadSelect || !routeSelect || !stateSelect) return;
@@ -241,11 +273,81 @@
       }
     }
 
+
     [roadSelect, routeSelect, stateSelect].forEach((sel) => {
       if (!sel) return;
       sel.addEventListener("change", () => {
         resetOtherFilters(sel);
         form.submit();
+      });
+    });
+
+    routeRows.forEach((row) => {
+      row.addEventListener("click", async () => {
+        const routeCode = row.dataset.route;
+        if (!routeCode) return;
+
+        try {
+          const url = new URL(routeDetailsUrl, window.location.origin);
+          url.searchParams.set("route", routeCode);
+          const resp = await fetch(url.toString(), { headers: { "X-Requested-With": "XMLHttpRequest" } });
+          const data = await resp.json();
+          if (!resp.ok || data.ok === false) return;
+
+          if (summaryPrompt) summaryPrompt.classList.add("is-hidden");
+          if (summaryRoute) summaryRoute.textContent = data.summary?.route || "";
+          if (summaryLength) summaryLength.textContent = data.summary?.length || "-";
+          if (summaryStartName) summaryStartName.textContent = data.summary?.start_name || "";
+          if (summaryEndName) summaryEndName.textContent = data.summary?.end_name || "";
+          if (summaryStartPoint) summaryStartPoint.textContent = data.summary?.start_point || "";
+          if (summaryEndPoint) summaryEndPoint.textContent = data.summary?.end_point || "";
+          if (summaryPassesThrough) summaryPassesThrough.textContent = data.summary?.passes_through || "";
+          if (summaryCount) summaryCount.textContent = String(data.summary?.number_of_segments ?? "");
+
+          if (segmentIdentityBody) {
+            segmentIdentityBody.innerHTML = "";
+            if (!data.segments?.length) {
+              segmentIdentityBody.innerHTML = '<tr><td colspan="6" class="is-empty">No segments found for the selected route.</td></tr>';
+            } else {
+              data.segments.forEach((seg, idx) => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                  <td>${seg.code ?? "-"}</td>
+                  <td>${seg.state ?? "-"}</td>
+                  <td>-</td>
+                  <td>-</td>
+                  <td>-</td>
+                  <td>${idx + 1}</td>
+                `;
+                segmentIdentityBody.appendChild(tr);
+              });
+            }
+          }
+
+          if (segmentCharacteristicsBody) {
+            segmentCharacteristicsBody.innerHTML = "";
+            if (!data.segments?.length) {
+              segmentCharacteristicsBody.innerHTML = '<tr><td colspan="9" class="is-empty">No segments found for the selected route.</td></tr>';
+            } else {
+              data.segments.forEach((seg) => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                  <td>${seg.code ?? "-"}</td>
+                  <td>-</td>
+                  <td>-</td>
+                  <td>-</td>
+                  <td>-</td>
+                  <td>-</td>
+                  <td>-</td>
+                  <td>-</td>
+                  <td>-</td>
+                `;
+                segmentCharacteristicsBody.appendChild(tr);
+              });
+            }
+          }
+        } catch (error) {
+        }
       });
     });
 

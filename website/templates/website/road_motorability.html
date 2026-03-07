@@ -1,6 +1,7 @@
 {% extends "website/base.html" %}
 {% load static %}
 {% block body_class %}app-body{% endblock %}
+{% block page_title %}<h1>Road Motorability</h1>{% endblock %}
 {% block content %}
 <section class="new-inventory-page">
     <div class="new-inventory-main">
@@ -14,13 +15,19 @@
                 <strong>{{ number_routes }}</strong>
             </article>
             <article class="kpi-card">
-                <span>Length of segment</span>
-                <strong>{{ segment_length_total }}</strong>
-            </article>
-            <article class="kpi-card">
                 <span>Number of segments</span>
                 <strong>{{ total_segments }}</strong>
             </article>
+            <article class="kpi-card">
+                <span>No data</span>
+                <strong>{{ counts.no_response }}</strong>
+            </article>
+        </div>
+        <div class="kpi-grid kpi-grid-status">
+            <article class="kpi-card kpi-good"><span>Good</span><strong>{{ counts.good }}</strong></article>
+            <article class="kpi-card kpi-blue"><span>Tolerable</span><strong>{{ counts.tolerable }}</strong></article>
+            <article class="kpi-card kpi-orange"><span>Intolerable</span><strong>{{ counts.intolerable }}</strong></article>
+            <article class="kpi-card kpi-red"><span>Failed</span><strong>{{ counts.failed }}</strong></article>
         </div>
 
         <div class="inventory-tools-row">
@@ -147,24 +154,12 @@
     </div>
 
     <aside class="new-inventory-side">
-        <div class="kpi-grid kpi-grid-status">
-            <article class="kpi-card kpi-good"><span>Good</span><strong>{{ counts.good }}</strong></article>
-            <article class="kpi-card kpi-blue"><span>Tolerable</span><strong>{{ counts.tolerable }}</strong></article>
-            <article class="kpi-card kpi-orange"><span>Intolerable</span><strong>{{ counts.intolerable }}</strong></article>
-            <article class="kpi-card kpi-red"><span>Failed</span><strong>{{ counts.failed }}</strong></article>
-            <article class="kpi-card"><span>No response</span><strong>{{ counts.no_response }}</strong></article>
-        </div>
-
         <article class="table-card side-card route-info-card">
-            <h2>Route info</h2>
-            {% if focus_segment %}
-            <p><strong>Name:</strong> {{ focus_segment.route.route }}</p>
-            <p><strong>Total length:</strong> {{ total_length }} km</p>
-            <p><strong>Alignment:</strong> Inter-City</p>
-            <p><strong>Description:</strong> {{ focus_segment.start_point.name|default:"-" }} - {{ focus_segment.end_point.name|default:"-" }}</p>
-            {% else %}
-            <p>No route data available.</p>
-            {% endif %}
+            <h2>Motorability summary</h2>
+            <p><strong>Total length of Good:</strong></p>
+            <p><strong>Total length of Tolerable:</strong></p>
+            <p><strong>Total length of Intolerable:</strong></p>
+            <p><strong>Total length of Failed:</strong></p>
         </article>
 
         <article class="table-card side-card">
@@ -227,12 +222,21 @@
       });
     }
 
+    function syncPagerLinks(viewName) {
+      inlinePager.querySelectorAll('a[href]').forEach((link) => {
+        const url = new URL(link.getAttribute("href"), window.location.href);
+        url.searchParams.set("view", viewName);
+        link.setAttribute("href", `${url.pathname}${url.search}${url.hash}`);
+      });
+    }
+
     function setView(viewName) {
       const isMap = viewName === "map";
       mapView.classList.toggle("is-hidden", !isMap);
       tableView.classList.toggle("is-hidden", isMap);
       inlinePager.classList.toggle("is-invisible", isMap);
       viewInput.value = viewName;
+      syncPagerLinks(viewName);
       buttons.forEach((btn) => {
         const active = btn.dataset.viewTarget === viewName;
         btn.classList.toggle("is-active", active);
@@ -272,6 +276,7 @@
         stateSelect.value = "";
       }
     }
+
 
     [roadSelect, routeSelect, stateSelect, speedSelect].forEach((sel) => {
       if (!sel) return;
