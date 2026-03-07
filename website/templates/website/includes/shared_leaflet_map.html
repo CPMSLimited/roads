@@ -29,10 +29,7 @@
 
     function ensureMap() {
       if (map) return;
-      map = L.map(mapEl, {
-        zoomSnap: 0.1,
-        zoomDelta: 0.1,
-      }).setView([9.08, 8.67], 10);
+      map = L.map(mapEl);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "&copy; OpenStreetMap contributors"
       }).addTo(map);
@@ -81,9 +78,8 @@
         const bounds = geojsonLayer.getBounds();
         if (bounds.isValid()) {
           map.fitBounds(bounds, { padding: [20, 20] });
-          // Apply an extra ~20% zoom-in after fitting all features.
-          const zoomBump = Math.log2(1.2);
-          map.setZoom(map.getZoom() + zoomBump, { animate: false });
+        } else {
+          map.fitWorld();
         }
       } catch (error) {
       }
