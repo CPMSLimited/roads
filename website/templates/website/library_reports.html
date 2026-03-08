@@ -1,6 +1,7 @@
 {% extends "website/base.html" %}
 {% load static %}
 {% block body_class %}app-body{% endblock %}
+{% block page_title %}<h1>Library</h1>{% endblock %}
 {% block content %}
 <form id="libraryReportsFilters" class="library-landing-v2" method="get" action="{% url 'library_reports' %}">
     <aside class="library-v2-side">

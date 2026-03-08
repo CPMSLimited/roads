@@ -162,30 +162,28 @@
             <p><strong>Total length of Failed:</strong></p>
         </article>
 
-        <article class="table-card side-card">
+        <article class="table-card side-card report-list-card">
             <header class="section-head">
-                <h2>Filtered Segments</h2>
-                <span>{{ total_segments }} rows</span>
+                <h2>Segments under investigation or repair</h2>
+                <span>{{ investigation_rows|length }} rows</span>
             </header>
             <div class="workspace-table-wrap side-results-wrap">
                 <table class="data-table inventory-table side-results-table">
                     <thead>
                         <tr>
-                            <th>Segment code</th>
-                            <th>State</th>
-                            <th>Distance</th>
+                            <th>Segment</th>
+                            <th>Status</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for seg in segments %}
+                        {% for row in investigation_rows %}
                         <tr>
-                            <td>{{ seg.code }}</td>
-                            <td>{{ seg.state|default:"-" }}</td>
-                            <td>{{ seg.distance }}</td>
+                            <td>{{ row.segment_code }}</td>
+                            <td>{{ row.status_label }}</td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="3" class="is-empty">No routes found for the selected filter.</td>
+                            <td colspan="2" class="is-empty">No segments under investigation or repair for the selected filter.</td>
                         </tr>
                         {% endfor %}
                     </tbody>

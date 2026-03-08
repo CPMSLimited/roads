@@ -11,7 +11,6 @@
             <header class="approvals-pending-head">
                 <h2>Pending Approvals</h2>
                 <div class="approvals-pending-controls">
-                    {% include "website/includes/sg_action_button.html" with button_type="button" class_name="approvals-priority-btn" label="Priority" %}
                     <button type="button" class="approvals-filter-btn" aria-label="Filter approvals">
                         <span></span><span></span><span></span>
                     </button>
@@ -23,7 +22,7 @@
                 <article class="approvals-pending-card">
                     <div class="approvals-pending-row">
                         <div>
-                            <h3>{{ row.code }} <span>{{ row.priority }}</span></h3>
+                            <h3>{{ row.code }}</h3>
                             <p>{{ row.submitted_text }}</p>
                         </div>
                         <div class="approvals-cost">

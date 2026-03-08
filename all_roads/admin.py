@@ -1,4 +1,5 @@
 from django.contrib import admin
+from .forms import SegmentForm
 from .models import Road, Route, Segment, State, Address, SubSegment, Defect
 
 # admin.site.register(Segment)
@@ -14,9 +15,31 @@ class AddressAdmin(admin.ModelAdmin):
 
 @admin.register(Segment)
 class SegmentAdmin(admin.ModelAdmin):
-    list_display = ("code", "route", "state", "name", "avg_speed", "status")
+    form = SegmentForm
+    list_display = (
+        "code",
+        "route",
+        "state",
+        "name",
+        "settlement_type",
+        "carriages",
+        "lanes",
+        "pavement_type",
+        "junctions",
+        "culverts",
+        "bridges",
+        "avg_speed",
+        "status",
+    )
     list_filter = ("route", "state", "status")
-    search_fields = ("code", "name", "state", "route__route")  # <-- required for autocomplete
+    search_fields = (
+        "code",
+        "name",
+        "state",
+        "route__route",
+        "settlement_type",
+        "pavement_type",
+    )  # <-- required for autocomplete
 
 @admin.register(SubSegment)
 class SubSegmentAdmin(admin.ModelAdmin):

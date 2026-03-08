@@ -54,6 +54,20 @@ class Route(models.Model):
     route = models.CharField(max_length=10, unique=True)
     index = models.CharField(max_length=2, blank=True)
     details = models.TextField(blank=True, default="")
+    start_point = models.ForeignKey(
+        "Address",
+        related_name="route_start_points",
+        on_delete=models.PROTECT,
+        blank=True,
+        null=True,
+    )
+    end_point = models.ForeignKey(
+        "Address",
+        related_name="route_end_points",
+        on_delete=models.PROTECT,
+        blank=True,
+        null=True,
+    )
 
     def __str__(self):
         return self.route
@@ -99,6 +113,33 @@ class Segment(models.Model):
     end_point = models.ForeignKey(Address, related_name='end_point', on_delete=models.PROTECT, default=1)
     map = models.ImageField(upload_to='images', blank=True)
     distance = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    settlement_type = models.CharField(max_length=32, blank=True, null=True)
+    carriages = models.PositiveSmallIntegerField(
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(1), MaxValueValidator(9)],
+    )
+    lanes = models.PositiveSmallIntegerField(
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(1), MaxValueValidator(9)],
+    )
+    pavement_type = models.CharField(max_length=32, blank=True, null=True)
+    junctions = models.PositiveSmallIntegerField(
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(1), MaxValueValidator(9)],
+    )
+    culverts = models.PositiveSmallIntegerField(
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(1), MaxValueValidator(9)],
+    )
+    bridges = models.PositiveSmallIntegerField(
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(1), MaxValueValidator(9)],
+    )
     travel_time = models.IntegerField(default=0)
     avg_speed = models.DecimalField(max_digits=4, decimal_places=1, default=0.0)
     # direction

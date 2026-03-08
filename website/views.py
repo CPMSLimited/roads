@@ -223,6 +223,29 @@ def _overview_metrics(qs):
     }
 
 
+def _format_fixed_coord(value, places=5):
+    try:
+        if value is None:
+            return "-"
+        return f"{Decimal(value):.{places}f}"
+    except (InvalidOperation, ValueError, TypeError):
+        return "-"
+
+
+def _format_segment_point_display(name, lat, lon):
+    point_name = (name or "").strip() or "-"
+    return f"{point_name} ({_format_fixed_coord(lat)}, {_format_fixed_coord(lon)})"
+
+
+def _format_km_total(value):
+    if value is None:
+        return ""
+    try:
+        return f"{Decimal(value).quantize(Decimal('0.01'))} km"
+    except (InvalidOperation, ValueError, TypeError):
+        return ""
+
+
 def _build_inventory_context(request, active_page="inventory"):
     qs = Segment.objects.select_related("route", "start_point", "end_point").all()
     current_view = request.GET.get("view") or "map"
@@ -268,24 +291,53 @@ def _build_inventory_context(request, active_page="inventory"):
     selected_route_segment_count = (
         Segment.objects.filter(route__route=selected_route).count() if selected_route else None
     )
-
-    segment_summary = {
-        "route": selected_route_obj.route if selected_route_obj else "",
-        "length": "-",
-        "start_name": "",
-        "end_name": "",
-        "start_point": "",
-        "end_point": "",
-        "passes_through": (selected_route_obj.details or "") if selected_route_obj else "",
-        "number_of_segments": selected_route_segment_count if selected_route_obj else "",
-    }
     selected_route_segments = (
-        Segment.objects.select_related("route")
+        Segment.objects.select_related("route", "start_point", "end_point")
         .filter(route__route=selected_route)
         .order_by("index", "code")
         if selected_route
         else Segment.objects.none()
     )
+    first_segment = selected_route_segments.first() if selected_route else None
+    last_segment = selected_route_segments.last() if selected_route else None
+    summary_start_point = ""
+    summary_end_point = ""
+    if first_segment:
+        start_name = (
+            first_segment.start_point.name
+            if first_segment.start_point_id and first_segment.start_point and first_segment.start_point.name
+            else (first_segment.name or first_segment.state or "")
+        )
+        summary_start_point = _format_segment_point_display(
+            start_name,
+            first_segment.start_lat,
+            first_segment.start_lon,
+        )
+    if last_segment:
+        end_name = (
+            last_segment.end_point.name
+            if last_segment.end_point_id and last_segment.end_point and last_segment.end_point.name
+            else (last_segment.name or last_segment.state or "")
+        )
+        summary_end_point = _format_segment_point_display(
+            end_name,
+            last_segment.end_lat,
+            last_segment.end_lon,
+        )
+    selected_route_total_length = (
+        selected_route_segments.aggregate(total_length=Sum("distance")).get("total_length")
+        if selected_route
+        else None
+    )
+
+    segment_summary = {
+        "route": selected_route_obj.route if selected_route_obj else "",
+        "length": _format_km_total(selected_route_total_length),
+        "start_point": summary_start_point,
+        "end_point": summary_end_point,
+        "passes_through": (selected_route_obj.details or "") if selected_route_obj else "",
+        "number_of_segments": selected_route_segment_count if selected_route_obj else "",
+    }
 
     return {
         "active_page": active_page,
@@ -533,6 +585,25 @@ def _build_road_motorability_context(request):
     all_rows = list(qs.order_by("route__route", "code")[:12])
     focus_segment = all_rows[0] if all_rows else None
     unique_route_count = qs.values("route_id").distinct().count()
+    active_defects_qs = (
+        Defect.objects.select_related("subsegment__segment")
+        .filter(subsegment__segment__in=qs)
+        .exclude(workflow_status=Defect.WORKFLOW_REPAIR_COMPLETE)
+        .order_by("subsegment__segment__index", "subsegment__segment__code", "-modified", "-id")
+    )
+    investigation_rows = []
+    seen_segment_ids = set()
+    for defect in active_defects_qs:
+        segment = defect.subsegment.segment if defect.subsegment_id else None
+        if not segment or segment.id in seen_segment_ids:
+            continue
+        seen_segment_ids.add(segment.id)
+        investigation_rows.append(
+            {
+                "segment_code": segment.code,
+                "status_label": defect.get_workflow_status_display(),
+            }
+        )
 
     return {
         "active_page": "road_motorability",
@@ -552,6 +623,7 @@ def _build_road_motorability_context(request):
         "segment_length_total": "----",
         "focus_segment": focus_segment,
         "report_rows": all_rows[:3],
+        "investigation_rows": investigation_rows,
         **metrics,
     }
 
@@ -1876,13 +1948,6 @@ def engineering_admin_approvals(request):
             )
         return redirect(reverse("library_approvals"))
 
-    def _priority_from_condition(defect_condition):
-        if defect_condition in {Defect.CONDITION_FAILED, Defect.CONDITION_INTOLERABLE}:
-            return "High Priority"
-        if defect_condition == Defect.CONDITION_TOLERABLE:
-            return "Medium Priority"
-        return "Low Priority"
-
     def _speed_text(defect):
         subsegment = getattr(defect, "subsegment", None)
         if not subsegment or subsegment.avg_speed is None:
@@ -1931,7 +1996,6 @@ def engineering_admin_approvals(request):
             {
                 "defect_id": defect.id,
                 "code": defect.subsegment.code if defect.subsegment else defect.defect_ref or "-",
-                "priority": _priority_from_condition(defect.condition),
                 "submitted_text": f"Submitted {timesince(defect.modified).split(',')[0]} ago by {engineer_name}",
                 "condition": defect.get_condition_display(),
                 "speed": _speed_text(defect),
@@ -2498,6 +2562,33 @@ def road_inventory_route_details(request):
         return JsonResponse({"ok": False, "message": f'Route "{route_code}" was not found.'}, status=404)
 
     seg_qs = Segment.objects.filter(route__route=route_code).order_by("index", "code")
+    first_segment = seg_qs.select_related("start_point").first()
+    last_segment = seg_qs.select_related("end_point").last()
+    summary_start_point = ""
+    summary_end_point = ""
+    if first_segment:
+        start_name = (
+            first_segment.start_point.name
+            if first_segment.start_point_id and first_segment.start_point and first_segment.start_point.name
+            else (first_segment.name or first_segment.state or "")
+        )
+        summary_start_point = _format_segment_point_display(
+            start_name,
+            first_segment.start_lat,
+            first_segment.start_lon,
+        )
+    if last_segment:
+        end_name = (
+            last_segment.end_point.name
+            if last_segment.end_point_id and last_segment.end_point and last_segment.end_point.name
+            else (last_segment.name or last_segment.state or "")
+        )
+        summary_end_point = _format_segment_point_display(
+            end_name,
+            last_segment.end_lat,
+            last_segment.end_lon,
+        )
+    route_total_length = seg_qs.aggregate(total_length=Sum("distance")).get("total_length")
     rows = [
         {
             "code": seg.code,
@@ -2506,6 +2597,13 @@ def road_inventory_route_details(request):
             "start_point": seg.start_point.name if seg.start_point_id and seg.start_point and seg.start_point.name else "-",
             "end_point": seg.end_point.name if seg.end_point_id and seg.end_point and seg.end_point.name else "-",
             "distance": str(seg.distance) if seg.distance is not None else "-",
+            "settlement_type": seg.settlement_type or "-",
+            "carriages": seg.carriages if seg.carriages is not None else "-",
+            "lanes": seg.lanes if seg.lanes is not None else "-",
+            "pavement_type": seg.pavement_type or "-",
+            "junctions": seg.junctions if seg.junctions is not None else "-",
+            "culverts": seg.culverts if seg.culverts is not None else "-",
+            "bridges": seg.bridges if seg.bridges is not None else "-",
         }
         for seg in seg_qs.select_related("start_point", "end_point")
     ]
@@ -2515,11 +2613,9 @@ def road_inventory_route_details(request):
             "ok": True,
             "summary": {
                 "route": route_obj.route,
-                "length": "-",
-                "start_name": "",
-                "end_name": "",
-                "start_point": "",
-                "end_point": "",
+                "length": _format_km_total(route_total_length),
+                "start_point": summary_start_point,
+                "end_point": summary_end_point,
                 "passes_through": route_obj.details or "",
                 "number_of_segments": len(rows),
             },

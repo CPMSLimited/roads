@@ -549,3 +549,84 @@ Traceback (most recent call last):
     raise TemplateSyntaxError(
 django.template.exceptions.TemplateSyntaxError: Could not parse the remainder: '(active_library_tab' from '(active_library_tab'
 "GET /engineering-admin/physical-inspection-2/ HTTP/1.1" 500 475862
+Internal Server Error: /road-inventory/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/db/backends/utils.py", line 89, in _execute
+    return self.cursor.execute(sql, params)
+psycopg2.errors.UndefinedColumn: column all_roads_segment.culverts does not exist
+LINE 1: ..."pavement_type", "all_roads_segment"."junctions", "all_roads...
+                                                             ^
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 314, in road_inventory
+    context = _build_inventory_context(request, active_page="inventory")
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 264, in _build_inventory_context
+    all_rows = list(qs.order_by("route__route", "code")[:12])
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/db/models/query.py", line 302, in __len__
+    self._fetch_all()
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/db/models/query.py", line 1507, in _fetch_all
+    self._result_cache = list(self._iterable_class(self))
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/db/models/query.py", line 57, in __iter__
+    results = compiler.execute_sql(
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/db/models/sql/compiler.py", line 1361, in execute_sql
+    cursor.execute(sql, params)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/db/backends/utils.py", line 103, in execute
+    return super().execute(sql, params)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/db/backends/utils.py", line 67, in execute
+    return self._execute_with_wrappers(
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/db/backends/utils.py", line 80, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/db/backends/utils.py", line 84, in _execute
+    with self.db.wrap_database_errors:
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/db/backends/utils.py", line 89, in _execute
+    return self.cursor.execute(sql, params)
+django.db.utils.ProgrammingError: column all_roads_segment.culverts does not exist
+LINE 1: ..."pavement_type", "all_roads_segment"."junctions", "all_roads...
+                                                             ^
+
+"GET /road-inventory/ HTTP/1.1" 500 138948
+Internal Server Error: /road-inventory/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 344, in road_inventory
+    context = _build_inventory_context(request, active_page="inventory")
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 285, in _build_inventory_context
+    first_segment = selected_route_segments.first() if selected_route else None
+UnboundLocalError: local variable 'selected_route_segments' referenced before assignment
+"GET /road-inventory/?view=map&road=&route=A121&state= HTTP/1.1" 500 72298
+Internal Server Error: /road-inventory/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 344, in road_inventory
+    context = _build_inventory_context(request, active_page="inventory")
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 285, in _build_inventory_context
+    first_segment = selected_route_segments.first() if selected_route else None
+UnboundLocalError: local variable 'selected_route_segments' referenced before assignment
+"GET /road-inventory/?view=map&road=&route=A121&state= HTTP/1.1" 500 72298
+Internal Server Error: /road-inventory/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 344, in road_inventory
+    context = _build_inventory_context(request, active_page="inventory")
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 285, in _build_inventory_context
+    first_segment = selected_route_segments.first() if selected_route else None
+UnboundLocalError: local variable 'selected_route_segments' referenced before assignment
+"GET /road-inventory/?view=map&road=&route=A121&state= HTTP/1.1" 500 72298

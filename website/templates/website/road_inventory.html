@@ -105,8 +105,6 @@
             <p id="segmentSummaryPrompt"{% if show_segment_summary %} class="is-hidden"{% endif %}>Select a segment to view its summary.</p>
             <p><strong>Route:</strong> <span id="segmentSummaryRoute">{{ segment_summary.route }}</span></p>
             <p><strong>Length:</strong> <span id="segmentSummaryLength">{{ segment_summary.length }}</span></p>
-            <p><strong>Start name:</strong> <span id="segmentSummaryStartName">{{ segment_summary.start_name }}</span></p>
-            <p><strong>End name:</strong> <span id="segmentSummaryEndName">{{ segment_summary.end_name }}</span></p>
             <p><strong>Start point:</strong> <span id="segmentSummaryStartPoint">{{ segment_summary.start_point }}</span></p>
             <p><strong>End point:</strong> <span id="segmentSummaryEndPoint">{{ segment_summary.end_point }}</span></p>
             <p><strong>Passes through:</strong> <span id="segmentSummaryPassesThrough">{{ segment_summary.passes_through }}</span></p>
@@ -122,12 +120,11 @@
                 <table class="data-table inventory-table side-results-table">
                     <thead>
                         <tr>
-                            <th>Segment code</th>
+                            <th>Segment</th>
                             <th>State</th>
                             <th>Segment name</th>
                             <th>Start point</th>
                             <th>End point</th>
-                            <th>No</th>
                         </tr>
                     </thead>
                     <tbody id="segmentIdentityBody">
@@ -136,19 +133,18 @@
                             <tr>
                                 <td>{{ seg.code }}</td>
                                 <td>{{ seg.state|default:"-" }}</td>
-                                <td>-</td>
-                                <td>-</td>
-                                <td>-</td>
-                                <td>{{ forloop.counter }}</td>
+                                <td>{{ seg.name|default:"-" }}</td>
+                                <td>{{ seg.start_point.name|default:"-" }}</td>
+                                <td>{{ seg.end_point.name|default:"-" }}</td>
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="6" class="is-empty">No segments found for the selected route.</td>
+                                <td colspan="5" class="is-empty">No segments found for the selected route.</td>
                             </tr>
                             {% endfor %}
                         {% else %}
                         <tr>
-                            <td colspan="6" class="is-empty">Select a route to view segment details.</td>
+                            <td colspan="5" class="is-empty">Select a route to view segment details.</td>
                         </tr>
                         {% endif %}
                     </tbody>
@@ -159,7 +155,7 @@
                 <table class="data-table inventory-table side-results-table">
                     <thead>
                         <tr>
-                            <th>Segment code</th>
+                            <th>Segment</th>
                             <th>Length</th>
                             <th>Settlement type</th>
                             <th>Carriages</th>
@@ -175,14 +171,14 @@
                             {% for seg in selected_route_segments %}
                             <tr>
                                 <td>{{ seg.code }}</td>
-                                <td>-</td>
-                                <td>-</td>
-                                <td>-</td>
-                                <td>-</td>
-                                <td>-</td>
-                                <td>-</td>
-                                <td>-</td>
-                                <td>-</td>
+                                <td>{{ seg.distance|default:"-" }}</td>
+                                <td>{{ seg.settlement_type|default:"-" }}</td>
+                                <td>{{ seg.carriages|default:"-" }}</td>
+                                <td>{{ seg.lanes|default:"-" }}</td>
+                                <td>{{ seg.pavement_type|default:"-" }}</td>
+                                <td>{{ seg.junctions|default:"-" }}</td>
+                                <td>{{ seg.culverts|default:"-" }}</td>
+                                <td>{{ seg.bridges|default:"-" }}</td>
                             </tr>
                             {% empty %}
                             <tr>
@@ -250,14 +246,16 @@
     const summaryPrompt = document.getElementById("segmentSummaryPrompt");
     const summaryRoute = document.getElementById("segmentSummaryRoute");
     const summaryLength = document.getElementById("segmentSummaryLength");
-    const summaryStartName = document.getElementById("segmentSummaryStartName");
-    const summaryEndName = document.getElementById("segmentSummaryEndName");
     const summaryStartPoint = document.getElementById("segmentSummaryStartPoint");
     const summaryEndPoint = document.getElementById("segmentSummaryEndPoint");
     const summaryPassesThrough = document.getElementById("segmentSummaryPassesThrough");
     const summaryCount = document.getElementById("segmentSummaryCount");
     const segmentIdentityBody = document.getElementById("segmentIdentityBody");
     const segmentCharacteristicsBody = document.getElementById("segmentCharacteristicsBody");
+
+    function displayValue(value) {
+      return value === null || value === undefined || value === "" ? "-" : value;
+    }
 
     function resetOtherFilters(changedSelect) {
       if (!roadSelect || !routeSelect || !stateSelect) return;
@@ -296,9 +294,7 @@
 
           if (summaryPrompt) summaryPrompt.classList.add("is-hidden");
           if (summaryRoute) summaryRoute.textContent = data.summary?.route || "";
-          if (summaryLength) summaryLength.textContent = data.summary?.length || "-";
-          if (summaryStartName) summaryStartName.textContent = data.summary?.start_name || "";
-          if (summaryEndName) summaryEndName.textContent = data.summary?.end_name || "";
+          if (summaryLength) summaryLength.textContent = data.summary?.length || "";
           if (summaryStartPoint) summaryStartPoint.textContent = data.summary?.start_point || "";
           if (summaryEndPoint) summaryEndPoint.textContent = data.summary?.end_point || "";
           if (summaryPassesThrough) summaryPassesThrough.textContent = data.summary?.passes_through || "";
@@ -307,17 +303,16 @@
           if (segmentIdentityBody) {
             segmentIdentityBody.innerHTML = "";
             if (!data.segments?.length) {
-              segmentIdentityBody.innerHTML = '<tr><td colspan="6" class="is-empty">No segments found for the selected route.</td></tr>';
+              segmentIdentityBody.innerHTML = '<tr><td colspan="5" class="is-empty">No segments found for the selected route.</td></tr>';
             } else {
-              data.segments.forEach((seg, idx) => {
+              data.segments.forEach((seg) => {
                 const tr = document.createElement("tr");
                 tr.innerHTML = `
-                  <td>${seg.code ?? "-"}</td>
-                  <td>${seg.state ?? "-"}</td>
-                  <td>-</td>
-                  <td>-</td>
-                  <td>-</td>
-                  <td>${idx + 1}</td>
+                  <td>${displayValue(seg.code)}</td>
+                  <td>${displayValue(seg.state)}</td>
+                  <td>${displayValue(seg.name)}</td>
+                  <td>${displayValue(seg.start_point)}</td>
+                  <td>${displayValue(seg.end_point)}</td>
                 `;
                 segmentIdentityBody.appendChild(tr);
               });
@@ -332,15 +327,15 @@
               data.segments.forEach((seg) => {
                 const tr = document.createElement("tr");
                 tr.innerHTML = `
-                  <td>${seg.code ?? "-"}</td>
-                  <td>-</td>
-                  <td>-</td>
-                  <td>-</td>
-                  <td>-</td>
-                  <td>-</td>
-                  <td>-</td>
-                  <td>-</td>
-                  <td>-</td>
+                  <td>${displayValue(seg.code)}</td>
+                  <td>${displayValue(seg.distance)}</td>
+                  <td>${displayValue(seg.settlement_type)}</td>
+                  <td>${displayValue(seg.carriages)}</td>
+                  <td>${displayValue(seg.lanes)}</td>
+                  <td>${displayValue(seg.pavement_type)}</td>
+                  <td>${displayValue(seg.junctions)}</td>
+                  <td>${displayValue(seg.culverts)}</td>
+                  <td>${displayValue(seg.bridges)}</td>
                 `;
                 segmentCharacteristicsBody.appendChild(tr);
               });
