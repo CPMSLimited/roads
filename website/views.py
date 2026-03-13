@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import json
+import html
 from pathlib import Path
 
 from all_roads.models import (
@@ -38,7 +39,6 @@ from django.utils import timezone
 from .forms import UploadSegmentsForm, UploadSubSegmentsForm
 import csv
 import io
-from markdown_it import MarkdownIt
 from django.utils.safestring import mark_safe
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,6 @@ DOC_FILENAME_ORDER = [
     "OPERATIONS.md",
     "styleguide-ferma-platform.md",
 ]
-DOC_MARKDOWN = MarkdownIt("commonmark", {"html": False, "linkify": True, "typographer": False})
 
 
 def _library_file_type_from_name(filename):
@@ -101,6 +100,98 @@ def _library_file_type_from_name(filename):
 
 def _slugify_doc_name(value):
     return re.sub(r"[^a-z0-9]+", "-", str(value or "").strip().lower()).strip("-")
+
+
+def _render_doc_inline(text):
+    escaped = html.escape(text or "")
+    escaped = re.sub(r"`([^`]+)`", lambda m: f"<code>{m.group(1)}</code>", escaped)
+    escaped = re.sub(
+        r"\[([^\]]+)\]\(([^)]+)\)",
+        lambda m: f'<a href="{html.escape(m.group(2), quote=True)}" target="_blank" rel="noopener noreferrer">{m.group(1)}</a>',
+        escaped,
+    )
+    return escaped
+
+
+def _render_markdown_without_dependency(content):
+    lines = (content or "").splitlines()
+    parts = []
+    in_code_block = False
+    code_lines = []
+    list_type = None
+
+    def close_list():
+        nonlocal list_type
+        if list_type:
+            parts.append(f"</{list_type}>")
+            list_type = None
+
+    def close_code_block():
+        nonlocal in_code_block, code_lines
+        if in_code_block:
+            code_html = html.escape("\n".join(code_lines))
+            parts.append(f"<pre><code>{code_html}</code></pre>")
+            in_code_block = False
+            code_lines = []
+
+    for raw_line in lines:
+        line = raw_line.rstrip("\n")
+        stripped = line.strip()
+
+        if stripped.startswith("```"):
+            close_list()
+            if in_code_block:
+                close_code_block()
+            else:
+                in_code_block = True
+                code_lines = []
+            continue
+
+        if in_code_block:
+            code_lines.append(line)
+            continue
+
+        if not stripped:
+            close_list()
+            continue
+
+        heading_match = re.match(r"^(#{1,6})\s+(.*)$", stripped)
+        if heading_match:
+            close_list()
+            level = len(heading_match.group(1))
+            parts.append(f"<h{level}>{_render_doc_inline(heading_match.group(2))}</h{level}>")
+            continue
+
+        blockquote_match = re.match(r"^>\s?(.*)$", stripped)
+        if blockquote_match:
+            close_list()
+            parts.append(f"<blockquote><p>{_render_doc_inline(blockquote_match.group(1))}</p></blockquote>")
+            continue
+
+        unordered_match = re.match(r"^\s*-\s+(.*)$", line)
+        if unordered_match:
+            if list_type != "ul":
+                close_list()
+                parts.append("<ul>")
+                list_type = "ul"
+            parts.append(f"<li>{_render_doc_inline(unordered_match.group(1))}</li>")
+            continue
+
+        ordered_match = re.match(r"^\s*\d+\.\s+(.*)$", line)
+        if ordered_match:
+            if list_type != "ol":
+                close_list()
+                parts.append("<ol>")
+                list_type = "ol"
+            parts.append(f"<li>{_render_doc_inline(ordered_match.group(1))}</li>")
+            continue
+
+        close_list()
+        parts.append(f"<p>{_render_doc_inline(stripped)}</p>")
+
+    close_list()
+    close_code_block()
+    return "".join(parts)
 
 
 def _load_library_documentation(selected_slug):
@@ -136,7 +227,9 @@ def _load_library_documentation(selected_slug):
     rendered_html = ""
     if selected_item:
         try:
-            rendered_html = mark_safe(DOC_MARKDOWN.render(selected_item["path"].read_text(encoding="utf-8")))
+            rendered_html = mark_safe(
+                _render_markdown_without_dependency(selected_item["path"].read_text(encoding="utf-8"))
+            )
         except Exception as exc:
             rendered_html = mark_safe(f"<p>Could not load documentation. ({exc})</p>")
 

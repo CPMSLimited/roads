@@ -241,8 +241,8 @@ a {
   grid-template-columns: 260px 1fr;
   gap: 18px;
   padding: 12px 18px 18px;
-  height: calc(100vh - 56px);
-  overflow: hidden;
+  min-height: calc(100vh - 56px);
+  overflow: visible;
 }
 
 .library-v2-side {
@@ -250,6 +250,11 @@ a {
   border-radius: 4px;
   padding: 12px;
   min-height: calc(100vh - 150px);
+  position: sticky;
+  top: 84px;
+  align-self: start;
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
 }
 
 .library-v2-search {
@@ -1973,6 +1978,10 @@ a {
 
   .library-v2-side {
     min-height: auto;
+    position: static;
+    top: auto;
+    max-height: none;
+    overflow: visible;
   }
 
   .library-v2-head {
