@@ -62,6 +62,7 @@
     const optionButtons = Array.from(document.querySelectorAll(".library-v2-upload-option"));
     const navLinks = Array.from(document.querySelectorAll(".library-v2-nav > a"));
     const defaultContent = document.getElementById("libraryDefaultContent");
+    const documentationWorkspace = document.getElementById("libraryDocumentationWorkspace");
     const workspace = document.getElementById("libraryUploadWorkspace");
     if (!accordion || !toggle || !optionsWrap || !optionButtons.length || !defaultContent || !workspace) return;
 
@@ -110,6 +111,7 @@
             "</section>" +
           "</div>" +
           "<div class=\"library-upload-guide__notes\">" +
+            "<p><strong>Header row:</strong> the first row of the upload file must contain the column headers.</p>" +
             "<p><strong>Header matching:</strong> case-insensitive. Spaces and underscores are treated as equivalent, and the importer accepts the supported coordinate aliases.</p>" +
             "<p><strong>Route handling:</strong> if the route in the file does not already exist, it is auto-created.</p>" +
             "<p><strong>Overwrite behavior:</strong> this option creates records only. It does not update existing segments.</p>" +
@@ -155,6 +157,7 @@
             "</section>" +
           "</div>" +
           "<div class=\"library-upload-guide__notes\">" +
+            "<p><strong>Header row:</strong> the first row of the upload file must contain the column headers.</p>" +
             "<p><strong>Create behavior:</strong> this option creates new subsegments only. It does not overwrite existing subsegments.</p>" +
             "<p><strong>Positioning:</strong> subsegment ordering is assigned by row order within each segment group in the uploaded file.</p>" +
             "<p><strong>Validation:</strong> if the segment does not exist or required values are invalid, the row is skipped and reported in the upload summary.</p>" +
@@ -199,6 +202,7 @@
             "</section>" +
           "</div>" +
           "<div class=\"library-upload-guide__notes\">" +
+            "<p><strong>Header row:</strong> the first row of the upload file must contain the column headers.</p>" +
             "<p><strong>Matching rule:</strong> the system updates the existing segment with the same <strong>Segment Code</strong>.</p>" +
             "<p><strong>Route rule:</strong> the supplied <strong>Route</strong> must also match the existing segment route. Route changes are not allowed here.</p>" +
             "<p><strong>Blank cells:</strong> blank editable cells leave the current stored value unchanged.</p>" +
@@ -244,6 +248,7 @@
             "</section>" +
           "</div>" +
           "<div class=\"library-upload-guide__notes\">" +
+            "<p><strong>Header row:</strong> the first row of the upload file must contain the column headers.</p>" +
             "<p><strong>Matching rule:</strong> the system updates the existing subsegment with the same <strong>Subsegment Code</strong>.</p>" +
             "<p><strong>Segment rule:</strong> the supplied <strong>Segment</strong> must match the existing parent segment of that subsegment.</p>" +
             "<p><strong>Blank cells:</strong> blank editable cells leave the current stored value unchanged.</p>" +
@@ -378,6 +383,7 @@
       const meta = optionMeta[option] || { label: "Uploads", instructions: "" };
       selectedOption = option;
       defaultContent.hidden = true;
+      if (documentationWorkspace) documentationWorkspace.hidden = true;
       workspace.hidden = false;
       workspaceTitle.textContent = meta.label;
       workspaceInstructions.textContent = meta.instructions;
@@ -405,6 +411,7 @@
     function restoreDefaultView() {
       selectedOption = "";
       defaultContent.hidden = false;
+      if (documentationWorkspace) documentationWorkspace.hidden = true;
       workspace.hidden = true;
       optionButtons.forEach((btn) => btn.classList.remove("is-active"));
       history.replaceState(null, "", window.location.pathname);

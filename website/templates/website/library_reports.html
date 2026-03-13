@@ -14,6 +14,19 @@
             <a class="is-active" href="{% url 'library_reports' %}"><span aria-hidden="true">&#128193;</span> Reports</a>
             <a href="{% url 'library_technical_guide' %}"><span aria-hidden="true">&#128193;</span> Technical Guide</a>
             <a href="{% url 'library_user_guide' %}"><span aria-hidden="true">&#128193;</span> User Guide</a>
+            <details class="library-uploads-accordion" id="libraryDocumentationAccordion" {% if selected_documentation_slug %}open{% endif %}>
+                <summary class="library-v2-upload-toggle {% if selected_documentation_slug %}is-active{% endif %}" id="libraryDocumentationToggle">
+                    <span><span aria-hidden="true">&#128193;</span> Documentation</span>
+                </summary>
+                <div class="library-v2-upload-options" id="libraryDocumentationOptions">
+                    {% for item in documentation_items %}
+                    <a
+                        class="library-v2-upload-option {% if selected_documentation_slug == item.slug %}is-active{% endif %}"
+                        href="?{% if selected_state %}state={{ selected_state|urlencode }}&{% endif %}doc={{ item.slug|urlencode }}"
+                    >{{ item.label }}</a>
+                    {% endfor %}
+                </div>
+            </details>
             <details class="library-uploads-accordion" id="libraryUploadsAccordion">
                 <summary class="library-v2-upload-toggle" id="libraryUploadsToggle">
                     <span><span aria-hidden="true">&#128193;</span> Uploads</span>
@@ -29,7 +42,7 @@
     </aside>
 
     <article class="library-v2-main">
-        <div class="library-v2-default-content" id="libraryDefaultContent">
+        <div class="library-v2-default-content" id="libraryDefaultContent" {% if selected_documentation_slug %}hidden{% endif %}>
         <header class="library-v2-head">
             <h1>All Reports <span>({{ page_obj.paginator.count }})</span></h1>
             <div class="library-v2-filters">
@@ -104,6 +117,16 @@
             </table>
         </div>
         </div>
+        {% if selected_documentation_slug %}
+        <section class="library-doc-workspace" id="libraryDocumentationWorkspace">
+            <header class="library-doc-workspace__head">
+                <h1>{{ selected_documentation_label }}</h1>
+            </header>
+            <article class="library-doc-markdown">
+                {{ selected_documentation_html }}
+            </article>
+        </section>
+        {% endif %}
         {% include "website/includes/library_uploads_workspace.html" %}
     </article>
 </form>

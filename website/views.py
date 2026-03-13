@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import json
+from pathlib import Path
 
 from all_roads.models import (
     Segment,
@@ -37,6 +38,8 @@ from django.utils import timezone
 from .forms import UploadSegmentsForm, UploadSubSegmentsForm
 import csv
 import io
+from markdown_it import MarkdownIt
+from django.utils.safestring import mark_safe
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +55,29 @@ STATUS_BUCKETS = {
 # ---- Pagination options (Point 5) ----
 PAGE_SIZE_DEFAULT = 25
 PAGE_SIZE_OPTIONS = [25, 50, 100]
+
+DOCS_DIR = Path(__file__).resolve().parent.parent / "docs"
+DOC_FILENAME_LABELS = {
+    "INDEX.md": "Index",
+    "PROJECT_STATUS_REPORT.md": "Project Status Report",
+    "FEATURES.md": "Features",
+    "DEPLOYMENT.md": "Deployment",
+    "ARCHITECTURE.md": "Architecture",
+    "API.md": "API",
+    "OPERATIONS.md": "Operations",
+    "styleguide-ferma-platform.md": "Styleguide",
+}
+DOC_FILENAME_ORDER = [
+    "INDEX.md",
+    "PROJECT_STATUS_REPORT.md",
+    "FEATURES.md",
+    "DEPLOYMENT.md",
+    "ARCHITECTURE.md",
+    "API.md",
+    "OPERATIONS.md",
+    "styleguide-ferma-platform.md",
+]
+DOC_MARKDOWN = MarkdownIt("commonmark", {"html": False, "linkify": True, "typographer": False})
 
 
 def _library_file_type_from_name(filename):
@@ -71,6 +97,55 @@ def _library_file_type_from_name(filename):
     if ext in {".geojson", ".json", ".kml", ".kmz", ".shp"}:
         return Library.FILE_TYPE_GEO_DATA
     return Library.FILE_TYPE_OTHER
+
+
+def _slugify_doc_name(value):
+    return re.sub(r"[^a-z0-9]+", "-", str(value or "").strip().lower()).strip("-")
+
+
+def _load_library_documentation(selected_slug):
+    items = []
+    ordered_files = []
+    for filename in DOC_FILENAME_ORDER:
+        path = DOCS_DIR / filename
+        if path.exists() and path.suffix.lower() == ".md":
+            ordered_files.append(path)
+
+    for path in sorted(DOCS_DIR.glob("*.md")):
+        if path not in ordered_files:
+            ordered_files.append(path)
+
+    for path in ordered_files:
+        label = DOC_FILENAME_LABELS.get(path.name, path.stem.replace("_", " ").replace("-", " ").title())
+        slug = _slugify_doc_name(path.stem)
+        items.append(
+            {
+                "slug": slug,
+                "label": label,
+                "path": path,
+            }
+        )
+
+    selected_item = None
+    if selected_slug:
+        selected_item = next((item for item in items if item["slug"] == selected_slug), None)
+
+    if selected_item is None and items:
+        selected_slug = ""
+
+    rendered_html = ""
+    if selected_item:
+        try:
+            rendered_html = mark_safe(DOC_MARKDOWN.render(selected_item["path"].read_text(encoding="utf-8")))
+        except Exception as exc:
+            rendered_html = mark_safe(f"<p>Could not load documentation. ({exc})</p>")
+
+    return {
+        "documentation_items": [{"slug": item["slug"], "label": item["label"]} for item in items],
+        "selected_documentation_slug": selected_item["slug"] if selected_item else "",
+        "selected_documentation_label": selected_item["label"] if selected_item else "",
+        "selected_documentation_html": rendered_html,
+    }
 
 
 def _get_assumed_project_user():
@@ -825,6 +900,7 @@ def library_landing(request, active_section="road_inventory"):
     qd = request.GET.copy()
     qd.pop("page", None)
     filters_qs = qd.urlencode()
+    documentation = _load_library_documentation((request.GET.get("doc") or "").strip())
 
     return render(
         request,
@@ -840,6 +916,7 @@ def library_landing(request, active_section="road_inventory"):
             "selected_route": selected_route,
             "selected_state": selected_state,
             "segment_code_query": segment_code_query,
+            **documentation,
         },
     )
 
@@ -935,6 +1012,7 @@ def library_reports(request):
     qd = request.GET.copy()
     qd.pop("page", None)
     filters_qs = qd.urlencode()
+    documentation = _load_library_documentation((request.GET.get("doc") or "").strip())
 
     return render(
         request,
@@ -947,6 +1025,7 @@ def library_reports(request):
             "states": State.objects.only("state").order_by("state"),
             "selected_state": selected_state,
             "filters_qs": filters_qs,
+            **documentation,
         },
     )
 
@@ -956,6 +1035,7 @@ def _render_library_guide(request, *, entry_type, active_section, search_label, 
     guides_qs = Library.objects.filter(entry_type=entry_type).order_by("-created", "-id")
     if query:
         guides_qs = guides_qs.filter(name__icontains=query)
+    documentation = _load_library_documentation((request.GET.get("doc") or "").strip())
 
     return render(
         request,
@@ -968,6 +1048,7 @@ def _render_library_guide(request, *, entry_type, active_section, search_label, 
             "search_query": query,
             "guide_search_label": search_label,
             "guide_url_name": url_name,
+            **documentation,
         },
     )
 

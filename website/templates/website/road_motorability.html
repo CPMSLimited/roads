@@ -10,9 +10,8 @@
                 <div class="inventory-tools-left">
                     <div class="inventory-refresh-actions">
                         <button type="button" class="btn btn-outline inventory-refresh-btn">Refresh Motorability</button>
+                        <button type="button" class="inventory-refresh-link" id="motorabilityInstructionsToggle" aria-expanded="false" aria-controls="motorabilityInstructionsPanel">Instructions</button>
                     </div>
-                    <p id="motorabilityRefreshFeedback" class="inventory-refresh-feedback" aria-live="polite"></p>
-                    <div id="motorabilityRefreshSummary" class="inventory-refresh-summary" aria-live="polite"></div>
                     <nav id="inventoryInlinePager" class="pager inventory-inline-pager" aria-label="Inventory table pagination">
                         {% if page_obj.has_previous %}
                         <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
@@ -85,6 +84,12 @@
                     </button>
                 </form>
             </div>
+            <div id="motorabilityInstructionsPanel" class="inventory-refresh-instructions" hidden>
+                <p>Refresh Motorability queues the segments currently matched by the active filters for Google-based speed and distance refresh.</p>
+                <p>Only segments not already refreshed in this browser session are queued again. After completion, the map, table, and right-side summary update using the latest saved values.</p>
+            </div>
+            <p id="motorabilityRefreshFeedback" class="inventory-refresh-feedback" aria-live="polite"></p>
+            <div id="motorabilityRefreshSummary" class="inventory-refresh-summary" aria-live="polite"></div>
         </div>
 
         <article class="table-card map-card">
@@ -193,6 +198,8 @@
     const tableView = document.getElementById("inventoryTableView");
     const buttons = document.querySelectorAll(".inventory-view-btn");
     const refreshBtn = document.querySelector(".inventory-refresh-btn");
+    const instructionsToggle = document.getElementById("motorabilityInstructionsToggle");
+    const instructionsPanel = document.getElementById("motorabilityInstructionsPanel");
     const refreshFeedback = document.getElementById("motorabilityRefreshFeedback");
     const refreshSummary = document.getElementById("motorabilityRefreshSummary");
     if (!form || !viewInput || !inlinePager || !mapView || !tableView || !buttons.length) return;
@@ -361,6 +368,13 @@
 
     function setRefreshControlsBusy(isBusy) {
       if (refreshBtn) refreshBtn.disabled = isBusy;
+    }
+
+    function setInstructionsOpen(isOpen) {
+      if (!instructionsToggle || !instructionsPanel) return;
+      instructionsPanel.hidden = !isOpen;
+      instructionsToggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      instructionsToggle.classList.toggle("is-active", isOpen);
     }
 
     async function readJsonSafe(response, fallbackMessage) {
@@ -599,6 +613,13 @@
       });
     }
 
+    if (instructionsToggle) {
+      instructionsToggle.addEventListener("click", () => {
+        const isOpen = instructionsToggle.getAttribute("aria-expanded") === "true";
+        setInstructionsOpen(!isOpen);
+      });
+    }
+
 
     [roadSelect, routeSelect, stateSelect, speedSelect].forEach((sel) => {
       if (!sel) return;
@@ -622,6 +643,7 @@
     });
 
     applyStatusContrast();
+    setInstructionsOpen(false);
     setView(viewInput.value || "map");
     const activeTask = getActiveTask();
     if (activeTask && activeTask.task_id) {
