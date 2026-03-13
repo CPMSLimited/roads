@@ -30,6 +30,7 @@ def refresh_segments_from_google(queryset, sleep_between=0.0):
     """
     api_key = config("GOOGLE_ROUTES_API_KEY")
     updated, failed = 0, 0
+    updated_codes, failed_codes = [], []
 
     for segment in queryset.iterator(chunk_size=200):
         try:
@@ -69,16 +70,24 @@ def refresh_segments_from_google(queryset, sleep_between=0.0):
 
             segment.save()
             updated += 1
+            updated_codes.append(segment.code)
 
         except Exception as e:
             segment.error_processing = True
             segment.save(update_fields=["error_processing"])
             failed += 1
+            failed_codes.append(segment.code)
         finally:
             if sleep_between:
                 time.sleep(sleep_between)
 
-    return {"updated": updated, "failed": failed, "total": queryset.count()}
+    return {
+        "updated": updated,
+        "failed": failed,
+        "total": queryset.count(),
+        "updated_codes": updated_codes,
+        "failed_codes": failed_codes,
+    }
 
 def refresh_subsegments_from_google(queryset, sleep_between=0.0):
     """

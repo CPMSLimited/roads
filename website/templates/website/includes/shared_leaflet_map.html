@@ -22,6 +22,15 @@
     const dataUrl = mapEl.dataset.mapDataUrl;
     let map = null;
     let geojsonLayer = null;
+    const nigeriaBounds = L.latLngBounds([4.2, 2.7], [13.9, 14.7]);
+
+    function hasActiveDataFilters(params) {
+      const filterKeys = ["road", "route", "state", "speed", "segment", "subsegment"];
+      return filterKeys.some((key) => {
+        const value = (params.get(key) || "").trim();
+        return value !== "";
+      });
+    }
 
     function statusToHex(raw) {
       const cleaned = String(raw || "").replace("#", "").trim();
@@ -87,10 +96,15 @@
         }).addTo(map);
 
         const bounds = geojsonLayer.getBounds();
+        const hasFilters = hasActiveDataFilters(params);
         if (bounds.isValid()) {
-          map.fitBounds(bounds, { padding: [20, 20] });
+          if (hasFilters) {
+            map.fitBounds(bounds, { padding: [20, 20] });
+          } else {
+            map.fitBounds(nigeriaBounds, { padding: [20, 20] });
+          }
         } else {
-          map.fitWorld();
+          map.fitBounds(nigeriaBounds, { padding: [20, 20] });
         }
       } catch (error) {
       }

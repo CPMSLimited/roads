@@ -1,0 +1,521 @@
+<section
+  id="libraryUploadWorkspace"
+  class="library-upload-workspace"
+  data-upload-url="{% url 'library_upload_dispatch' %}"
+  hidden
+>
+  <header class="library-upload-workspace__head">
+    <h1 id="libraryUploadWorkspaceTitle">Uploads</h1>
+    <p id="libraryUploadWorkspaceInstructions"></p>
+  </header>
+
+  <section id="libraryUploadGuide" class="library-upload-guide" hidden>
+    <div class="library-upload-guide__content" id="libraryUploadGuideContent"></div>
+    <button
+      id="libraryUploadTemplateDownload"
+      type="button"
+      class="btn btn-outline"
+      hidden
+    >
+      Download template
+    </button>
+  </section>
+
+  <div class="library-upload-workspace__form">
+    <label class="library-upload-workspace__field">
+      <span>Select file (.xls, .xlsx, .csv)</span>
+      <input id="libraryUploadFileInput" type="file" accept=".xls,.xlsx,.csv">
+    </label>
+    <button id="libraryUploadBeginButton" type="button" class="btn btn-solid">Begin Upload</button>
+  </div>
+
+  <div id="libraryUploadProgress" class="library-upload-progress" hidden>
+    <p>Uploading, please wait...</p>
+    <div class="library-upload-progress__track">
+      <div class="library-upload-progress__bar"></div>
+    </div>
+  </div>
+
+  <section id="libraryUploadSummary" class="library-upload-summary" hidden>
+    <h2>Upload summary</h2>
+    <div id="libraryUploadSummaryBody"></div>
+    <button
+      id="libraryUploadDownloadErrors"
+      type="button"
+      class="btn btn-outline"
+      style="margin-top:10px;"
+      hidden
+    >
+      Download error CSV
+    </button>
+  </section>
+</section>
+
+<script>
+  (function () {
+    if (window.__libraryUploadsWorkspaceBound) return;
+    window.__libraryUploadsWorkspaceBound = true;
+
+    const accordion = document.getElementById("libraryUploadsAccordion");
+    const toggle = document.getElementById("libraryUploadsToggle");
+    const optionsWrap = document.getElementById("libraryUploadsOptions");
+    const optionButtons = Array.from(document.querySelectorAll(".library-v2-upload-option"));
+    const navLinks = Array.from(document.querySelectorAll(".library-v2-nav > a"));
+    const defaultContent = document.getElementById("libraryDefaultContent");
+    const workspace = document.getElementById("libraryUploadWorkspace");
+    if (!accordion || !toggle || !optionsWrap || !optionButtons.length || !defaultContent || !workspace) return;
+
+    const uploadUrl = workspace.dataset.uploadUrl;
+    const workspaceTitle = document.getElementById("libraryUploadWorkspaceTitle");
+    const workspaceInstructions = document.getElementById("libraryUploadWorkspaceInstructions");
+    const fileInput = document.getElementById("libraryUploadFileInput");
+    const beginButton = document.getElementById("libraryUploadBeginButton");
+    const progressBox = document.getElementById("libraryUploadProgress");
+    const summaryBox = document.getElementById("libraryUploadSummary");
+    const summaryBody = document.getElementById("libraryUploadSummaryBody");
+    const downloadErrorsBtn = document.getElementById("libraryUploadDownloadErrors");
+    const guideBox = document.getElementById("libraryUploadGuide");
+    const guideContent = document.getElementById("libraryUploadGuideContent");
+    const templateDownloadBtn = document.getElementById("libraryUploadTemplateDownload");
+
+    const optionMeta = {
+      new_segments: {
+        label: "Upload new segments",
+        instructions:
+          "Use this to create new segment records from an Excel/CSV file. Required headers: Route and Segment Code.",
+        guideHtml:
+          "<div class=\"library-upload-guide__hero\">" +
+            "<div>" +
+              "<h2>New segments guide</h2>" +
+              "<p>Create new segment records from a spreadsheet without overwriting existing segment data.</p>" +
+            "</div>" +
+            "<div class=\"library-upload-guide__badges\">" +
+              "<span class=\"library-upload-guide__badge\">Create only</span>" +
+              "<span class=\"library-upload-guide__badge\">Route auto-create</span>" +
+              "<span class=\"library-upload-guide__badge\">Extra columns allowed</span>" +
+            "</div>" +
+          "</div>" +
+          "<div class=\"library-upload-guide__grid\">" +
+            "<section class=\"library-upload-guide__card\">" +
+              "<h3>Accepted files</h3>" +
+              "<p>.xls, .xlsx, .csv</p>" +
+            "</section>" +
+            "<section class=\"library-upload-guide__card\">" +
+              "<h3>Compulsory columns</h3>" +
+              "<ul><li>Route</li><li>Segment Code</li></ul>" +
+            "</section>" +
+            "<section class=\"library-upload-guide__card library-upload-guide__card--wide\">" +
+              "<h3>Supported columns</h3>" +
+              "<ul><li>Route</li><li>Segment Code</li><li>State</li><li>Segment Name</li><li>Start Lat</li><li>Start Lon</li><li>End Lat</li><li>End Lon</li><li>Index</li></ul>" +
+            "</section>" +
+          "</div>" +
+          "<div class=\"library-upload-guide__notes\">" +
+            "<p><strong>Header matching:</strong> case-insensitive. Spaces and underscores are treated as equivalent, and the importer accepts the supported coordinate aliases.</p>" +
+            "<p><strong>Route handling:</strong> if the route in the file does not already exist, it is auto-created.</p>" +
+            "<p><strong>Overwrite behavior:</strong> this option creates records only. It does not update existing segments.</p>" +
+            "<p><strong>Additional columns:</strong> the sheet may contain extra columns. Only the supported fields are used.</p>" +
+            "<p><strong>Validation:</strong> rows with invalid required data are skipped and reported in the upload summary.</p>" +
+          "</div>",
+        template: {
+          filename: "new_segments_template.csv",
+          rows: [
+            ["Route", "Segment Code", "State", "Segment Name", "Start Lat", "Start Lon", "End Lat", "End Lon", "Index"],
+            ["A1", "A1LAG1", "Lagos", "Apapa - Costain", "6.449800", "3.391200", "6.470100", "3.406500", "1"]
+          ]
+        }
+      },
+      new_1km_subsegments: {
+        label: "Upload new 1km subsegments",
+        instructions:
+          "Use this to create new subsegments. Required headers: Segment, Length, X_Start, Y_Start, X_End, Y_End.",
+        guideHtml:
+          "<div class=\"library-upload-guide__hero\">" +
+            "<div>" +
+              "<h2>New 1km subsegments guide</h2>" +
+              "<p>Create new subsegment records from a spreadsheet without updating existing subsegments.</p>" +
+            "</div>" +
+            "<div class=\"library-upload-guide__badges\">" +
+              "<span class=\"library-upload-guide__badge\">Create only</span>" +
+              "<span class=\"library-upload-guide__badge\">Segment must exist</span>" +
+              "<span class=\"library-upload-guide__badge\">Row-order position</span>" +
+            "</div>" +
+          "</div>" +
+          "<div class=\"library-upload-guide__grid\">" +
+            "<section class=\"library-upload-guide__card\">" +
+              "<h3>Accepted files</h3>" +
+              "<p>.xls, .xlsx, .csv</p>" +
+            "</section>" +
+            "<section class=\"library-upload-guide__card\">" +
+              "<h3>Compulsory columns</h3>" +
+              "<ul><li>Segment</li><li>Length</li><li>X_Start</li><li>Y_Start</li><li>X_End</li><li>Y_End</li></ul>" +
+            "</section>" +
+            "<section class=\"library-upload-guide__card library-upload-guide__card--wide\">" +
+              "<h3>Matching rule</h3>" +
+              "<p>Each row is created under the existing segment identified by the <strong>Segment</strong> value.</p>" +
+            "</section>" +
+          "</div>" +
+          "<div class=\"library-upload-guide__notes\">" +
+            "<p><strong>Create behavior:</strong> this option creates new subsegments only. It does not overwrite existing subsegments.</p>" +
+            "<p><strong>Positioning:</strong> subsegment ordering is assigned by row order within each segment group in the uploaded file.</p>" +
+            "<p><strong>Validation:</strong> if the segment does not exist or required values are invalid, the row is skipped and reported in the upload summary.</p>" +
+            "<p><strong>Additional columns:</strong> extra columns may exist on the sheet. Only the supported fields are used.</p>" +
+          "</div>",
+        template: {
+          filename: "new_subsegments_template.csv",
+          rows: [
+            ["Segment", "Length", "X_Start", "Y_Start", "X_End", "Y_End"],
+            ["A1LAG1", "1.00", "3.391200", "6.449800", "3.399100", "6.456300"]
+          ]
+        }
+      },
+      edit_segments: {
+        label: "Edit segments",
+        instructions:
+          "Use this to update existing segments only (no creates). Route and Segment Code must match an existing record; blank cells keep existing values.",
+        guideHtml:
+          "<div class=\"library-upload-guide__hero\">" +
+            "<div>" +
+              "<h2>Edit segments guide</h2>" +
+              "<p>Update existing segment records from a spreadsheet without creating new ones.</p>" +
+            "</div>" +
+            "<div class=\"library-upload-guide__badges\">" +
+              "<span class=\"library-upload-guide__badge\">Edit only</span>" +
+              "<span class=\"library-upload-guide__badge\">Blank cells keep values</span>" +
+              "<span class=\"library-upload-guide__badge\">Route must match</span>" +
+            "</div>" +
+          "</div>" +
+          "<div class=\"library-upload-guide__grid\">" +
+            "<section class=\"library-upload-guide__card\">" +
+              "<h3>Accepted files</h3>" +
+              "<p>.xls, .xlsx, .csv</p>" +
+            "</section>" +
+            "<section class=\"library-upload-guide__card\">" +
+              "<h3>Compulsory columns</h3>" +
+              "<ul><li>Route</li><li>Segment Code</li></ul>" +
+            "</section>" +
+            "<section class=\"library-upload-guide__card library-upload-guide__card--wide\">" +
+              "<h3>Editable columns</h3>" +
+              "<ul><li>Route</li><li>Segment Code</li><li>State</li><li>Segment Name</li><li>Start Lat</li><li>Start Lon</li><li>End Lat</li><li>End Lon</li><li>Index</li></ul>" +
+            "</section>" +
+          "</div>" +
+          "<div class=\"library-upload-guide__notes\">" +
+            "<p><strong>Matching rule:</strong> the system updates the existing segment with the same <strong>Segment Code</strong>.</p>" +
+            "<p><strong>Route rule:</strong> the supplied <strong>Route</strong> must also match the existing segment route. Route changes are not allowed here.</p>" +
+            "<p><strong>Blank cells:</strong> blank editable cells leave the current stored value unchanged.</p>" +
+            "<p><strong>Validation:</strong> if the segment does not exist, the route does not match, or the data is invalid, the row is skipped and reported.</p>" +
+            "<p><strong>Additional columns:</strong> extra columns may exist on the sheet. Only the supported fields are used.</p>" +
+          "</div>",
+        template: {
+          filename: "edit_segments_template.csv",
+          rows: [
+            ["Route", "Segment Code", "State", "Segment Name", "Start Lat", "Start Lon", "End Lat", "End Lon", "Index"],
+            ["A1", "A1LAG1", "Lagos", "Apapa - Costain Revised", "", "", "6.470100", "3.406500", "1"]
+          ]
+        }
+      },
+      edit_subsegments: {
+        label: "Edit subsegments",
+        instructions:
+          "Use this to update existing subsegments only (no creates). Required headers include Segment and Subsegment Code; blank cells keep existing values.",
+        guideHtml:
+          "<div class=\"library-upload-guide__hero\">" +
+            "<div>" +
+              "<h2>Edit subsegments guide</h2>" +
+              "<p>Update existing subsegment records from a spreadsheet without creating new ones.</p>" +
+            "</div>" +
+            "<div class=\"library-upload-guide__badges\">" +
+              "<span class=\"library-upload-guide__badge\">Edit only</span>" +
+              "<span class=\"library-upload-guide__badge\">Blank cells keep values</span>" +
+              "<span class=\"library-upload-guide__badge\">Segment must match</span>" +
+            "</div>" +
+          "</div>" +
+          "<div class=\"library-upload-guide__grid\">" +
+            "<section class=\"library-upload-guide__card\">" +
+              "<h3>Accepted files</h3>" +
+              "<p>.xls, .xlsx, .csv</p>" +
+            "</section>" +
+            "<section class=\"library-upload-guide__card\">" +
+              "<h3>Compulsory columns</h3>" +
+              "<ul><li>Segment</li><li>Subsegment Code</li></ul>" +
+            "</section>" +
+            "<section class=\"library-upload-guide__card library-upload-guide__card--wide\">" +
+              "<h3>Editable columns</h3>" +
+              "<ul><li>Segment</li><li>Subsegment Code</li><li>Length</li><li>X_Start</li><li>Y_Start</li><li>X_End</li><li>Y_End</li></ul>" +
+            "</section>" +
+          "</div>" +
+          "<div class=\"library-upload-guide__notes\">" +
+            "<p><strong>Matching rule:</strong> the system updates the existing subsegment with the same <strong>Subsegment Code</strong>.</p>" +
+            "<p><strong>Segment rule:</strong> the supplied <strong>Segment</strong> must match the existing parent segment of that subsegment.</p>" +
+            "<p><strong>Blank cells:</strong> blank editable cells leave the current stored value unchanged.</p>" +
+            "<p><strong>Validation:</strong> if the subsegment does not exist, the segment does not match, or the data is invalid, the row is skipped and reported.</p>" +
+            "<p><strong>Additional columns:</strong> extra columns may exist on the sheet. Only the supported fields are used.</p>" +
+          "</div>",
+        template: {
+          filename: "edit_subsegments_template.csv",
+          rows: [
+            ["Segment", "Subsegment Code", "Length", "X_Start", "Y_Start", "X_End", "Y_End"],
+            ["A1LAG1", "A1LAG1-01", "1.00", "3.391200", "6.449800", "3.399100", "6.456300"]
+          ]
+        }
+      }
+    };
+
+    let selectedOption = "";
+    let latestSummary = null;
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function getCsrfToken() {
+      const cookies = document.cookie ? document.cookie.split(";") : [];
+      for (let i = 0; i < cookies.length; i += 1) {
+        const cookie = cookies[i].trim();
+        if (cookie.startsWith("csrftoken=")) {
+          return decodeURIComponent(cookie.substring("csrftoken=".length));
+        }
+      }
+      return "";
+    }
+
+    function setAccordionOpen(open) {
+      accordion.open = !!open;
+      toggle.classList.toggle("is-active", !!open);
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+
+    function clearSummary() {
+      if (!summaryBody || !summaryBox) return;
+      summaryBody.innerHTML = "";
+      summaryBox.hidden = true;
+      latestSummary = null;
+      if (downloadErrorsBtn) {
+        downloadErrorsBtn.hidden = true;
+      }
+    }
+
+    function showSummary(html, isError) {
+      if (!summaryBody || !summaryBox) return;
+      summaryBody.innerHTML = html;
+      summaryBody.classList.toggle("is-error", !!isError);
+      summaryBox.hidden = false;
+      if (downloadErrorsBtn) {
+        const hasIssues = !!latestSummary && (
+          (Array.isArray(latestSummary.errors) && latestSummary.errors.length > 0) ||
+          (Array.isArray(latestSummary.skipped_details) && latestSummary.skipped_details.length > 0)
+        );
+        downloadErrorsBtn.hidden = !hasIssues;
+      }
+    }
+
+    function csvEscape(value) {
+      const raw = String(value || "");
+      const escaped = raw.replace(/"/g, "\"\"");
+      return "\"" + escaped + "\"";
+    }
+
+    function buildCsv(rows) {
+      return (rows || []).map((row) => row.map(csvEscape).join(",")).join("\n");
+    }
+
+    function downloadTextFile(filename, content, mimeType) {
+      const blob = new Blob([content], { type: mimeType || "text/plain;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    function buildErrorCsv(summary) {
+      const rows = [["Type", "Message"]];
+      const skipped = Array.isArray(summary?.skipped_details) ? summary.skipped_details : [];
+      const errors = Array.isArray(summary?.errors) ? summary.errors : [];
+      skipped.forEach((item) => rows.push(["Skipped", item]));
+      errors.forEach((item) => rows.push(["Error", item]));
+      if (rows.length === 1) {
+        rows.push(["Info", "No skipped rows or errors found."]);
+      }
+      return rows.map((r) => r.map(csvEscape).join(",")).join("\n");
+    }
+
+    function listHtml(items) {
+      if (!Array.isArray(items) || !items.length) return "<p>-</p>";
+      return (
+        "<ul>" +
+        items.map((item) => "<li>" + escapeHtml(item) + "</li>").join("") +
+        "</ul>"
+      );
+    }
+
+    function summaryHtml(summary) {
+      const created = summary.created || 0;
+      const updated = summary.updated || 0;
+      const skipped = summary.skipped || 0;
+      const errors = Array.isArray(summary.errors) ? summary.errors.length : 0;
+      const createdDetails = Array.isArray(summary.created_details) ? summary.created_details : [];
+      const updatedDetails = Array.isArray(summary.updated_details) ? summary.updated_details : [];
+      const skippedDetails = Array.isArray(summary.skipped_details) ? summary.skipped_details : [];
+      const errorDetails = Array.isArray(summary.errors) ? summary.errors : [];
+      const successTotal = created + updated;
+      return (
+        "<p><strong>Created:</strong> " + created + " | <strong>Updated:</strong> " + updated + " | <strong>Skipped:</strong> " + skipped + " | <strong>Errors:</strong> " + errors + "</p>" +
+        "<details><summary>Successfully processed (" + successTotal + ")</summary>" + listHtml(createdDetails.concat(updatedDetails)) + "</details>" +
+        "<details><summary>Skipped details (" + skippedDetails.length + ")</summary>" + listHtml(skippedDetails) + "</details>" +
+        "<details><summary>Error details (" + errorDetails.length + ")</summary>" + listHtml(errorDetails) + "</details>"
+      );
+    }
+
+    function showWorkspace(option) {
+      const meta = optionMeta[option] || { label: "Uploads", instructions: "" };
+      selectedOption = option;
+      defaultContent.hidden = true;
+      workspace.hidden = false;
+      workspaceTitle.textContent = meta.label;
+      workspaceInstructions.textContent = meta.instructions;
+      if (guideBox && guideContent) {
+        if (meta.guideHtml) {
+          guideContent.innerHTML = meta.guideHtml;
+          guideBox.hidden = false;
+        } else {
+          guideContent.innerHTML = "";
+          guideBox.hidden = true;
+        }
+      }
+      if (templateDownloadBtn) {
+        templateDownloadBtn.hidden = !meta.template;
+      }
+      optionButtons.forEach((btn) => {
+        btn.classList.toggle("is-active", btn.dataset.uploadOption === option);
+      });
+      navLinks.forEach((link) => link.classList.remove("is-active"));
+      clearSummary();
+      if (fileInput) fileInput.value = "";
+      history.replaceState(null, "", window.location.pathname + "?upload_option=" + encodeURIComponent(option));
+    }
+
+    function restoreDefaultView() {
+      selectedOption = "";
+      defaultContent.hidden = false;
+      workspace.hidden = true;
+      optionButtons.forEach((btn) => btn.classList.remove("is-active"));
+      history.replaceState(null, "", window.location.pathname);
+    }
+
+    toggle.addEventListener("click", function () {
+      setTimeout(function () {
+        setAccordionOpen(accordion.open);
+      }, 0);
+    });
+
+    optionButtons.forEach((btn) => {
+      btn.addEventListener("click", function () {
+        setAccordionOpen(true);
+        showWorkspace(btn.dataset.uploadOption);
+      });
+    });
+
+    if (templateDownloadBtn) {
+      templateDownloadBtn.addEventListener("click", function () {
+        const meta = optionMeta[selectedOption] || {};
+        const template = meta.template;
+        if (!template || !Array.isArray(template.rows) || !template.rows.length) return;
+        downloadTextFile(template.filename, buildCsv(template.rows), "text/csv;charset=utf-8;");
+      });
+    }
+
+    beginButton.addEventListener("click", function () {
+      if (!selectedOption) {
+        showSummary("<p>Select an upload option first.</p>", true);
+        return;
+      }
+      const file = fileInput && fileInput.files && fileInput.files[0];
+      if (!file) {
+        showSummary("<p>Select a file first.</p>", true);
+        return;
+      }
+      if (!uploadUrl) {
+        showSummary("<p>Upload endpoint is not configured.</p>", true);
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("upload_option", selectedOption);
+      formData.append("upload_file", file);
+
+      progressBox.hidden = false;
+      beginButton.disabled = true;
+      showSummary("<p>Upload started...</p>", false);
+
+      fetch(uploadUrl, {
+        method: "POST",
+        headers: {
+          "X-CSRFToken": getCsrfToken(),
+        },
+        body: formData,
+      })
+        .then(async function (response) {
+          const data = await response.json();
+          if (!response.ok || !data.ok) {
+            throw new Error(data.message || "Upload failed.");
+          }
+          latestSummary = data.summary || {};
+          showSummary(summaryHtml(data.summary || {}), false);
+        })
+        .catch(function (error) {
+          latestSummary = {
+            skipped_details: [],
+            errors: [error.message || "Upload failed."],
+          };
+          showSummary("<p>" + escapeHtml(error.message || "Upload failed.") + "</p>", true);
+        })
+        .finally(function () {
+          progressBox.hidden = true;
+          beginButton.disabled = false;
+        });
+    });
+
+    if (downloadErrorsBtn) {
+      downloadErrorsBtn.addEventListener("click", function () {
+        if (!latestSummary) return;
+        const csvText = buildErrorCsv(latestSummary);
+        const blob = new Blob([csvText], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        const now = new Date();
+        const stamp = [
+          now.getFullYear(),
+          String(now.getMonth() + 1).padStart(2, "0"),
+          String(now.getDate()).padStart(2, "0"),
+          String(now.getHours()).padStart(2, "0"),
+          String(now.getMinutes()).padStart(2, "0"),
+          String(now.getSeconds()).padStart(2, "0")
+        ].join("");
+        const optionSlug = (selectedOption || "upload").replace(/[^a-z0-9_]+/gi, "_");
+        anchor.href = url;
+        anchor.download = "upload_errors_" + optionSlug + "_" + stamp + ".csv";
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        URL.revokeObjectURL(url);
+      });
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const initialOption = params.get("upload_option");
+    if (initialOption && optionMeta[initialOption]) {
+      setAccordionOpen(true);
+      showWorkspace(initialOption);
+    } else {
+      setAccordionOpen(false);
+    }
+  })();
+</script>

@@ -174,6 +174,7 @@
     const chartCanvas = document.getElementById("inventorySpeedChart");
     const chartPrompt = document.getElementById("inventorySpeedChartPrompt");
     const selectedSubsegmentMap = new Map();
+    const refreshedSegments = new Set();
     let subsegmentChart = null;
     if (!sideForm || !mapView || !rightMapPanel) return;
 
@@ -540,14 +541,25 @@
       renderSubsegmentChart(rows, rows[0].segment_code || "Selected segment");
     }
 
-    async function loadSubsegmentsForSegment(segmentCode) {
+    async function loadSubsegmentsForSegment(segmentCode, forceRefresh) {
       if (!segmentCode) return;
-      setSubsegmentMessage(`Loading subsegments for ${segmentCode}...`);
+      if (forceRefresh) {
+        setSubsegmentMessage(`Refreshing subsegments for ${segmentCode} from Google...`);
+      } else {
+        setSubsegmentMessage(`Loading subsegments for ${segmentCode}...`);
+      }
       if (chartTitle) chartTitle.textContent = `Speed vs Position — ${segmentCode}`;
-      setChartPrompt(`Loading graph for "${segmentCode}"...`);
+      if (forceRefresh) {
+        setChartPrompt(`Fetching latest speed data from Google for "${segmentCode}"...`);
+      } else {
+        setChartPrompt(`Loading graph for "${segmentCode}"...`);
+      }
       try {
         const url = new URL('{% url "road_condition_subsegments" %}', window.location.origin);
         url.searchParams.set("segment", segmentCode);
+        if (forceRefresh) {
+          url.searchParams.set("refresh", "1");
+        }
         const resp = await fetch(url.toString(), { headers: { "X-Requested-With": "XMLHttpRequest" } });
         const data = await resp.json();
         if (!resp.ok || data.ok === false) {
@@ -564,7 +576,11 @@
       row.addEventListener("click", () => {
         const segmentCode = row.dataset.segmentCode || "";
         markActiveSegmentRow(segmentCode);
-        loadSubsegmentsForSegment(segmentCode);
+        const shouldRefresh = !refreshedSegments.has(segmentCode);
+        if (shouldRefresh) {
+          refreshedSegments.add(segmentCode);
+        }
+        loadSubsegmentsForSegment(segmentCode, shouldRefresh);
       });
     });
 
@@ -574,7 +590,7 @@
     clearSubsegmentChart("Select a segment on the right table to view the graph.");
     const defaultSegmentCode = "A1LAS1";
     markActiveSegmentRow(defaultSegmentCode);
-    loadSubsegmentsForSegment(defaultSegmentCode);
+    loadSubsegmentsForSegment(defaultSegmentCode, false);
   })();
 </script>
 {% endblock %}

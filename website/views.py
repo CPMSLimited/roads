@@ -2,6 +2,8 @@
 
 import logging
 import os
+import re
+import json
 
 from all_roads.models import (
     Segment,
@@ -18,7 +20,8 @@ from all_roads.models import (
     PhysicalInspectionCharacteristic,
     Library,
 )
-from all_roads.services import refresh_segment_and_subsegments
+from all_roads.services import refresh_segment_and_subsegments, refresh_subsegments_from_google
+from all_roads.tasks import refresh_segments_task
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 from django.contrib.auth import get_user_model
@@ -553,6 +556,36 @@ def _filtered_segments_for_road_motorability(request):
     }
 
 
+def _apply_motorability_filters(qs, selected_road="", selected_route="", selected_state="", selected_speed=""):
+    selected_road = selected_road or ""
+    selected_route = selected_route or ""
+    selected_state = (selected_state or "").strip()
+    selected_speed = (selected_speed or "").strip().lower()
+
+    if selected_road:
+        selected_route = ""
+        selected_state = ""
+        selected_speed = ""
+        qs = qs.filter(route__road__road=selected_road)
+    elif selected_route:
+        selected_road = ""
+        selected_state = ""
+        selected_speed = ""
+        qs = qs.filter(route__route=selected_route)
+    elif selected_state:
+        selected_road = ""
+        selected_route = ""
+        selected_speed = ""
+        qs = qs.filter(state__iexact=selected_state)
+    elif selected_speed in STATUS_BUCKETS:
+        selected_road = ""
+        selected_route = ""
+        selected_state = ""
+        qs = qs.filter(status__in=STATUS_BUCKETS[selected_speed]["codes"])
+
+    return qs, selected_road, selected_route, selected_state, selected_speed
+
+
 def _build_road_motorability_context(request):
     filtered = _filtered_segments_for_road_motorability(request)
     qs = filtered["qs"]
@@ -585,6 +618,25 @@ def _build_road_motorability_context(request):
     all_rows = list(qs.order_by("route__route", "code")[:12])
     focus_segment = all_rows[0] if all_rows else None
     unique_route_count = qs.values("route_id").distinct().count()
+    has_rows = qs.exists()
+
+    def _sum_length_or_dash(base_qs):
+        total = base_qs.aggregate(total_length=Sum("distance")).get("total_length")
+        return _format_km_total(total) if total is not None else "-"
+
+    selected_total_length = _sum_length_or_dash(qs) if has_rows else "-"
+    good_total_length = (
+        _sum_length_or_dash(qs.filter(status__in=STATUS_BUCKETS["good"]["codes"])) if has_rows else "-"
+    )
+    tolerable_total_length = (
+        _sum_length_or_dash(qs.filter(status__in=STATUS_BUCKETS["tolerable"]["codes"])) if has_rows else "-"
+    )
+    intolerable_total_length = (
+        _sum_length_or_dash(qs.filter(status__in=STATUS_BUCKETS["intolerable"]["codes"])) if has_rows else "-"
+    )
+    failed_total_length = (
+        _sum_length_or_dash(qs.filter(status__in=STATUS_BUCKETS["failed"]["codes"])) if has_rows else "-"
+    )
     active_defects_qs = (
         Defect.objects.select_related("subsegment__segment")
         .filter(subsegment__segment__in=qs)
@@ -624,6 +676,13 @@ def _build_road_motorability_context(request):
         "focus_segment": focus_segment,
         "report_rows": all_rows[:3],
         "investigation_rows": investigation_rows,
+        "summary_total_length_selected": selected_total_length,
+        "summary_number_routes": unique_route_count if has_rows else "-",
+        "summary_number_segments": metrics["total_segments"] if has_rows else "-",
+        "summary_total_length_good": good_total_length,
+        "summary_total_length_tolerable": tolerable_total_length,
+        "summary_total_length_intolerable": intolerable_total_length,
+        "summary_total_length_failed": failed_total_length,
         **metrics,
     }
 
@@ -631,6 +690,76 @@ def _build_road_motorability_context(request):
 def road_motorability(request):
     context = _build_road_motorability_context(request)
     return render(request, "website/road_motorability.html", context)
+
+
+def road_motorability_queue_refresh(request):
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "message": "POST method required."}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except Exception:
+        payload = {}
+
+    selected_road = (payload.get("road") or "").strip()
+    selected_route = (payload.get("route") or "").strip()
+    selected_state = (payload.get("state") or "").strip()
+    selected_speed = (payload.get("speed") or "").strip().lower()
+    refreshed_codes = payload.get("refreshed_codes") or []
+    if not isinstance(refreshed_codes, list):
+        refreshed_codes = []
+    refreshed_set = {str(code).strip().upper() for code in refreshed_codes if str(code).strip()}
+
+    base_qs = Segment.objects.all()
+    filtered_qs, _, _, _, _ = _apply_motorability_filters(
+        base_qs,
+        selected_road=selected_road,
+        selected_route=selected_route,
+        selected_state=selected_state,
+        selected_speed=selected_speed,
+    )
+    all_codes = [str(code).strip().upper() for code in filtered_qs.values_list("code", flat=True) if str(code).strip()]
+    already_refreshed_codes = [code for code in all_codes if code in refreshed_set]
+    to_queue = [code for code in all_codes if code not in refreshed_set]
+
+    if not to_queue:
+        return JsonResponse(
+            {
+                "ok": True,
+                "queued": False,
+                "task_id": "",
+                "queued_count": 0,
+                "total_filtered": len(all_codes),
+                "already_refreshed": len(already_refreshed_codes),
+                "already_refreshed_codes": already_refreshed_codes,
+                "queued_codes": [],
+                "message": "No eligible segments to refresh for current filters.",
+            }
+        )
+
+    try:
+        async_result = refresh_segments_task.delay(codes=to_queue)
+    except Exception as exc:
+        return JsonResponse(
+            {
+                "ok": False,
+                "message": f"Could not queue motorability refresh. ({exc})",
+            },
+            status=500,
+        )
+    return JsonResponse(
+        {
+            "ok": True,
+            "queued": True,
+            "task_id": str(async_result.id),
+            "queued_count": len(to_queue),
+            "total_filtered": len(all_codes),
+            "already_refreshed": len(already_refreshed_codes),
+            "already_refreshed_codes": already_refreshed_codes,
+            "queued_codes": to_queue,
+            "message": f"Queued {len(to_queue)} segments for refresh.",
+        }
+    )
 
 def _segments_geojson_response(segments):
     features = []
@@ -2243,8 +2372,7 @@ def _road_code_from_route(route_code: str) -> str:
     return "F"
 
 REQUIRED_HEADERS = [
-    "ROUTE", "SEGMENT CODE", "STATE", "SEGMENT NAME",
-    "START_LAT", "START_LON", "END_LAT", "END_LON"
+    "ROUTE", "SEGMENT CODE"
 ]
 
 SUBSEG_REQUIRED_HEADERS = ["X_START", "Y_START", "X_END", "Y_END"]
@@ -2265,6 +2393,66 @@ def _normalize_headers(headers):
         norm.append(h)
     return norm
 
+
+def _normalize_header_token(value):
+    value = (value or "").strip().lower()
+    value = value.replace("\ufeff", "")
+    value = value.replace("_", " ").replace("-", " ")
+    value = re.sub(r"[^a-z0-9\s]", " ", value)
+    value = re.sub(r"\s+", " ", value)
+    return value
+
+
+SEGMENT_UPLOAD_HEADER_ALIASES = {
+    "ROUTE": {"route"},
+    "SEGMENT CODE": {"segment code"},
+    "STATE": {"state"},
+    "SEGMENT NAME": {"segment name"},
+    "START_LAT": {"start lat", "eastings"},
+    "START_LON": {"start lon", "northings"},
+    "END_LAT": {"end lat", "eastings 2"},
+    "END_LON": {"end lon", "northings 2"},
+    "INDEX": {"index"},
+}
+
+SUBSEGMENT_UPLOAD_REQUIRED_HEADERS = [
+    "SEGMENT",
+    "LENGTH",
+    "X_START",
+    "Y_START",
+    "X_END",
+    "Y_END",
+]
+
+SUBSEGMENT_UPLOAD_HEADER_ALIASES = {
+    "SEGMENT": {"segment"},
+    "LENGTH": {"length"},
+    "X_START": {"x start", "x_start", "x-start", "xstart"},
+    "Y_START": {"y start", "y_start", "y-start", "ystart"},
+    "X_END": {"x end", "x_end", "x-end", "xend"},
+    "Y_END": {"y end", "y_end", "y-end", "yend"},
+}
+
+EDIT_SUBSEGMENT_REQUIRED_HEADERS = [
+    "SEGMENT",
+    "SUBSEGMENT_CODE",
+    "LENGTH",
+    "X_START",
+    "Y_START",
+    "X_END",
+    "Y_END",
+]
+
+EDIT_SUBSEGMENT_HEADER_ALIASES = {
+    "SEGMENT": {"segment"},
+    "SUBSEGMENT_CODE": {"subsegment code", "subsegment_code", "subsegment", "sub segment code", "code"},
+    "LENGTH": {"length"},
+    "X_START": {"x start", "x_start", "x-start", "xstart"},
+    "Y_START": {"y start", "y_start", "y-start", "ystart"},
+    "X_END": {"x end", "x_end", "x-end", "xend"},
+    "Y_END": {"y end", "y_end", "y-end", "yend"},
+}
+
 def _is_blank_row(cells):
     if not cells:
         return True
@@ -2279,109 +2467,740 @@ def _is_blank_row(cells):
 
 def _read_rows(fileobj, filename):
     """
-    Yield dicts keyed by REQUIRED_HEADERS from CSV/XLSX/XLS.
+    Yield dicts keyed by canonical segment-upload headers from CSV/XLSX/XLS.
+    Required headers: ROUTE, SEGMENT CODE.
     """
-    name = filename.lower()
-    if name.endswith(".csv"):
-        data = fileobj.read().decode("utf-8", errors="ignore")
-        reader = csv.reader(io.StringIO(data))
-        rows = list(reader)
-        if not rows:
-            return [], ["Empty CSV"]
-        headers = _normalize_headers(rows[0])
-        required_norm = _normalize_headers(REQUIRED_HEADERS)
-        norm_to_canon = dict(zip(required_norm, REQUIRED_HEADERS))
+    name = (filename or "").lower()
 
-        idx = {norm_to_canon[h]: headers.index(h) for h in required_norm if h in headers}
-        missing = [norm_to_canon[h] for h in required_norm if h not in headers]
+    def _sniff_csv_dialect(data):
+        sample = data[:4096]
+        try:
+            return csv.Sniffer().sniff(sample, delimiters=",;\t|")
+        except Exception:
+            return csv.excel
+
+    def _build_from_rows(rows):
+        if not rows:
+            return [], ["The spreadsheet is empty."]
+
+        header_map = {}
+        for idx, raw_header in enumerate(rows[0]):
+            token = _normalize_header_token(raw_header)
+            if not token:
+                continue
+            for canonical, aliases in SEGMENT_UPLOAD_HEADER_ALIASES.items():
+                if token in aliases and canonical not in header_map:
+                    header_map[canonical] = idx
+                    break
+
+        missing = [h for h in REQUIRED_HEADERS if h not in header_map]
         if missing:
             return [], [f"Missing headers: {', '.join(missing)}"]
+
+        def _cell(r, canonical):
+            col = header_map.get(canonical)
+            if col is None or col >= len(r):
+                return ""
+            return r[col]
 
         out = []
         for i, r in enumerate(rows[1:], start=2):
             if _is_blank_row(r):
                 continue
-            def cell(h):
-                j = idx[h]
-                return r[j] if j < len(r) else ""
-            out.append({
-                "ROUTE": cell("ROUTE"),
-                "SEGMENT CODE": cell("SEGMENT CODE"),
-                "STATE": cell("STATE"),
-                "SEGMENT NAME": cell("SEGMENT NAME"),
-                "START_LAT": cell("START_LAT"),
-                "START_LON": cell("START_LON"),
-                "END_LAT": cell("END_LAT"),
-                "END_LON": cell("END_LON"),
-                "_rownum": i,
-            })
+            out.append(
+                {
+                    "ROUTE": _cell(r, "ROUTE"),
+                    "SEGMENT CODE": _cell(r, "SEGMENT CODE"),
+                    "STATE": _cell(r, "STATE"),
+                    "SEGMENT NAME": _cell(r, "SEGMENT NAME"),
+                    "START_LAT": _cell(r, "START_LAT"),
+                    "START_LON": _cell(r, "START_LON"),
+                    "END_LAT": _cell(r, "END_LAT"),
+                    "END_LON": _cell(r, "END_LON"),
+                    "INDEX": _cell(r, "INDEX"),
+                    "_rownum": i,
+                }
+            )
         return out, []
 
-    elif name.endswith(".xlsx"):
+    if name.endswith(".csv"):
+        fileobj.seek(0)
+        data = fileobj.read().decode("utf-8", errors="ignore")
+        dialect = _sniff_csv_dialect(data)
+        rows = list(csv.reader(io.StringIO(data), dialect=dialect))
+        return _build_from_rows(rows)
+
+    if name.endswith(".xlsx"):
         if openpyxl is None:
             return [], ["openpyxl not installed (required for .xlsx)"]
+        fileobj.seek(0)
         wb = openpyxl.load_workbook(fileobj, data_only=True)
         ws = wb.active
-        rows = list(ws.iter_rows(values_only=True))
-        if not rows:
-            return [], ["Empty XLSX"]
-        headers = _normalize_headers(rows[0])
-        required_norm = _normalize_headers(REQUIRED_HEADERS)
-        norm_to_canon = dict(zip(required_norm, REQUIRED_HEADERS))
+        rows = [[cell for cell in row] for row in ws.iter_rows(values_only=True)]
+        return _build_from_rows(rows)
 
-        idx = {norm_to_canon[h]: headers.index(h) for h in required_norm if h in headers}
-        missing = [norm_to_canon[h] for h in required_norm if h not in headers]
+    if name.endswith(".xls"):
+        if xlrd is None:
+            return [], ["xlrd not installed (required for .xls)"]
+        fileobj.seek(0)
+        book = xlrd.open_workbook(file_contents=fileobj.read())
+        sheet = book.sheet_by_index(0)
+        rows = [sheet.row_values(i) for i in range(sheet.nrows)]
+        return _build_from_rows(rows)
+
+    return [], [f"Unsupported file type: {filename}"]
+
+
+def _to_decimal_or_none(value):
+    try:
+        if value is None:
+            return None
+        parsed = str(value).strip()
+        if parsed == "":
+            return None
+        return Decimal(parsed)
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+
+
+def _parse_decimal_required(value, rownum, label, errors, allow_blank_default=None):
+    parsed = _to_decimal_or_none(value)
+    if parsed is None:
+        raw = str(value).strip() if value is not None else ""
+        if raw == "" and allow_blank_default is not None:
+            return allow_blank_default
+        errors.append(f"Row {rownum}: invalid value for {label}.")
+        return None
+    return parsed
+
+
+def _extract_segment_index_from_code(segment_code):
+    match = re.search(r"(\d{1,2})$", (segment_code or "").strip())
+    if not match:
+        return None
+    return str(int(match.group(1)))
+
+
+def _process_new_segments_upload(fileobj):
+    rows, read_errors = _read_rows(fileobj, getattr(fileobj, "name", ""))
+    summary = {
+        "created": 0,
+        "created_details": [],
+        "skipped": 0,
+        "skipped_details": [],
+        "errors": [],
+        "rows_found": len(rows),
+    }
+    if read_errors:
+        summary["errors"].extend(read_errors)
+        return summary
+
+    route_cache = {}
+    for row in rows:
+        rownum = row.get("_rownum")
+        route_code = str(row.get("ROUTE") or "").strip().upper()
+        segment_code = str(row.get("SEGMENT CODE") or "").strip().upper()
+
+        if not route_code or not segment_code:
+            summary["skipped"] += 1
+            reason = "required values for Route and Segment Code are missing"
+            summary["skipped_details"].append(f"Row {rownum}: {reason}.")
+            summary["errors"].append(f"Row {rownum}: {reason}.")
+            continue
+
+        derived_index = _extract_segment_index_from_code(segment_code)
+        if derived_index is None:
+            summary["skipped"] += 1
+            reason = "Segment Code must end with one or two digits"
+            summary["skipped_details"].append(f"Row {rownum}: {reason}.")
+            summary["errors"].append(f"Row {rownum}: {reason}.")
+            continue
+
+        if Segment.objects.filter(code__iexact=segment_code).exists():
+            summary["skipped"] += 1
+            summary["skipped_details"].append(
+                f"Row {rownum}: skipped because segment code {segment_code} already exists."
+            )
+            continue
+
+        route_obj = route_cache.get(route_code)
+        if route_obj is None:
+            road_code = _road_code_from_route(route_code)
+            road_obj, _ = Road.objects.get_or_create(road=road_code)
+            route_obj, _ = Route.objects.get_or_create(
+                route=route_code,
+                defaults={"road": road_obj},
+            )
+            route_cache[route_code] = route_obj
+
+        segment_kwargs = {
+            "route": route_obj,
+            "code": segment_code,
+            "index": derived_index,
+            "state": str(row.get("STATE") or "").strip(),
+            "name": str(row.get("SEGMENT NAME") or "").strip(),
+        }
+
+        start_lat = _to_decimal_or_none(row.get("START_LAT"))
+        start_lon = _to_decimal_or_none(row.get("START_LON"))
+        end_lat = _to_decimal_or_none(row.get("END_LAT"))
+        end_lon = _to_decimal_or_none(row.get("END_LON"))
+        if start_lat is not None:
+            segment_kwargs["start_lat"] = start_lat
+        if start_lon is not None:
+            segment_kwargs["start_lon"] = start_lon
+        if end_lat is not None:
+            segment_kwargs["end_lat"] = end_lat
+        if end_lon is not None:
+            segment_kwargs["end_lon"] = end_lon
+
+        try:
+            Segment.objects.create(**segment_kwargs)
+            summary["created"] += 1
+            summary["created_details"].append(
+                f"Row {rownum}: created segment {segment_code}."
+            )
+        except Exception as exc:
+            summary["skipped"] += 1
+            summary["skipped_details"].append(
+                f"Row {rownum}: skipped because segment {segment_code} could not be created."
+            )
+            summary["errors"].append(f"Row {rownum}: failed to create segment {segment_code}. ({exc})")
+
+    return summary
+
+
+def _read_new_subsegment_rows(fileobj, filename):
+    name = (filename or "").lower()
+
+    def _sniff_csv_dialect(data):
+        sample = data[:4096]
+        try:
+            return csv.Sniffer().sniff(sample, delimiters=",;\t|")
+        except Exception:
+            return csv.excel
+
+    def _build_from_rows(rows):
+        if not rows:
+            return [], ["The spreadsheet is empty."]
+
+        header_map = {}
+        for idx, raw_header in enumerate(rows[0]):
+            token = _normalize_header_token(raw_header)
+            if not token:
+                continue
+            for canonical, aliases in SUBSEGMENT_UPLOAD_HEADER_ALIASES.items():
+                if token in aliases and canonical not in header_map:
+                    header_map[canonical] = idx
+                    break
+
+        missing = [h for h in SUBSEGMENT_UPLOAD_REQUIRED_HEADERS if h not in header_map]
         if missing:
             return [], [f"Missing headers: {', '.join(missing)}"]
 
+        def _cell(r, canonical):
+            col = header_map.get(canonical)
+            if col is None or col >= len(r):
+                return ""
+            return r[col]
+
         out = []
         for i, r in enumerate(rows[1:], start=2):
-            def cell(h):
-                j = idx[h]
-                return r[j] if j < len(r or []) else ""
-            out.append({
-                "ROUTE": cell("ROUTE"),
-                "SEGMENT CODE": cell("SEGMENT CODE"),
-                "STATE": cell("STATE"),
-                "SEGMENT NAME": cell("SEGMENT NAME"),
-                "START_LAT": cell("START_LAT"),
-                "START_LON": cell("START_LON"),
-                "END_LAT": cell("END_LAT"),
-                "END_LON": cell("END_LON"),
-                "_rownum": i,
-            })
+            if _is_blank_row(r):
+                continue
+            out.append(
+                {
+                    "SEGMENT": _cell(r, "SEGMENT"),
+                    "LENGTH": _cell(r, "LENGTH"),
+                    "X_START": _cell(r, "X_START"),
+                    "Y_START": _cell(r, "Y_START"),
+                    "X_END": _cell(r, "X_END"),
+                    "Y_END": _cell(r, "Y_END"),
+                    "_rownum": i,
+                }
+            )
         return out, []
 
-    elif name.endswith(".xls"):
+    if name.endswith(".csv"):
+        fileobj.seek(0)
+        data = fileobj.read().decode("utf-8", errors="ignore")
+        dialect = _sniff_csv_dialect(data)
+        rows = list(csv.reader(io.StringIO(data), dialect=dialect))
+        return _build_from_rows(rows)
+
+    if name.endswith(".xlsx"):
+        if openpyxl is None:
+            return [], ["openpyxl not installed (required for .xlsx)"]
+        fileobj.seek(0)
+        wb = openpyxl.load_workbook(fileobj, data_only=True)
+        ws = wb.active
+        rows = [[cell for cell in row] for row in ws.iter_rows(values_only=True)]
+        return _build_from_rows(rows)
+
+    if name.endswith(".xls"):
         if xlrd is None:
             return [], ["xlrd not installed (required for .xls)"]
+        fileobj.seek(0)
         book = xlrd.open_workbook(file_contents=fileobj.read())
         sheet = book.sheet_by_index(0)
-        # NOTE: If you plan to support .xls soon, ensure you read headers from the sheet:
-        # headers = _normalize_headers(sheet.row_values(0))
-        # required_norm = _normalize_headers(REQUIRED_HEADERS)
-        # norm_to_canon = dict(zip(required_norm, REQUIRED_HEADERS))
-        # idx = {norm_to_canon[h]: headers.index(h) for h in required_norm if h in headers}
-        # ... (left as-is per original structure)
+        rows = [sheet.row_values(i) for i in range(sheet.nrows)]
+        return _build_from_rows(rows)
 
-        # Minimal compatibility (assuming order matches REQUIRED_HEADERS):
+    return [], [f"Unsupported file type: {filename}"]
+
+
+def _process_new_subsegments_upload(fileobj):
+    rows, read_errors = _read_new_subsegment_rows(fileobj, getattr(fileobj, "name", ""))
+    summary = {
+        "created": 0,
+        "created_details": [],
+        "skipped": 0,
+        "skipped_details": [],
+        "errors": [],
+        "rows_found": len(rows),
+    }
+    if read_errors:
+        summary["errors"].extend(read_errors)
+        return summary
+
+    segment_position_counter = defaultdict(int)
+    segment_cache = {}
+
+    for row in rows:
+        rownum = row.get("_rownum")
+        segment_code = str(row.get("SEGMENT") or "").strip().upper()
+        if not segment_code:
+            summary["skipped"] += 1
+            summary["skipped_details"].append(f"Row {rownum}: skipped because Segment is blank.")
+            summary["errors"].append(f"Row {rownum}: Segment is blank.")
+            continue
+
+        segment_obj = segment_cache.get(segment_code)
+        if segment_obj is None:
+            segment_obj = Segment.objects.filter(code__iexact=segment_code).first()
+            if segment_obj:
+                segment_cache[segment_code] = segment_obj
+        if segment_obj is None:
+            summary["skipped"] += 1
+            summary["skipped_details"].append(
+                f"Row {rownum}: skipped because segment {segment_code} was not found."
+            )
+            summary["errors"].append(f"Row {rownum}: segment {segment_code} was not found.")
+            continue
+
+        row_errors = []
+        x_start = _parse_decimal_required(row.get("X_START"), rownum, "X_Start", row_errors)
+        y_start = _parse_decimal_required(row.get("Y_START"), rownum, "Y_Start", row_errors)
+        x_end = _parse_decimal_required(row.get("X_END"), rownum, "X_End", row_errors)
+        y_end = _parse_decimal_required(row.get("Y_END"), rownum, "Y_End", row_errors)
+        length = _parse_decimal_required(
+            row.get("LENGTH"),
+            rownum,
+            "Length",
+            row_errors,
+            allow_blank_default=Decimal("0"),
+        )
+
+        if not row_errors:
+            if not _in_lon_range(x_start):
+                row_errors.append(f"Row {rownum}: X_Start must be between -180 and 180.")
+            if not _in_lat_range(y_start):
+                row_errors.append(f"Row {rownum}: Y_Start must be between -90 and 90.")
+            if not _in_lon_range(x_end):
+                row_errors.append(f"Row {rownum}: X_End must be between -180 and 180.")
+            if not _in_lat_range(y_end):
+                row_errors.append(f"Row {rownum}: Y_End must be between -90 and 90.")
+
+        if row_errors:
+            summary["skipped"] += 1
+            summary["skipped_details"].append(f"Row {rownum}: skipped due to invalid coordinates/length.")
+            summary["errors"].extend(row_errors)
+            continue
+
+        segment_position_counter[segment_code] += 1
+        position = segment_position_counter[segment_code]
+        subsegment_code = f"{segment_obj.code}-{position:02d}"
+
+        if SubSegment.objects.filter(code__iexact=subsegment_code).exists():
+            summary["skipped"] += 1
+            summary["skipped_details"].append(
+                f"Row {rownum}: skipped because subsegment code {subsegment_code} already exists."
+            )
+            continue
+
+        if SubSegment.objects.filter(segment=segment_obj, position=position).exists():
+            summary["skipped"] += 1
+            summary["skipped_details"].append(
+                f"Row {rownum}: skipped because position {position} already exists for segment {segment_obj.code}."
+            )
+            continue
+
+        try:
+            SubSegment.objects.create(
+                segment=segment_obj,
+                position=position,
+                code=subsegment_code,
+                start_lon=x_start,
+                start_lat=y_start,
+                end_lon=x_end,
+                end_lat=y_end,
+                distance=length,
+            )
+            summary["created"] += 1
+            summary["created_details"].append(
+                f"Row {rownum}: created subsegment {subsegment_code}."
+            )
+        except Exception as exc:
+            summary["skipped"] += 1
+            summary["skipped_details"].append(
+                f"Row {rownum}: skipped because subsegment {subsegment_code} could not be created."
+            )
+            summary["errors"].append(f"Row {rownum}: failed to create subsegment {subsegment_code}. ({exc})")
+
+    return summary
+
+
+def _process_edit_segments_upload(fileobj):
+    rows, read_errors = _read_rows(fileobj, getattr(fileobj, "name", ""))
+    summary = {
+        "updated": 0,
+        "updated_details": [],
+        "skipped": 0,
+        "skipped_details": [],
+        "errors": [],
+        "rows_found": len(rows),
+    }
+    if read_errors:
+        summary["errors"].extend(read_errors)
+        return summary
+
+    for row in rows:
+        rownum = row.get("_rownum")
+        route_code = str(row.get("ROUTE") or "").strip().upper()
+        segment_code = str(row.get("SEGMENT CODE") or "").strip().upper()
+        if not route_code or not segment_code:
+            summary["skipped"] += 1
+            summary["errors"].append(f"Row {rownum}: Route and Segment Code are required.")
+            summary["skipped_details"].append(f"Row {rownum}: skipped due to missing Route/Segment Code.")
+            continue
+
+        segment = Segment.objects.select_related("route").filter(code__iexact=segment_code).first()
+        if not segment:
+            summary["skipped"] += 1
+            summary["errors"].append(f"Row {rownum}: segment {segment_code} was not found.")
+            summary["skipped_details"].append(f"Row {rownum}: skipped because segment {segment_code} does not exist.")
+            continue
+
+        current_route = (segment.route.route if segment.route_id and segment.route else "").strip().upper()
+        if current_route != route_code:
+            summary["skipped"] += 1
+            summary["errors"].append(
+                f"Row {rownum}: route mismatch for {segment_code}. Existing route is {current_route}, file has {route_code}."
+            )
+            summary["skipped_details"].append(f"Row {rownum}: skipped because route change is not allowed.")
+            continue
+
+        updates = {}
+
+        state_raw = str(row.get("STATE") or "")
+        if state_raw.strip():
+            updates["state"] = state_raw.strip()
+
+        name_raw = str(row.get("SEGMENT NAME") or "")
+        if name_raw.strip():
+            updates["name"] = name_raw.strip()
+
+        index_raw = str(row.get("INDEX") or "")
+        if index_raw.strip():
+            updates["index"] = index_raw.strip()
+
+        decimal_errors = []
+        for key, field in (
+            ("START_LAT", "start_lat"),
+            ("START_LON", "start_lon"),
+            ("END_LAT", "end_lat"),
+            ("END_LON", "end_lon"),
+        ):
+            raw = row.get(key)
+            raw_text = str(raw).strip() if raw is not None else ""
+            if raw_text == "":
+                continue
+            parsed = _to_decimal_or_none(raw)
+            if parsed is None:
+                decimal_errors.append(f"Row {rownum}: invalid value for {key}.")
+            else:
+                updates[field] = parsed
+
+        if decimal_errors:
+            summary["skipped"] += 1
+            summary["errors"].extend(decimal_errors)
+            summary["skipped_details"].append(f"Row {rownum}: skipped due to invalid numeric data.")
+            continue
+
+        if not updates:
+            summary["skipped"] += 1
+            summary["skipped_details"].append(f"Row {rownum}: skipped because no editable values were provided.")
+            continue
+
+        try:
+            for field, value in updates.items():
+                setattr(segment, field, value)
+            segment.save(update_fields=list(updates.keys()))
+            summary["updated"] += 1
+            summary["updated_details"].append(f"Row {rownum}: updated segment {segment_code}.")
+        except Exception as exc:
+            summary["skipped"] += 1
+            summary["errors"].append(f"Row {rownum}: failed to update segment {segment_code}. ({exc})")
+            summary["skipped_details"].append(f"Row {rownum}: skipped because update failed for {segment_code}.")
+
+    return summary
+
+
+def _read_edit_subsegment_rows(fileobj, filename):
+    name = (filename or "").lower()
+
+    def _sniff_csv_dialect(data):
+        sample = data[:4096]
+        try:
+            return csv.Sniffer().sniff(sample, delimiters=",;\t|")
+        except Exception:
+            return csv.excel
+
+    def _build_from_rows(rows):
+        if not rows:
+            return [], ["The spreadsheet is empty."]
+
+        header_map = {}
+        for idx, raw_header in enumerate(rows[0]):
+            token = _normalize_header_token(raw_header)
+            if not token:
+                continue
+            for canonical, aliases in EDIT_SUBSEGMENT_HEADER_ALIASES.items():
+                if token in aliases and canonical not in header_map:
+                    header_map[canonical] = idx
+                    break
+
+        missing = [h for h in EDIT_SUBSEGMENT_REQUIRED_HEADERS if h not in header_map]
+        if missing:
+            return [], [f"Missing headers: {', '.join(missing)}"]
+
+        def _cell(r, canonical):
+            col = header_map.get(canonical)
+            if col is None or col >= len(r):
+                return ""
+            return r[col]
+
         out = []
-        for i in range(1, sheet.nrows):
-            r = sheet.row_values(i)
-            out.append({
-                "ROUTE": r[0] if len(r) > 0 else "",
-                "SEGMENT CODE": r[1] if len(r) > 1 else "",
-                "STATE": r[2] if len(r) > 2 else "",
-                "SEGMENT NAME": r[3] if len(r) > 3 else "",
-                "START_LAT": r[4] if len(r) > 4 else "",
-                "START_LON": r[5] if len(r) > 5 else "",
-                "END_LAT": r[6] if len(r) > 6 else "",
-                "END_LON": r[7] if len(r) > 7 else "",
-                "_rownum": i + 1,
-            })
+        for i, r in enumerate(rows[1:], start=2):
+            if _is_blank_row(r):
+                continue
+            out.append(
+                {
+                    "SEGMENT": _cell(r, "SEGMENT"),
+                    "SUBSEGMENT_CODE": _cell(r, "SUBSEGMENT_CODE"),
+                    "LENGTH": _cell(r, "LENGTH"),
+                    "X_START": _cell(r, "X_START"),
+                    "Y_START": _cell(r, "Y_START"),
+                    "X_END": _cell(r, "X_END"),
+                    "Y_END": _cell(r, "Y_END"),
+                    "_rownum": i,
+                }
+            )
         return out, []
-    else:
-        return [], [f"Unsupported file type: {filename}"]
+
+    if name.endswith(".csv"):
+        fileobj.seek(0)
+        data = fileobj.read().decode("utf-8", errors="ignore")
+        dialect = _sniff_csv_dialect(data)
+        rows = list(csv.reader(io.StringIO(data), dialect=dialect))
+        return _build_from_rows(rows)
+
+    if name.endswith(".xlsx"):
+        if openpyxl is None:
+            return [], ["openpyxl not installed (required for .xlsx)"]
+        fileobj.seek(0)
+        wb = openpyxl.load_workbook(fileobj, data_only=True)
+        ws = wb.active
+        rows = [[cell for cell in row] for row in ws.iter_rows(values_only=True)]
+        return _build_from_rows(rows)
+
+    if name.endswith(".xls"):
+        if xlrd is None:
+            return [], ["xlrd not installed (required for .xls)"]
+        fileobj.seek(0)
+        book = xlrd.open_workbook(file_contents=fileobj.read())
+        sheet = book.sheet_by_index(0)
+        rows = [sheet.row_values(i) for i in range(sheet.nrows)]
+        return _build_from_rows(rows)
+
+    return [], [f"Unsupported file type: {filename}"]
+
+
+def _process_edit_subsegments_upload(fileobj):
+    rows, read_errors = _read_edit_subsegment_rows(fileobj, getattr(fileobj, "name", ""))
+    summary = {
+        "updated": 0,
+        "updated_details": [],
+        "skipped": 0,
+        "skipped_details": [],
+        "errors": [],
+        "rows_found": len(rows),
+    }
+    if read_errors:
+        summary["errors"].extend(read_errors)
+        return summary
+
+    for row in rows:
+        rownum = row.get("_rownum")
+        segment_code = str(row.get("SEGMENT") or "").strip().upper()
+        subsegment_code = str(row.get("SUBSEGMENT_CODE") or "").strip().upper()
+        if not segment_code or not subsegment_code:
+            summary["skipped"] += 1
+            summary["errors"].append(f"Row {rownum}: Segment and Subsegment code are required.")
+            summary["skipped_details"].append(f"Row {rownum}: skipped due to missing Segment/Subsegment code.")
+            continue
+
+        subsegment = SubSegment.objects.select_related("segment").filter(code__iexact=subsegment_code).first()
+        if not subsegment:
+            summary["skipped"] += 1
+            summary["errors"].append(f"Row {rownum}: subsegment {subsegment_code} was not found.")
+            summary["skipped_details"].append(f"Row {rownum}: skipped because subsegment {subsegment_code} does not exist.")
+            continue
+
+        if not subsegment.segment_id or (subsegment.segment.code or "").strip().upper() != segment_code:
+            summary["skipped"] += 1
+            summary["errors"].append(
+                f"Row {rownum}: segment mismatch for {subsegment_code}. Existing segment is {subsegment.segment.code if subsegment.segment_id else '-'}, file has {segment_code}."
+            )
+            summary["skipped_details"].append(f"Row {rownum}: skipped because segment/subsegment mismatch.")
+            continue
+
+        updates = {}
+        row_errors = []
+
+        for key, field, is_lon, is_lat in (
+            ("X_START", "start_lon", True, False),
+            ("Y_START", "start_lat", False, True),
+            ("X_END", "end_lon", True, False),
+            ("Y_END", "end_lat", False, True),
+        ):
+            raw = row.get(key)
+            raw_text = str(raw).strip() if raw is not None else ""
+            if raw_text == "":
+                continue
+            parsed = _to_decimal_or_none(raw)
+            if parsed is None:
+                row_errors.append(f"Row {rownum}: invalid value for {key}.")
+                continue
+            if is_lon and not _in_lon_range(parsed):
+                row_errors.append(f"Row {rownum}: {key} must be between -180 and 180.")
+                continue
+            if is_lat and not _in_lat_range(parsed):
+                row_errors.append(f"Row {rownum}: {key} must be between -90 and 90.")
+                continue
+            updates[field] = parsed
+
+        length_raw = row.get("LENGTH")
+        length_text = str(length_raw).strip() if length_raw is not None else ""
+        if length_text != "":
+            parsed_length = _to_decimal_or_none(length_raw)
+            if parsed_length is None:
+                row_errors.append(f"Row {rownum}: invalid value for LENGTH.")
+            else:
+                updates["distance"] = parsed_length
+
+        if row_errors:
+            summary["skipped"] += 1
+            summary["errors"].extend(row_errors)
+            summary["skipped_details"].append(f"Row {rownum}: skipped due to invalid data.")
+            continue
+
+        if not updates:
+            summary["skipped"] += 1
+            summary["skipped_details"].append(f"Row {rownum}: skipped because no editable values were provided.")
+            continue
+
+        try:
+            for field, value in updates.items():
+                setattr(subsegment, field, value)
+            subsegment.save(update_fields=list(updates.keys()))
+            summary["updated"] += 1
+            summary["updated_details"].append(f"Row {rownum}: updated subsegment {subsegment_code}.")
+        except Exception as exc:
+            summary["skipped"] += 1
+            summary["errors"].append(f"Row {rownum}: failed to update subsegment {subsegment_code}. ({exc})")
+            summary["skipped_details"].append(f"Row {rownum}: skipped because update failed for {subsegment_code}.")
+
+    return summary
+
+
+def library_upload_dispatch(request):
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "message": "POST method required."}, status=405)
+
+    upload_option = (request.POST.get("upload_option") or "").strip()
+    upload_file = request.FILES.get("upload_file")
+    if not upload_option:
+        return JsonResponse({"ok": False, "message": "Select an upload option."}, status=400)
+    if not upload_file:
+        return JsonResponse({"ok": False, "message": "Select a file to upload."}, status=400)
+
+    ext = os.path.splitext((upload_file.name or "").lower())[1]
+    if ext not in {".xls", ".xlsx", ".csv"}:
+        return JsonResponse(
+            {"ok": False, "message": "Unsupported file type. Allowed: .xls, .xlsx, .csv"},
+            status=400,
+        )
+
+    if upload_option == "new_segments":
+        summary = _process_new_segments_upload(upload_file)
+        return JsonResponse(
+            {
+                "ok": True,
+                "message": "Upload processed.",
+                "option": upload_option,
+                "summary": summary,
+            }
+        )
+    if upload_option == "new_1km_subsegments":
+        summary = _process_new_subsegments_upload(upload_file)
+        return JsonResponse(
+            {
+                "ok": True,
+                "message": "Upload processed.",
+                "option": upload_option,
+                "summary": summary,
+            }
+        )
+    if upload_option == "edit_segments":
+        summary = _process_edit_segments_upload(upload_file)
+        return JsonResponse(
+            {
+                "ok": True,
+                "message": "Upload processed.",
+                "option": upload_option,
+                "summary": summary,
+            }
+        )
+    if upload_option == "edit_subsegments":
+        summary = _process_edit_subsegments_upload(upload_file)
+        return JsonResponse(
+            {
+                "ok": True,
+                "message": "Upload processed.",
+                "option": upload_option,
+                "summary": summary,
+            }
+        )
+
+    return JsonResponse(
+        {
+            "ok": False,
+            "message": "This upload option is not wired yet.",
+            "option": upload_option,
+        },
+        status=400,
+    )
 
 def _read_subsegment_rows(fileobj, filename):
     """
@@ -2643,6 +3462,28 @@ def road_condition_subsegments(request):
             status=404,
         )
 
+    refresh_requested = (request.GET.get("refresh") or "").strip() in {"1", "true", "yes"}
+    refresh_meta = {"attempted": False, "failed": False, "updated": 0, "failed_count": 0, "total": 0}
+    refresh_warning = ""
+
+    if refresh_requested:
+        refresh_meta["attempted"] = True
+        try:
+            refresh_result = refresh_subsegments_from_google(
+                SubSegment.objects.filter(segment=segment),
+                sleep_between=0.0,
+            )
+            refresh_meta.update(
+                {
+                    "updated": int(refresh_result.get("updated", 0) or 0),
+                    "failed_count": int(refresh_result.get("failed", 0) or 0),
+                    "total": int(refresh_result.get("total", 0) or 0),
+                }
+            )
+        except Exception:
+            refresh_meta["failed"] = True
+            refresh_warning = " Refresh failed; showing saved data."
+
     sub_qs = SubSegment.objects.filter(segment=segment).order_by("position", "id")
     rows = [
         {
@@ -2662,15 +3503,25 @@ def road_condition_subsegments(request):
         return JsonResponse(
             {
                 "ok": True,
-                "message": f'Segment "{segment.code}" has no subsegments.',
+                "message": f'Segment "{segment.code}" has no subsegments.{refresh_warning}',
                 "rows": [],
+                "refresh": refresh_meta,
             }
         )
+
+    if refresh_meta["attempted"] and not refresh_meta["failed"]:
+        message = (
+            f'Refreshed {refresh_meta["updated"]}/{refresh_meta["total"]} subsegments '
+            f'for "{segment.code}" (failed: {refresh_meta["failed_count"]}).'
+        )
+    else:
+        message = f'Loaded {len(rows)} subsegments for "{segment.code}".{refresh_warning}'
 
     return JsonResponse(
         {
             "ok": True,
-            "message": f'Loaded {len(rows)} subsegments for "{segment.code}".',
+            "message": message,
             "rows": rows,
+            "refresh": refresh_meta,
         }
     )

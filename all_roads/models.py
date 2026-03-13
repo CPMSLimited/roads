@@ -162,10 +162,10 @@ class SubSegment(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(25)],
         help_text="Order of this sub-segment within its parent segment (1–25)."
     )
-    start_lat = models.DecimalField(max_digits=18, decimal_places=16, default=0.00)
-    start_lon = models.DecimalField(max_digits=18, decimal_places=16, default=0.00)
-    end_lat   = models.DecimalField(max_digits=18, decimal_places=16, default=0.00)
-    end_lon   = models.DecimalField(max_digits=18, decimal_places=16, default=0.00)
+    start_lat = models.DecimalField(max_digits=18, decimal_places=5, default=0.00)
+    start_lon = models.DecimalField(max_digits=18, decimal_places=5, default=0.00)
+    end_lat   = models.DecimalField(max_digits=18, decimal_places=5, default=0.00)
+    end_lon   = models.DecimalField(max_digits=18, decimal_places=5, default=0.00)
     distance    = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
     travel_time = models.IntegerField(default=0)  # seconds
     avg_speed   = models.DecimalField(max_digits=4, decimal_places=1, default=0.0)

@@ -630,3 +630,77 @@ Traceback (most recent call last):
     first_segment = selected_route_segments.first() if selected_route else None
 UnboundLocalError: local variable 'selected_route_segments' referenced before assignment
 "GET /road-inventory/?view=map&road=&route=A121&state= HTTP/1.1" 500 72298
+Internal Server Error: /road-motorability/queue-refresh/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 739, in road_motorability_queue_refresh
+    async_result = refresh_segments_task.delay(codes=to_queue)
+NameError: name 'refresh_segments_task' is not defined
+Internal Server Error: /road-motorability/queue-refresh/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 739, in road_motorability_queue_refresh
+    async_result = refresh_segments_task.delay(codes=to_queue)
+NameError: name 'refresh_segments_task' is not defined
+Internal Server Error: /road-motorability/queue-refresh/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 739, in road_motorability_queue_refresh
+    async_result = refresh_segments_task.delay(codes=to_queue)
+NameError: name 'refresh_segments_task' is not defined
+Internal Server Error: /road-motorability/queue-refresh/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 739, in road_motorability_queue_refresh
+    async_result = refresh_segments_task.delay(codes=to_queue)
+NameError: name 'refresh_segments_task' is not defined
+Internal Server Error: /road-motorability/queue-refresh/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 739, in road_motorability_queue_refresh
+    async_result = refresh_segments_task.delay(codes=to_queue)
+NameError: name 'refresh_segments_task' is not defined
+"POST /road-motorability/queue-refresh/ HTTP/1.1" 500 80357
+"POST /road-motorability/queue-refresh/ HTTP/1.1" 500 67925
+"POST /road-motorability/queue-refresh/ HTTP/1.1" 500 80893
+"POST /road-motorability/queue-refresh/ HTTP/1.1" 500 67925
+"POST /road-motorability/queue-refresh/ HTTP/1.1" 500 80893
+Internal Server Error: /road-motorability/queue-refresh/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 739, in road_motorability_queue_refresh
+    async_result = refresh_segments_task.delay(codes=to_queue)
+NameError: name 'refresh_segments_task' is not defined
+Internal Server Error: /road-motorability/queue-refresh/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 739, in road_motorability_queue_refresh
+    async_result = refresh_segments_task.delay(codes=to_queue)
+NameError: name 'refresh_segments_task' is not defined
+"POST /road-motorability/queue-refresh/ HTTP/1.1" 500 67925
+"POST /road-motorability/queue-refresh/ HTTP/1.1" 500 67925
+Internal Server Error: /road-motorability/queue-refresh/
+"POST /road-motorability/queue-refresh/ HTTP/1.1" 500 111
+Internal Server Error: /road-motorability/queue-refresh/
+"POST /road-motorability/queue-refresh/ HTTP/1.1" 500 126

@@ -14,10 +14,22 @@
             <a class="is-active" href="{% url 'library_reports' %}"><span aria-hidden="true">&#128193;</span> Reports</a>
             <a href="{% url 'library_technical_guide' %}"><span aria-hidden="true">&#128193;</span> Technical Guide</a>
             <a href="{% url 'library_user_guide' %}"><span aria-hidden="true">&#128193;</span> User Guide</a>
+            <details class="library-uploads-accordion" id="libraryUploadsAccordion">
+                <summary class="library-v2-upload-toggle" id="libraryUploadsToggle">
+                    <span><span aria-hidden="true">&#128193;</span> Uploads</span>
+                </summary>
+                <div class="library-v2-upload-options" id="libraryUploadsOptions">
+                    <button type="button" class="library-v2-upload-option" data-upload-option="new_segments">Upload new segments</button>
+                    <button type="button" class="library-v2-upload-option" data-upload-option="new_1km_subsegments">Upload new 1km subsegments</button>
+                    <button type="button" class="library-v2-upload-option" data-upload-option="edit_segments">Edit segments</button>
+                    <button type="button" class="library-v2-upload-option" data-upload-option="edit_subsegments">Edit subsegments</button>
+                </div>
+            </details>
         </nav>
     </aside>
 
     <article class="library-v2-main">
+        <div class="library-v2-default-content" id="libraryDefaultContent">
         <header class="library-v2-head">
             <h1>All Reports <span>({{ page_obj.paginator.count }})</span></h1>
             <div class="library-v2-filters">
@@ -91,6 +103,8 @@
                 </tbody>
             </table>
         </div>
+        </div>
+        {% include "website/includes/library_uploads_workspace.html" %}
     </article>
 </form>
 <script>

@@ -5,54 +5,37 @@
 {% block content %}
 <section class="new-inventory-page">
     <div class="new-inventory-main">
-        <div class="kpi-grid kpi-grid-four">
-            <article class="kpi-card">
-                <span>Total length of road (km)</span>
-                <strong>{{ total_length }}</strong>
-            </article>
-            <article class="kpi-card">
-                <span>Number of routes</span>
-                <strong>{{ number_routes }}</strong>
-            </article>
-            <article class="kpi-card">
-                <span>Number of segments</span>
-                <strong>{{ total_segments }}</strong>
-            </article>
-            <article class="kpi-card">
-                <span>No data</span>
-                <strong>{{ counts.no_response }}</strong>
-            </article>
-        </div>
-        <div class="kpi-grid kpi-grid-status">
-            <article class="kpi-card kpi-good"><span>Good</span><strong>{{ counts.good }}</strong></article>
-            <article class="kpi-card kpi-blue"><span>Tolerable</span><strong>{{ counts.tolerable }}</strong></article>
-            <article class="kpi-card kpi-orange"><span>Intolerable</span><strong>{{ counts.intolerable }}</strong></article>
-            <article class="kpi-card kpi-red"><span>Failed</span><strong>{{ counts.failed }}</strong></article>
-        </div>
-
         <div class="inventory-tools-row">
             <div class="inventory-tools-layout">
-                <nav id="inventoryInlinePager" class="pager inventory-inline-pager" aria-label="Inventory table pagination">
-                    {% if page_obj.has_previous %}
-                    <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
-                    {% else %}
-                    <span class="is-disabled">Previous</span>
-                    {% endif %}
+                <div class="inventory-tools-left">
+                    <div class="inventory-refresh-actions">
+                        <button type="button" class="btn btn-outline inventory-refresh-btn">Refresh Motorability</button>
+                    </div>
+                    <p id="motorabilityRefreshFeedback" class="inventory-refresh-feedback" aria-live="polite"></p>
+                    <div id="motorabilityRefreshSummary" class="inventory-refresh-summary" aria-live="polite"></div>
+                    <nav id="inventoryInlinePager" class="pager inventory-inline-pager" aria-label="Inventory table pagination">
+                        {% if page_obj.has_previous %}
+                        <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
+                        {% else %}
+                        <span class="is-disabled">Previous</span>
+                        {% endif %}
 
-                    {% if page_obj.paginator.count == 0 %}
-                    <span>Page 0 of 0</span>
-                    {% else %}
-                    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
-                    {% endif %}
+                        {% if page_obj.paginator.count == 0 %}
+                        <span>Page 0 of 0</span>
+                        {% else %}
+                        <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                        {% endif %}
 
-                    {% if page_obj.has_next %}
-                    <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
-                    {% else %}
-                    <span class="is-disabled">Next</span>
-                    {% endif %}
-                </nav>
+                        {% if page_obj.has_next %}
+                        <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+                        {% else %}
+                        <span class="is-disabled">Next</span>
+                        {% endif %}
+                    </nav>
+                </div>
 
                 <form id="inventoryFiltersForm" class="toolbar-filters inventory-tools-controls" method="get">
+                    {% csrf_token %}
                     <input type="hidden" name="view" id="inventoryViewInput" value="{{ current_view|default:'map' }}">
                     <label class="inventory-field">
                         <span>Select road</span>
@@ -156,10 +139,19 @@
     <aside class="new-inventory-side">
         <article class="table-card side-card route-info-card">
             <h2>Motorability summary</h2>
-            <p><strong>Total length of Good:</strong></p>
-            <p><strong>Total length of Tolerable:</strong></p>
-            <p><strong>Total length of Intolerable:</strong></p>
-            <p><strong>Total length of Failed:</strong></p>
+            <div class="kpi-grid kpi-grid-status">
+                <article class="kpi-card kpi-good"><span>Good</span><strong>{{ counts.good }}</strong></article>
+                <article class="kpi-card kpi-blue"><span>Tolerable</span><strong>{{ counts.tolerable }}</strong></article>
+                <article class="kpi-card kpi-orange"><span>Intolerable</span><strong>{{ counts.intolerable }}</strong></article>
+                <article class="kpi-card kpi-red"><span>Failed</span><strong>{{ counts.failed }}</strong></article>
+            </div>
+            <p><strong>Total lenght of selected roads:</strong> {{ summary_total_length_selected }}</p>
+            <p><strong>Number of routes:</strong> {{ summary_number_routes }}</p>
+            <p><strong>Number of segments:</strong> {{ summary_number_segments }}</p>
+            <p><strong>Total lenght of Good roads:</strong> {{ summary_total_length_good }}</p>
+            <p><strong>Total lenght of Tolerable roads:</strong> {{ summary_total_length_tolerable }}</p>
+            <p><strong>Total lenght of Intolerable roads:</strong> {{ summary_total_length_intolerable }}</p>
+            <p><strong>Total length of Failed roads:</strong> {{ summary_total_length_failed }}</p>
         </article>
 
         <article class="table-card side-card report-list-card">
@@ -193,14 +185,19 @@
     </aside>
 </section>
 <script>
-  (function () {
+  function initRoadMotorabilityPage() {
     const form = document.getElementById("inventoryFiltersForm");
     const viewInput = document.getElementById("inventoryViewInput");
     const inlinePager = document.getElementById("inventoryInlinePager");
     const mapView = document.getElementById("inventoryMapView");
     const tableView = document.getElementById("inventoryTableView");
     const buttons = document.querySelectorAll(".inventory-view-btn");
+    const refreshBtn = document.querySelector(".inventory-refresh-btn");
+    const refreshFeedback = document.getElementById("motorabilityRefreshFeedback");
+    const refreshSummary = document.getElementById("motorabilityRefreshSummary");
     if (!form || !viewInput || !inlinePager || !mapView || !tableView || !buttons.length) return;
+    const REFRESHED_SESSION_KEY = "motorability_refreshed_segment_codes_v1";
+    const ACTIVE_TASK_SESSION_KEY = "motorability_refresh_active_task_v1";
 
     function statusToHex(raw) {
       const cleaned = String(raw || "").replace("#", "").trim();
@@ -218,6 +215,222 @@
         cell.style.backgroundColor = `#${hex}`;
         cell.style.color = luminance > 160 ? "#1f2a27" : "#ffffff";
       });
+    }
+
+    function getCsrfToken() {
+      const cookieMatch = document.cookie.match(/csrftoken=([^;]+)/);
+      if (cookieMatch) return decodeURIComponent(cookieMatch[1]);
+      const inputToken = document.querySelector('input[name="csrfmiddlewaretoken"]');
+      return inputToken ? String(inputToken.value || "").trim() : "";
+    }
+
+    function getRefreshedCodes() {
+      try {
+        const raw = sessionStorage.getItem(REFRESHED_SESSION_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter((item) => typeof item === "string" && item.trim() !== "");
+      } catch (err) {
+        return [];
+      }
+    }
+
+    function saveRefreshedCodes(codes) {
+      const current = new Set(getRefreshedCodes().map((code) => code.toUpperCase()));
+      (codes || []).forEach((code) => {
+        if (!code) return;
+        current.add(String(code).trim().toUpperCase());
+      });
+      sessionStorage.setItem(REFRESHED_SESSION_KEY, JSON.stringify(Array.from(current)));
+    }
+
+    function setRefreshFeedback(message, tone) {
+      if (!refreshFeedback) return;
+      refreshFeedback.textContent = message || "";
+      refreshFeedback.classList.remove("is-success", "is-warning", "is-error");
+      if (tone) refreshFeedback.classList.add(tone);
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function downloadCsv(filename, header, values) {
+      const rows = [header].concat((values || []).map((value) => [value]));
+      const csv = rows
+        .map((row) => row.map((cell) => `"${String(cell || "").replaceAll('"', '""')}"`).join(","))
+        .join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+    }
+
+    function renderRefreshSummary(payload) {
+      if (!refreshSummary) return;
+      if (!payload) {
+        refreshSummary.innerHTML = "";
+        return;
+      }
+
+      const preflight = payload.preflight || {};
+      const result = payload.result || {};
+      const details = payload.details || {};
+      const parts = [];
+
+      if (preflight.total_filtered !== undefined) {
+        parts.push(`
+          <section class="inventory-refresh-summary-block">
+            <h3>Preflight summary</h3>
+            <p>Matched by filters: <strong>${Number(preflight.total_filtered || 0)}</strong></p>
+            <p>Already refreshed in this session: <strong>${Number(preflight.already_refreshed || 0)}</strong></p>
+            <p>Eligible for queue: <strong>${Number(preflight.queued_count || 0)}</strong></p>
+          </section>
+        `);
+      }
+
+      if (result.total !== undefined) {
+        parts.push(`
+          <section class="inventory-refresh-summary-block">
+            <h3>Completion details</h3>
+            <p>Queued: <strong>${Number(result.total || 0)}</strong></p>
+            <p>Updated: <strong>${Number(result.updated || 0)}</strong></p>
+            <p>Failed: <strong>${Number(result.failed || 0)}</strong></p>
+          </section>
+        `);
+      }
+
+      const updatedCodes = details.updated_codes || [];
+      const failedCodes = details.failed_codes || [];
+      const skippedCodes = details.skipped_codes || [];
+      if (updatedCodes.length || failedCodes.length || skippedCodes.length) {
+        parts.push(`<section class="inventory-refresh-summary-block"><h3>Segment lists</h3><div class="inventory-refresh-summary-actions">`);
+        if (updatedCodes.length) {
+          parts.push(`<button type="button" class="btn btn-ghost inventory-refresh-download" data-download="updated">Download updated CSV (${updatedCodes.length})</button>`);
+        }
+        if (failedCodes.length) {
+          parts.push(`<button type="button" class="btn btn-ghost inventory-refresh-download" data-download="failed">Download failed CSV (${failedCodes.length})</button>`);
+        }
+        if (skippedCodes.length) {
+          parts.push(`<button type="button" class="btn btn-ghost inventory-refresh-download" data-download="skipped">Download skipped CSV (${skippedCodes.length})</button>`);
+        }
+        parts.push(`</div>`);
+
+        if (failedCodes.length) {
+          parts.push(`
+            <details>
+              <summary>Failed segments (${failedCodes.length})</summary>
+              <div class="inventory-refresh-summary-list">${failedCodes.map((code) => `<span>${escapeHtml(code)}</span>`).join("")}</div>
+            </details>
+          `);
+        }
+        parts.push(`</section>`);
+      }
+
+      refreshSummary.innerHTML = parts.join("");
+      refreshSummary.dataset.updatedCodes = JSON.stringify(updatedCodes);
+      refreshSummary.dataset.failedCodes = JSON.stringify(failedCodes);
+      refreshSummary.dataset.skippedCodes = JSON.stringify(skippedCodes);
+    }
+
+    function getActiveTask() {
+      try {
+        const raw = sessionStorage.getItem(ACTIVE_TASK_SESSION_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function setActiveTask(task) {
+      if (!task) {
+        sessionStorage.removeItem(ACTIVE_TASK_SESSION_KEY);
+        return;
+      }
+      sessionStorage.setItem(ACTIVE_TASK_SESSION_KEY, JSON.stringify(task));
+    }
+
+    function setRefreshControlsBusy(isBusy) {
+      if (refreshBtn) refreshBtn.disabled = isBusy;
+    }
+
+    async function readJsonSafe(response, fallbackMessage) {
+      const contentType = (response.headers.get("content-type") || "").toLowerCase();
+      const text = await response.text();
+      if (!text) return {};
+      if (!contentType.includes("application/json")) {
+        throw new Error(fallbackMessage || "Unexpected server response format.");
+      }
+      try {
+        return JSON.parse(text);
+      } catch (err) {
+        throw new Error(fallbackMessage || "Invalid JSON response from server.");
+      }
+    }
+
+    async function pollRefreshTask(taskId) {
+      const maxAttempts = 180;
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        const resp = await fetch(`/api/tasks/${taskId}/`, { headers: { "X-Requested-With": "XMLHttpRequest" } });
+        const data = await readJsonSafe(resp, "Could not read task status response.");
+        const state = (data.state || "").toUpperCase();
+        if (state === "SUCCESS") return data;
+        if (state === "FAILURE") throw new Error(data.error || "Refresh task failed.");
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+      }
+      throw new Error("Refresh task timed out.");
+    }
+
+    async function runRefreshTask(taskMeta) {
+      if (!taskMeta || !taskMeta.task_id) return;
+      setRefreshControlsBusy(true);
+      setRefreshFeedback(`Queued ${Number(taskMeta.queued_count || 0)} segment(s). Refresh in progress...`, "");
+      renderRefreshSummary({ preflight: taskMeta, details: { skipped_codes: taskMeta.already_refreshed_codes || [] } });
+      try {
+        const taskData = await pollRefreshTask(taskMeta.task_id);
+        const result = taskData.result || {};
+        const updated = Number(result.updated || 0);
+        const failed = Number(result.failed || 0);
+        const total = Number(result.total || 0);
+        const updatedCodes = Array.isArray(result.updated_codes) ? result.updated_codes : [];
+        const failedCodes = Array.isArray(result.failed_codes) ? result.failed_codes : [];
+        saveRefreshedCodes(updatedCodes);
+
+        renderRefreshSummary({
+          preflight: taskMeta,
+          result: { updated, failed, total },
+          details: {
+            updated_codes: updatedCodes,
+            failed_codes: failedCodes,
+            skipped_codes: taskMeta.already_refreshed_codes || [],
+          },
+        });
+
+        if (failed > 0) {
+          setRefreshFeedback(`Refresh complete: updated ${updated}/${total}, failed ${failed}.`, "is-warning");
+        } else {
+          setRefreshFeedback(`Refresh complete: updated ${updated}/${total}.`, "is-success");
+        }
+        setActiveTask(null);
+        window.setTimeout(() => {
+          applyFiltersAjax().catch(() => {
+            window.location.reload();
+          });
+        }, 1200);
+      } catch (error) {
+        setRefreshFeedback(error.message || "Could not refresh motorability.", "is-error");
+      } finally {
+        setRefreshControlsBusy(false);
+      }
     }
 
     function syncPagerLinks(viewName) {
@@ -243,6 +456,48 @@
       if (isMap) {
         window.dispatchEvent(new CustomEvent("shared-leaflet:refresh", { detail: { id: "roadMotorabilityLeafletMap" } }));
       }
+    }
+
+    async function applyFiltersAjax() {
+      const action = form.getAttribute("action") || window.location.pathname;
+      const url = new URL(action, window.location.origin);
+      const params = new URLSearchParams(new FormData(form));
+      params.set("view", viewInput.value || "map");
+      params.delete("page");
+      url.search = params.toString();
+
+      const response = await fetch(url.toString(), {
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+        },
+      });
+      if (!response.ok) {
+        throw new Error("Could not apply filters.");
+      }
+
+      const html = await response.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+      const nextForm = doc.getElementById("inventoryFiltersForm");
+      const currentForm = document.getElementById("inventoryFiltersForm");
+      const nextPager = doc.getElementById("inventoryInlinePager");
+      const currentPager = document.getElementById("inventoryInlinePager");
+      const nextTableView = doc.getElementById("inventoryTableView");
+      const currentTableView = document.getElementById("inventoryTableView");
+      const nextSide = doc.querySelector(".new-inventory-side");
+      const currentSide = document.querySelector(".new-inventory-side");
+
+      if (!nextForm || !currentForm || !nextPager || !currentPager || !nextTableView || !currentTableView || !nextSide || !currentSide) {
+        throw new Error("Could not update filtered content.");
+      }
+
+      currentForm.replaceWith(nextForm);
+      currentPager.replaceWith(nextPager);
+      currentTableView.replaceWith(nextTableView);
+      currentSide.replaceWith(nextSide);
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      window.dispatchEvent(new CustomEvent("shared-leaflet:refresh", { detail: { id: "roadMotorabilityLeafletMap" } }));
+      window.initRoadMotorabilityPage();
     }
 
     buttons.forEach((btn) => {
@@ -275,17 +530,106 @@
       }
     }
 
+    if (refreshBtn) {
+      refreshBtn.addEventListener("click", async () => {
+        if (getActiveTask()) return;
+        const road = (roadSelect && roadSelect.value) || "";
+        const route = (routeSelect && routeSelect.value) || "";
+        const state = (stateSelect && stateSelect.value) || "";
+        const speed = (speedSelect && speedSelect.value) || "";
+        const refreshedCodes = getRefreshedCodes();
+
+        setRefreshControlsBusy(true);
+        setRefreshFeedback("Queueing motorability refresh...", "");
+        renderRefreshSummary(null);
+        try {
+          const queueResp = await fetch('{% url "road_motorability_queue_refresh" %}', {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRFToken": getCsrfToken(),
+              "X-Requested-With": "XMLHttpRequest",
+            },
+            body: JSON.stringify({
+              road,
+              route,
+              state,
+              speed,
+              refreshed_codes: refreshedCodes,
+            }),
+          });
+          const queueData = await readJsonSafe(queueResp, "Could not read refresh queue response.");
+          if (!queueResp.ok || queueData.ok === false) {
+            throw new Error(queueData.message || "Could not queue refresh.");
+          }
+          if (!queueData.queued || !queueData.task_id) {
+            renderRefreshSummary({
+              preflight: queueData,
+              details: { skipped_codes: queueData.already_refreshed_codes || [] },
+            });
+            setRefreshFeedback(queueData.message || "No eligible segments to refresh.", "is-warning");
+            return;
+          }
+          setActiveTask(queueData);
+          await runRefreshTask(queueData);
+        } catch (error) {
+          setRefreshFeedback(error.message || "Could not refresh motorability.", "is-error");
+          setActiveTask(null);
+        } finally {
+          setRefreshControlsBusy(false);
+        }
+      });
+    }
+
+    if (refreshSummary) {
+      refreshSummary.addEventListener("click", (event) => {
+        const btn = event.target.closest(".inventory-refresh-download");
+        if (!btn) return;
+        const which = btn.dataset.download;
+        let codes = [];
+        try {
+          if (which === "updated") codes = JSON.parse(refreshSummary.dataset.updatedCodes || "[]");
+          if (which === "failed") codes = JSON.parse(refreshSummary.dataset.failedCodes || "[]");
+          if (which === "skipped") codes = JSON.parse(refreshSummary.dataset.skippedCodes || "[]");
+        } catch (err) {
+          codes = [];
+        }
+        if (!codes.length) return;
+        downloadCsv(`motorability_${which}_segments.csv`, "segment_code", codes);
+      });
+    }
+
 
     [roadSelect, routeSelect, stateSelect, speedSelect].forEach((sel) => {
       if (!sel) return;
-      sel.addEventListener("change", () => {
+      sel.addEventListener("change", async () => {
         resetOtherFilters(sel);
-        form.submit();
+        try {
+          await applyFiltersAjax();
+        } catch (error) {
+          form.submit();
+        }
       });
     });
 
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        await applyFiltersAjax();
+      } catch (error) {
+        window.location.href = `${window.location.pathname}?${new URLSearchParams(new FormData(form)).toString()}`;
+      }
+    });
+
     applyStatusContrast();
-    setView("{{ current_view|default:'map' }}");
-  })();
+    setView(viewInput.value || "map");
+    const activeTask = getActiveTask();
+    if (activeTask && activeTask.task_id) {
+      runRefreshTask(activeTask);
+    }
+  }
+
+  window.initRoadMotorabilityPage = initRoadMotorabilityPage;
+  initRoadMotorabilityPage();
 </script>
 {% endblock %}
