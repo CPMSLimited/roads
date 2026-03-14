@@ -101,8 +101,8 @@
 
     <aside class="new-inventory-side">
         <article class="table-card side-card route-info-card">
-            <h2>Segment summary</h2>
-            <p id="segmentSummaryPrompt"{% if show_segment_summary %} class="is-hidden"{% endif %}>Select a segment to view its summary.</p>
+            <h2>Route summary</h2>
+            <p id="segmentSummaryPrompt"{% if show_segment_summary %} class="is-hidden"{% endif %}>Select a route to view its summary.</p>
             <p><strong>Route:</strong> <span id="segmentSummaryRoute">{{ segment_summary.route }}</span></p>
             <p><strong>Length:</strong> <span id="segmentSummaryLength">{{ segment_summary.length }}</span></p>
             <p><strong>Start point:</strong> <span id="segmentSummaryStartPoint">{{ segment_summary.start_point }}</span></p>
@@ -113,7 +113,7 @@
 
         <article class="table-card side-card report-list-card">
             <header class="section-head">
-                <h2>Segment details</h2>
+                <h2>Route's segments' details</h2>
             </header>
             <div class="workspace-table-wrap side-results-wrap">
                 <h3>Segment Identity</h3>
@@ -151,7 +151,7 @@
                 </table>
             </div>
             <div class="workspace-table-wrap side-results-wrap">
-                <h3>Segment Characteristics</h3>
+                <h3>Route's segments' characteristics</h3>
                 <table class="data-table inventory-table side-results-table">
                     <thead>
                         <tr>
