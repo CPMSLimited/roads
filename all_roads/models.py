@@ -91,10 +91,10 @@ class Address(models.Model):
 class Segment(models.Model):
     STATUS_CHOICES = [
         ('666699', 'No response'),
-        ('F70202', 'Failed (<49 km/h)'),
-        ('FF8D28', 'Intolerable (<59 km/h)'),
-        ('2A6FDD', 'Tolerable (<69 km/h)'),
-        ('1F8A70', 'Good (<79 km/h)'),
+        ('F70202', 'Failed (<60 km/h)'),
+        ('FF8D28', 'Intolerable (60 to <70 km/h)'),
+        ('2A6FDD', 'Tolerable (70 to <80 km/h)'),
+        ('1F8A70', 'Good (>=80 km/h)'),
     ]
 
     route = models.ForeignKey(Route, db_column='route', on_delete=models.PROTECT, default=1)

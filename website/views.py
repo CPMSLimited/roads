@@ -45,10 +45,10 @@ logger = logging.getLogger(__name__)
 
 # ---- Status buckets used for counts/mini-chart (hex codes) ----
 STATUS_BUCKETS = {
-    "good": {"codes": ["339933", "006600"]},         # Good (>=90 km/h)
-    "tolerable": {"codes": ["00CC00", "FFFFCC"]},    # OK / Manageable
-    "intolerable": {"codes": ["FF9966", "FF5050"]},  # Poor / Bad
-    "failed": {"codes": ["FF0000"]},                 # Failed
+    "good": {"codes": ["1F8A70"]},                   # Good (>=80 km/h)
+    "tolerable": {"codes": ["2A6FDD"]},              # Tolerable (70 to <80 km/h)
+    "intolerable": {"codes": ["FF8D28"]},            # Intolerable (60 to <70 km/h)
+    "failed": {"codes": ["F70202"]},                 # Failed (<60 km/h)
     "no_response": {"codes": ["666699"]},            # Unknown / no response
 }
 
@@ -292,11 +292,11 @@ def _get_latest_defect(subsegment):
 
 def _defect_condition_from_subsegment(subsegment):
     status_code = (getattr(subsegment, "status", "") or "").replace("#", "").upper()
-    if status_code == "FF0000":
+    if status_code == "F70202":
         return Defect.CONDITION_FAILED
-    if status_code in {"FF5050", "FF9966"}:
+    if status_code == "FF8D28":
         return Defect.CONDITION_INTOLERABLE
-    if status_code in {"FFFFCC", "00CC00", "339933", "006600"}:
+    if status_code in {"2A6FDD", "1F8A70"}:
         return Defect.CONDITION_TOLERABLE
     return Defect.CONDITION_BAD
 
@@ -1021,9 +1021,11 @@ def library_landing(request, active_section="road_inventory"):
 
 def library_reports(request):
     def _status_label_and_class(status_code):
-        if status_code in {"FF0000", "FF5050", "FF9966"}:
+        if status_code == "F70202":
+            return "Failed", "is-intolerable"
+        if status_code == "FF8D28":
             return "Intolerable", "is-intolerable"
-        if status_code in {"FFFFCC", "00CC00", "339933", "006600"}:
+        if status_code in {"2A6FDD", "1F8A70"}:
             return "Tolerable", "is-tolerable"
         return "No response", "is-neutral"
 
@@ -1474,10 +1476,13 @@ def engineering_admin_root_cause(request):
             supporting_documents = [f"{code} Root Cause.jpg", f"{code} Root Cause.jpg"]
 
         segment_status_code = getattr(getattr(existing_analysis.subsegment, "segment", None), "status", "")
-        if segment_status_code in {"FF0000", "FF5050", "FF9966"}:
+        if segment_status_code == "F70202":
+            view_segment_status_text = "Failed"
+            view_segment_status_class = "intolerable"
+        elif segment_status_code == "FF8D28":
             view_segment_status_text = "Intolerable"
             view_segment_status_class = "intolerable"
-        elif segment_status_code in {"FFFFCC", "00CC00", "339933", "006600"}:
+        elif segment_status_code in {"2A6FDD", "1F8A70"}:
             view_segment_status_text = "Tolerable"
             view_segment_status_class = "tolerable"
         else:
@@ -1940,10 +1945,13 @@ def physical_inspection(request):
             physical_supporting_documents = [f"{code} Physical Inspection.jpg", f"{code} Physical Inspection.jpg"]
 
         segment_status_code = getattr(getattr(current_physical_view.subsegment, "segment", None), "status", "")
-        if segment_status_code in {"FF0000", "FF5050", "FF9966"}:
+        if segment_status_code == "F70202":
+            physical_view_segment_status_text = "Failed"
+            physical_view_segment_status_class = "intolerable"
+        elif segment_status_code == "FF8D28":
             physical_view_segment_status_text = "Intolerable"
             physical_view_segment_status_class = "intolerable"
-        elif segment_status_code in {"FFFFCC", "00CC00", "339933", "006600"}:
+        elif segment_status_code in {"2A6FDD", "1F8A70"}:
             physical_view_segment_status_text = "Tolerable"
             physical_view_segment_status_class = "tolerable"
 

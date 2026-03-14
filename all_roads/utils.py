@@ -1,13 +1,10 @@
 # Keep in one place so services, api, tasks can import without circulars
 SPEED_COLOR_CODES = [
-    (1, '666699'),   # No response / very slow
-    (40, 'FF0000'),  # Werser
-    (50, 'FF5050'),  # Bad
-    (60, 'FF9966'),  # Poor
-    (70, 'FFFFCC'),  # Manage
-    (80, '00CC00'),  # Ok
-    (90, '339933'),  # Good
-    (float('inf'), '006600'),  # Better
+    (1, '666699'),          # No response / unusable data
+    (60, 'F70202'),         # Failed (<60 km/h)
+    (70, 'FF8D28'),         # Intolerable (60 to <70 km/h)
+    (80, '2A6FDD'),         # Tolerable (70 to <80 km/h)
+    (float('inf'), '1F8A70'),  # Good (>=80 km/h)
 ]
 
 def get_status_color(speed: float) -> str:
