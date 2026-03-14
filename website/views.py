@@ -2579,13 +2579,13 @@ def _normalize_header_token(value):
 
 SEGMENT_UPLOAD_HEADER_ALIASES = {
     "ROUTE": {"route"},
-    "SEGMENT CODE": {"segment code"},
+    "SEGMENT CODE": {"segment code", "segment_code"},
     "STATE": {"state"},
     "SEGMENT NAME": {"segment name"},
-    "START_LAT": {"start lat", "eastings"},
-    "START_LON": {"start lon", "northings"},
-    "END_LAT": {"end lat", "eastings 2"},
-    "END_LON": {"end lon", "northings 2"},
+    "START_LAT": {"start lat", "northings"},
+    "START_LON": {"start lon", "eastings"},
+    "END_LAT": {"end lat", "northings 2", "northings2"},
+    "END_LON": {"end lon", "eastings 2", "eastings2"},
     "INDEX": {"index"},
 }
 

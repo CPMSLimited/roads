@@ -52,10 +52,7 @@
 </section>
 
 <script>
-  (function () {
-    if (window.__libraryUploadsWorkspaceBound) return;
-    window.__libraryUploadsWorkspaceBound = true;
-
+  function initLibraryUploadsWorkspace() {
     const accordion = document.getElementById("libraryUploadsAccordion");
     const toggle = document.getElementById("libraryUploadsToggle");
     const optionsWrap = document.getElementById("libraryUploadsOptions");
@@ -65,6 +62,8 @@
     const documentationWorkspace = document.getElementById("libraryDocumentationWorkspace");
     const workspace = document.getElementById("libraryUploadWorkspace");
     if (!accordion || !toggle || !optionsWrap || !optionButtons.length || !defaultContent || !workspace) return;
+    if (workspace.dataset.initialized === "true") return;
+    workspace.dataset.initialized = "true";
 
     const uploadUrl = workspace.dataset.uploadUrl;
     const workspaceTitle = document.getElementById("libraryUploadWorkspaceTitle");
@@ -524,5 +523,8 @@
     } else {
       setAccordionOpen(false);
     }
-  })();
+  }
+
+  window.initLibraryUploadsWorkspace = initLibraryUploadsWorkspace;
+  initLibraryUploadsWorkspace();
 </script>
