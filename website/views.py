@@ -975,10 +975,13 @@ def segments_map_data(request):
 
 def library_landing(request, active_section="road_inventory"):
     qs = Segment.objects.select_related("route", "start_point", "end_point").all()
+    selected_road = (request.GET.get("road") or "").strip()
     selected_route = (request.GET.get("route") or "").strip()
     selected_state = (request.GET.get("state") or "").strip()
     segment_code_query = (request.GET.get("segment_code") or "").strip()
 
+    if selected_road:
+        qs = qs.filter(route__road__road=selected_road)
     if selected_route:
         qs = qs.filter(route__route=selected_route)
     if selected_state:
@@ -1004,8 +1007,10 @@ def library_landing(request, active_section="road_inventory"):
             "segments": page_obj.object_list,
             "page_obj": page_obj,
             "filters_qs": filters_qs,
+            "roads": Road.objects.only("road").order_by("road"),
             "routes": Route.objects.only("route").order_by("route"),
             "states": State.objects.only("state").order_by("state"),
+            "selected_road": selected_road,
             "selected_route": selected_route,
             "selected_state": selected_state,
             "segment_code_query": segment_code_query,
@@ -2582,8 +2587,10 @@ SEGMENT_UPLOAD_HEADER_ALIASES = {
     "SEGMENT CODE": {"segment code", "segment_code"},
     "STATE": {"state"},
     "SEGMENT NAME": {"segment name"},
+    "START NAME": {"start name", "start_name"},
     "START_LAT": {"start lat", "northings"},
     "START_LON": {"start lon", "eastings"},
+    "END_NAME": {"end name", "end_name"},
     "END_LAT": {"end lat", "northings 2", "northings2"},
     "END_LON": {"end lon", "eastings 2", "eastings2"},
     "INDEX": {"index"},
@@ -2687,8 +2694,10 @@ def _read_rows(fileobj, filename):
                     "SEGMENT CODE": _cell(r, "SEGMENT CODE"),
                     "STATE": _cell(r, "STATE"),
                     "SEGMENT NAME": _cell(r, "SEGMENT NAME"),
+                    "START NAME": _cell(r, "START NAME"),
                     "START_LAT": _cell(r, "START_LAT"),
                     "START_LON": _cell(r, "START_LON"),
+                    "END NAME": _cell(r, "END NAME"),
                     "END_LAT": _cell(r, "END_LAT"),
                     "END_LON": _cell(r, "END_LON"),
                     "INDEX": _cell(r, "INDEX"),

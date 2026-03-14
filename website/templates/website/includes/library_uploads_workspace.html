@@ -106,7 +106,7 @@
             "</section>" +
             "<section class=\"library-upload-guide__card library-upload-guide__card--wide\">" +
               "<h3>Supported columns</h3>" +
-              "<ul><li>Route</li><li>Segment Code</li><li>State</li><li>Segment Name</li><li>Start Lat</li><li>Start Lon</li><li>End Lat</li><li>End Lon</li><li>Index</li></ul>" +
+              "<ul><li>Route</li><li>Segment Code</li><li>State</li><li>Segment Name</li><li>Start Name</li><li>Start Lat</li><li>Start Lon</li><li>End Name</li><li>End Lat</li><li>End Lon</li><li>Index</li></ul>" +
             "</section>" +
           "</div>" +
           "<div class=\"library-upload-guide__notes\">" +
@@ -120,8 +120,8 @@
         template: {
           filename: "new_segments_template.csv",
           rows: [
-            ["Route", "Segment Code", "State", "Segment Name", "Start Lat", "Start Lon", "End Lat", "End Lon", "Index"],
-            ["A1", "A1LAG1", "Lagos", "Apapa - Costain", "6.449800", "3.391200", "6.470100", "3.406500", "1"]
+            ["Route", "Segment Code", "State", "Segment Name", "Start Name", "Start Lat", "Start Lon", "End Name", "End Lat", "End Lon", "Index"],
+            ["A1", "A1LAG1", "Lagos", "Apapa - Costain", "Apapa", "6.449800", "3.391200", "Costain", "6.470100", "3.406500", "1"]
           ]
         }
       },

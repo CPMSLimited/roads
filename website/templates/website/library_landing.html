@@ -23,7 +23,7 @@
                     {% for item in documentation_items %}
                     <a
                         class="library-v2-upload-option {% if selected_documentation_slug == item.slug %}is-active{% endif %}"
-                        href="?{% if segment_code_query %}segment_code={{ segment_code_query|urlencode }}&{% endif %}{% if selected_route %}route={{ selected_route|urlencode }}&{% endif %}{% if selected_state %}state={{ selected_state|urlencode }}&{% endif %}doc={{ item.slug|urlencode }}"
+                        href="?{% if segment_code_query %}segment_code={{ segment_code_query|urlencode }}&{% endif %}{% if selected_road %}road={{ selected_road|urlencode }}&{% endif %}{% if selected_route %}route={{ selected_route|urlencode }}&{% endif %}{% if selected_state %}state={{ selected_state|urlencode }}&{% endif %}doc={{ item.slug|urlencode }}"
                     >{{ item.label }}</a>
                     {% endfor %}
                 </div>
@@ -45,7 +45,7 @@
     <article class="library-v2-main">
         <div class="library-v2-default-content" id="libraryDefaultContent" {% if selected_documentation_slug %}hidden{% endif %}>
         <header class="library-v2-head">
-            <h1>Routes <span>({{ page_obj.paginator.count }})</span></h1>
+            <h1>Segments <span>({{ page_obj.paginator.count }})</span></h1>
             <div class="library-v2-filters">
                 <nav class="library-v2-pager library-v2-pager-top" aria-label="Library table pagination">
                     {% if page_obj.has_previous %}
@@ -66,6 +66,12 @@
                     <span class="is-disabled">Next</span>
                     {% endif %}
                 </nav>
+                <select name="road" id="libraryRoadSelect" aria-label="Filter by road">
+                    <option value="">All roads</option>
+                    {% for road in roads %}
+                    <option value="{{ road.road }}" {% if selected_road == road.road %}selected{% endif %}>{{ road.road }}</option>
+                    {% endfor %}
+                </select>
                 <select name="route" id="libraryRouteSelect" aria-label="Filter by route">
                     <option value="">All routes</option>
                     {% for r in routes %}
@@ -138,16 +144,65 @@
 </form>
 
 <script>
-  (function () {
+  function initLibraryInventoryFilters() {
     const form = document.getElementById("libraryLandingFilters");
+    const roadSelect = document.getElementById("libraryRoadSelect");
     const routeSelect = document.getElementById("libraryRouteSelect");
     const stateSelect = document.getElementById("libraryStateSelect");
     const searchInput = document.getElementById("segmentCodeSearch");
     const suggestionsEl = document.getElementById("segmentCodeSuggestions");
-    if (!form || !routeSelect || !stateSelect || !searchInput || !suggestionsEl) return;
+    if (!form || !roadSelect || !routeSelect || !stateSelect || !searchInput || !suggestionsEl) return;
+    if (form.dataset.inventoryAjaxBound === "true") return;
+    form.dataset.inventoryAjaxBound = "true";
 
-    routeSelect.addEventListener("change", () => form.submit());
-    stateSelect.addEventListener("change", () => form.submit());
+    function buildUrl() {
+      const url = new URL(form.action || window.location.href, window.location.origin);
+      const params = new URLSearchParams(new FormData(form));
+      params.delete("doc");
+      params.delete("page");
+      url.search = params.toString();
+      return url;
+    }
+
+    function applyInventoryContent(nextDoc) {
+      const currentDoc = document.getElementById("libraryDefaultContent");
+      if (currentDoc && nextDoc) {
+        currentDoc.replaceWith(nextDoc);
+      }
+    }
+
+    function bindFreshControls() {
+      const reboundForm = document.getElementById("libraryLandingFilters");
+      if (reboundForm) {
+        delete reboundForm.dataset.inventoryAjaxBound;
+      }
+      initLibraryInventoryFilters();
+    }
+
+    function submitFiltersAjax() {
+      const url = buildUrl();
+      fetch(url.toString(), { headers: { "X-Requested-With": "XMLHttpRequest" } })
+        .then((response) => response.text())
+        .then((markup) => {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(markup, "text/html");
+          const nextContent = doc.getElementById("libraryDefaultContent");
+          if (!nextContent) {
+            window.location.href = url.toString();
+            return;
+          }
+          applyInventoryContent(nextContent);
+          window.history.replaceState({}, "", url.toString());
+          bindFreshControls();
+        })
+        .catch(() => {
+          window.location.href = url.toString();
+        });
+    }
+
+    roadSelect.addEventListener("change", submitFiltersAjax);
+    routeSelect.addEventListener("change", submitFiltersAjax);
+    stateSelect.addEventListener("change", submitFiltersAjax);
 
     let debounceId = null;
     let suggestionIndex = -1;
@@ -178,7 +233,7 @@
           event.preventDefault();
           searchInput.value = value;
           clearSuggestions();
-          form.submit();
+          submitFiltersAjax();
         });
         suggestionsEl.appendChild(btn);
       });
@@ -211,7 +266,8 @@
       const items = suggestionsEl.querySelectorAll("button");
       if (!items.length) {
         if (event.key === "Enter") {
-          form.submit();
+          event.preventDefault();
+          submitFiltersAjax();
         }
         return;
       }
@@ -232,8 +288,13 @@
           searchInput.value = items[suggestionIndex].textContent || "";
         }
         clearSuggestions();
-        form.submit();
+        submitFiltersAjax();
       }
+    });
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      submitFiltersAjax();
     });
 
     document.addEventListener("click", (event) => {
@@ -241,6 +302,8 @@
         clearSuggestions();
       }
     });
-  })();
+  }
+
+  initLibraryInventoryFilters();
 </script>
 {% endblock %}
