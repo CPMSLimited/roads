@@ -154,14 +154,14 @@
         <p class="library-row-modal__message" id="libraryRowModalMessage" hidden></p>
         <div class="library-row-modal__actions">
             <button type="button" class="library-row-modal__secondary" data-library-row-close>Close</button>
-            <button type="button" class="library-row-modal__primary" id="libraryRowModalSave">Save</button>
+            <button type="button" class="library-row-modal__primary" id="libraryRowModalSave" onclick="window.saveLibraryRowModal && window.saveLibraryRowModal(false)">Save</button>
         </div>
         <div class="library-row-modal__confirm" id="libraryRowModalConfirm" hidden>
             <p>You have unsaved changes.</p>
             <div class="library-row-modal__confirm-actions">
                 <button type="button" class="library-row-modal__secondary" id="libraryRowContinue">Continue editing</button>
                 <button type="button" class="library-row-modal__secondary" id="libraryRowDiscard">Discard changes</button>
-                <button type="button" class="library-row-modal__primary" id="libraryRowSaveClose">Save changes</button>
+                <button type="button" class="library-row-modal__primary" id="libraryRowSaveClose" onclick="window.saveLibraryRowModal && window.saveLibraryRowModal(true)">Save changes</button>
             </div>
         </div>
     </div>
@@ -196,6 +196,16 @@
     let initialState = "";
     let pendingClose = false;
 
+    function normalizeFieldValue(field, value) {
+      const raw = String(value || "").trim();
+      if (!raw || raw === "-") return "";
+      if (["northings", "eastings", "northings_2", "eastings_2", "distance"].includes(field)) {
+        const numeric = Number(raw);
+        return Number.isFinite(numeric) ? String(numeric) : raw;
+      }
+      return raw;
+    }
+
     function getCsrfToken() {
       const match = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
       return match ? decodeURIComponent(match[1]) : "";
@@ -221,14 +231,14 @@
     function serializeModalState() {
       const payload = {};
       modalBody.querySelectorAll("input[data-field]").forEach((input) => {
-        payload[input.dataset.field] = (input.value || "").trim();
+        payload[input.dataset.field] = normalizeFieldValue(input.dataset.field, input.value);
       });
       return JSON.stringify(payload);
     }
 
     function updateDirtyHighlights() {
       modalBody.querySelectorAll("input[data-field]").forEach((input) => {
-        const currentValue = (input.value || "").trim();
+        const currentValue = normalizeFieldValue(input.dataset.field, input.value);
         const originalValue = input.dataset.originalValue || "";
         input.classList.toggle("is-dirty", currentValue !== originalValue);
       });
@@ -264,7 +274,7 @@
         const input = document.createElement("input");
         input.type = "text";
         input.value = cell ? cell.textContent.trim().replace(/^-$/, "") : "";
-        input.dataset.originalValue = input.value.trim();
+        input.dataset.originalValue = normalizeFieldValue(field, input.value);
         input.dataset.field = field;
         input.setAttribute("aria-label", header);
         input.addEventListener("input", updateDirtyHighlights);
@@ -334,7 +344,7 @@
           originalSegmentCode = data.segment.segment_code || originalSegmentCode;
           modalBody.querySelectorAll("input[data-field]").forEach((input) => {
             input.value = data.segment[input.dataset.field] || "";
-            input.dataset.originalValue = input.value.trim();
+            input.dataset.originalValue = normalizeFieldValue(input.dataset.field, input.value);
           });
           initialState = serializeModalState();
           updateDirtyHighlights();
@@ -356,6 +366,8 @@
           saveCloseButton.disabled = false;
         });
     }
+
+    window.saveLibraryRowModal = saveModal;
 
     document.querySelectorAll(".library-v2-row-action").forEach((row) => {
       if (row.dataset.previewBound === "true") return;
