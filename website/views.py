@@ -11,6 +11,7 @@ from all_roads.models import (
     Segment,
     Route,
     Road,
+    Address,
     State,
     SubSegment,
     Defect,
@@ -419,7 +420,6 @@ def _format_km_total(value):
 
 def _build_inventory_context(request, active_page="inventory"):
     qs = Segment.objects.select_related("route", "start_point", "end_point").all()
-    current_view = request.GET.get("view") or "map"
     selected_road = request.GET.get("road") or ""
     selected_route = request.GET.get("route") or ""
     selected_state = (request.GET.get("state") or "").strip()
@@ -442,11 +442,7 @@ def _build_inventory_context(request, active_page="inventory"):
     routes = Route.objects.only("route").order_by("route")
     states = State.objects.only("state").order_by("state").values_list("state", flat=True)
 
-    route_ids = qs.values_list("route_id", flat=True).distinct()
-    table_qs = Route.objects.filter(id__in=route_ids).only("route", "details").order_by("route")
     filters = {}
-    if current_view:
-        filters["view"] = current_view
     if selected_road:
         filters["road"] = selected_road
     if selected_route:
@@ -513,14 +509,12 @@ def _build_inventory_context(request, active_page="inventory"):
     return {
         "active_page": active_page,
         "segments": qs.order_by("route__route", "index", "code")[:50],
-        "route_rows": table_qs,
         "roads": roads,
         "routes": routes,
         "states": list(states),
         "selected_road": selected_road,
         "selected_route": selected_route,
         "selected_state": selected_state,
-        "current_view": current_view,
         "filters_qs": urlencode(filters),
         "number_routes": unique_route_count,
         "segment_length_total": "----",
@@ -820,7 +814,7 @@ def _build_road_motorability_context(request):
         seen_segment_ids.add(segment.id)
         investigation_rows.append(
             {
-                "segment_code": segment.code,
+                "subsegment_code": defect.subsegment.code if defect.subsegment_id and defect.subsegment else "-",
                 "status_label": defect.get_workflow_status_display(),
             }
         )
@@ -1017,6 +1011,116 @@ def library_landing(request, active_section="road_inventory"):
             **documentation,
         },
     )
+
+
+def _library_segment_editor_payload(segment):
+    return {
+        "route": segment.route.route if segment.route_id and segment.route else "",
+        "segment_code": segment.code or "",
+        "name": segment.name or "",
+        "state": segment.state or "",
+        "start_name": segment.start_point.name if segment.start_point_id and segment.start_point and segment.start_point.name else "",
+        "northings": str(segment.start_lat) if segment.start_lat is not None else "",
+        "eastings": str(segment.start_lon) if segment.start_lon is not None else "",
+        "end_name": segment.end_point.name if segment.end_point_id and segment.end_point and segment.end_point.name else "",
+        "northings_2": str(segment.end_lat) if segment.end_lat is not None else "",
+        "eastings_2": str(segment.end_lon) if segment.end_lon is not None else "",
+    }
+
+
+def _resolve_library_address(name, lat, lon):
+    clean_name = (name or "").strip()
+    if not clean_name:
+        return None
+    address = Address.objects.filter(name__iexact=clean_name).order_by("id").first()
+    if address is None:
+        return Address.objects.create(
+            address=clean_name,
+            name=clean_name,
+            lat=lat if lat is not None else Decimal("0"),
+            lng=lon if lon is not None else Decimal("0"),
+        )
+    fields_to_update = []
+    if address.name != clean_name:
+        address.name = clean_name
+        fields_to_update.append("name")
+    if lat is not None and address.lat != lat:
+        address.lat = lat
+        fields_to_update.append("lat")
+    if lon is not None and address.lng != lon:
+        address.lng = lon
+        fields_to_update.append("lng")
+    if fields_to_update:
+        address.save(update_fields=fields_to_update)
+    return address
+
+
+def library_segment_editor(request, segment_code):
+    segment = (
+        Segment.objects.select_related("route", "start_point", "end_point")
+        .filter(code__iexact=(segment_code or "").strip())
+        .first()
+    )
+    if segment is None:
+        return JsonResponse({"ok": False, "message": "Segment not found."}, status=404)
+
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "message": "POST method required."}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return JsonResponse({"ok": False, "message": "Invalid request payload."}, status=400)
+
+    route_code = str(payload.get("route") or "").strip().upper()
+    new_segment_code = str(payload.get("segment_code") or "").strip().upper()
+    name = str(payload.get("name") or "").strip()
+    state = str(payload.get("state") or "").strip()
+    start_name = str(payload.get("start_name") or "").strip()
+    end_name = str(payload.get("end_name") or "").strip()
+    start_lat = _to_decimal_or_none(payload.get("northings"))
+    start_lon = _to_decimal_or_none(payload.get("eastings"))
+    end_lat = _to_decimal_or_none(payload.get("northings_2"))
+    end_lon = _to_decimal_or_none(payload.get("eastings_2"))
+    if not route_code:
+        return JsonResponse({"ok": False, "message": "Route is required."}, status=400)
+    if not new_segment_code:
+        return JsonResponse({"ok": False, "message": "Segment code is required."}, status=400)
+
+    duplicate_exists = (
+        Segment.objects.exclude(pk=segment.pk)
+        .filter(code__iexact=new_segment_code)
+        .exists()
+    )
+    if duplicate_exists:
+        return JsonResponse({"ok": False, "message": f'Segment code "{new_segment_code}" already exists.'}, status=400)
+
+    with transaction.atomic():
+        road_code = _road_code_from_route(route_code)
+        road_obj, _ = Road.objects.get_or_create(road=road_code)
+        route_obj, _ = Route.objects.get_or_create(route=route_code, defaults={"road": road_obj})
+        if route_obj.road_id != road_obj.id:
+            route_obj.road = road_obj
+            route_obj.save(update_fields=["road"])
+
+        segment.route = route_obj
+        segment.code = new_segment_code
+        segment.name = name
+        segment.state = state
+        segment.start_lat = start_lat if start_lat is not None else Decimal("0")
+        segment.start_lon = start_lon if start_lon is not None else Decimal("0")
+        segment.end_lat = end_lat if end_lat is not None else Decimal("0")
+        segment.end_lon = end_lon if end_lon is not None else Decimal("0")
+
+        if start_name:
+            segment.start_point = _resolve_library_address(start_name, segment.start_lat, segment.start_lon)
+        if end_name:
+            segment.end_point = _resolve_library_address(end_name, segment.end_lat, segment.end_lon)
+
+        segment.save()
+
+    segment.refresh_from_db()
+    return JsonResponse({"ok": True, "segment": _library_segment_editor_payload(segment)})
 
 
 def library_reports(request):

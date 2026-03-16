@@ -10,7 +10,10 @@
                 <div class="inventory-tools-left">
                     <div class="inventory-refresh-actions">
                         <button type="button" class="btn btn-outline inventory-refresh-btn">Refresh Motorability</button>
-                        <button type="button" class="inventory-refresh-link" id="motorabilityInstructionsToggle" aria-expanded="false" aria-controls="motorabilityInstructionsPanel">Instructions</button>
+                        <button type="button" class="inventory-refresh-link inventory-refresh-tooltip-trigger inventory-refresh-info-icon" aria-label="Refresh motorability instructions">
+                            <span aria-hidden="true">i</span>
+                            <span class="inventory-refresh-tooltip">Click to update segments' motorability. Only the segments in the filter results will be updated.</span>
+                        </button>
                     </div>
                     <nav id="inventoryInlinePager" class="pager inventory-inline-pager" aria-label="Inventory table pagination">
                         {% if page_obj.has_previous %}
@@ -84,10 +87,6 @@
                     </button>
                 </form>
             </div>
-            <div id="motorabilityInstructionsPanel" class="inventory-refresh-instructions" hidden>
-                <p>Refresh Motorability queues the segments currently matched by the active filters for Google-based speed and distance refresh.</p>
-                <p>Only segments not already refreshed in this browser session are queued again. After completion, the map, table, and right-side summary update using the latest saved values.</p>
-            </div>
             <p id="motorabilityRefreshFeedback" class="inventory-refresh-feedback" aria-live="polite"></p>
             <div id="motorabilityRefreshSummary" class="inventory-refresh-summary" aria-live="polite"></div>
         </div>
@@ -159,29 +158,24 @@
             <p><strong>Total length of Failed roads:</strong> {{ summary_total_length_failed }}</p>
         </article>
 
-        <article class="table-card side-card report-list-card">
-            <header class="section-head">
+        <article class="table-card side-card route-info-card">
                 <h2>Segments under investigation or repair</h2>
-                <span>{{ investigation_rows|length }} rows</span>
-            </header>
+                <span>{{ investigation_rows|length }} segments</span>
             <div class="workspace-table-wrap side-results-wrap">
                 <table class="data-table inventory-table side-results-table">
                     <thead>
                         <tr>
-                            <th>Segment</th>
+                            <th>Subsegment</th>
                             <th>Status</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for row in investigation_rows %}
                         <tr>
-                            <td>{{ row.segment_code }}</td>
+                            <td>{{ row.subsegment_code }}</td>
                             <td>{{ row.status_label }}</td>
                         </tr>
                         {% empty %}
-                        <tr>
-                            <td colspan="2" class="is-empty">No segments under investigation or repair for the selected filter.</td>
-                        </tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -198,8 +192,6 @@
     const tableView = document.getElementById("inventoryTableView");
     const buttons = document.querySelectorAll(".inventory-view-btn");
     const refreshBtn = document.querySelector(".inventory-refresh-btn");
-    const instructionsToggle = document.getElementById("motorabilityInstructionsToggle");
-    const instructionsPanel = document.getElementById("motorabilityInstructionsPanel");
     const refreshFeedback = document.getElementById("motorabilityRefreshFeedback");
     const refreshSummary = document.getElementById("motorabilityRefreshSummary");
     if (!form || !viewInput || !inlinePager || !mapView || !tableView || !buttons.length) return;
@@ -368,13 +360,6 @@
 
     function setRefreshControlsBusy(isBusy) {
       if (refreshBtn) refreshBtn.disabled = isBusy;
-    }
-
-    function setInstructionsOpen(isOpen) {
-      if (!instructionsToggle || !instructionsPanel) return;
-      instructionsPanel.hidden = !isOpen;
-      instructionsToggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
-      instructionsToggle.classList.toggle("is-active", isOpen);
     }
 
     async function readJsonSafe(response, fallbackMessage) {
@@ -613,14 +598,6 @@
       });
     }
 
-    if (instructionsToggle) {
-      instructionsToggle.addEventListener("click", () => {
-        const isOpen = instructionsToggle.getAttribute("aria-expanded") === "true";
-        setInstructionsOpen(!isOpen);
-      });
-    }
-
-
     [roadSelect, routeSelect, stateSelect, speedSelect].forEach((sel) => {
       if (!sel) return;
       sel.addEventListener("change", async () => {
@@ -643,7 +620,6 @@
     });
 
     applyStatusContrast();
-    setInstructionsOpen(false);
     setView(viewInput.value || "map");
     const activeTask = getActiveTask();
     if (activeTask && activeTask.task_id) {

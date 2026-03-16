@@ -27,7 +27,6 @@
         <div class="inventory-tools-row">
             <div class="inventory-tools-layout">
                 <form id="inventoryFiltersForm" class="toolbar-filters inventory-tools-controls" method="get">
-                    <input type="hidden" name="view" id="inventoryViewInput" value="{{ current_view|default:'map' }}">
                 <label class="inventory-field">
                     <span>Select road</span>
                     <select name="road" aria-label="All roads filter">
@@ -55,16 +54,6 @@
                         {% endfor %}
                     </select>
                 </label>
-                <button class="btn btn-ghost inventory-view-btn is-active" type="button" data-view-target="map" aria-label="Map view" aria-pressed="true">
-                    <svg viewBox="0 0 24 24" width="16" height="16" role="img" focusable="false">
-                        <path fill="currentColor" d="M3 6.4 8 4l8 2.4L21 4v13.2l-5 2.4-8-2.4-5 2.4V6.4Zm6 .5v9.4l6 1.8V8.7L9 6.9Z"/>
-                    </svg>
-                </button>
-                <button class="btn btn-ghost inventory-view-btn" type="button" data-view-target="table" aria-label="Table view" aria-pressed="false">
-                    <svg viewBox="0 0 24 24" width="16" height="16" role="img" focusable="false">
-                        <path fill="currentColor" d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h16v2H4v-2Z"/>
-                    </svg>
-                </button>
                 </form>
             </div>
         </div>
@@ -73,50 +62,22 @@
             <div id="inventoryMapView" class="map-placeholder inventory-map" aria-label="Road inventory map">
                 {% include "website/includes/shared_leaflet_map.html" with map_dom_id="roadInventoryLeafletMap" map_data_url_name="segments_map_data" map_theme="inventory" %}
             </div>
-            <div id="inventoryTableView" class="inventory-table-view is-hidden" aria-label="Road inventory table view">
-                <table class="data-table inventory-table">
-                    <thead>
-                        <tr>
-                            <th>Route</th>
-                            <th>Details</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for route in route_rows %}
-                        <tr data-route="{{ route.route }}" class="inventory-route-row">
-                            <td>{{ route.route }}</td>
-                            <td>{{ route.details|default:"-" }}</td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="2" class="is-empty">No routes found for the selected filter.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-
-            </div>
         </article>
     </div>
 
     <aside class="new-inventory-side">
         <article class="table-card side-card route-info-card">
-            <h2>Route summary</h2>
-            <p id="segmentSummaryPrompt"{% if show_segment_summary %} class="is-hidden"{% endif %}>Select a route to view its summary.</p>
-            <p><strong>Route:</strong> <span id="segmentSummaryRoute">{{ segment_summary.route }}</span></p>
+            <div class="route-info-card__head">
+                <h2 id="segmentSummaryTitle">{% if segment_summary.route %}Route {{ segment_summary.route }}{% endif %}</h2>
+            </div>
+            <p class="route-info-card__tooltip-inline{% if show_segment_summary %} is-hidden{% endif %}" id="segmentSummaryTooltip">Select a route - from the “Select route” filter above the map - to view its details.</p>
+            <p><strong>Segments:</strong> <span id="segmentSummaryCount">{{ segment_summary.number_of_segments }}</span></p>
             <p><strong>Length:</strong> <span id="segmentSummaryLength">{{ segment_summary.length }}</span></p>
             <p><strong>Start point:</strong> <span id="segmentSummaryStartPoint">{{ segment_summary.start_point }}</span></p>
             <p><strong>End point:</strong> <span id="segmentSummaryEndPoint">{{ segment_summary.end_point }}</span></p>
             <p><strong>Passes through:</strong> <span id="segmentSummaryPassesThrough">{{ segment_summary.passes_through }}</span></p>
-            <p><strong>Number of segments:</strong> <span id="segmentSummaryCount">{{ segment_summary.number_of_segments }}</span></p>
-        </article>
-
-        <article class="table-card side-card report-list-card">
-            <header class="section-head">
-                <h2>Route's segments' details</h2>
-            </header>
             <div class="workspace-table-wrap side-results-wrap">
-                <h3>Segment Identity</h3>
+                <h3>Identity of segments</h3>
                 <table class="data-table inventory-table side-results-table">
                     <thead>
                         <tr>
@@ -151,7 +112,7 @@
                 </table>
             </div>
             <div class="workspace-table-wrap side-results-wrap">
-                <h3>Route's segments' characteristics</h3>
+                <h3>Characteristics of segments</h3>
                 <table class="data-table inventory-table side-results-table">
                     <thead>
                         <tr>
@@ -199,30 +160,8 @@
 <script>
   (function () {
     const form = document.getElementById("inventoryFiltersForm");
-    const viewInput = document.getElementById("inventoryViewInput");
     const mapView = document.getElementById("inventoryMapView");
-    const tableView = document.getElementById("inventoryTableView");
-    const buttons = document.querySelectorAll(".inventory-view-btn");
-    if (!form || !viewInput || !mapView || !tableView || !buttons.length) return;
-
-    function setView(viewName) {
-      const isMap = viewName === "map";
-      mapView.classList.toggle("is-hidden", !isMap);
-      tableView.classList.toggle("is-hidden", isMap);
-      viewInput.value = viewName;
-      buttons.forEach((btn) => {
-        const active = btn.dataset.viewTarget === viewName;
-        btn.classList.toggle("is-active", active);
-        btn.setAttribute("aria-pressed", active ? "true" : "false");
-      });
-      if (isMap) {
-        window.dispatchEvent(new CustomEvent("shared-leaflet:refresh", { detail: { id: "roadInventoryLeafletMap" } }));
-      }
-    }
-
-    buttons.forEach((btn) => {
-      btn.addEventListener("click", () => setView(btn.dataset.viewTarget));
-    });
+    if (!form || !mapView) return;
 
     function applyStatusContrast() {
       const cells = document.querySelectorAll(".inventory-status-cell");
@@ -241,21 +180,6 @@
     const roadSelect = form.querySelector('select[name="road"]');
     const routeSelect = form.querySelector('select[name="route"]');
     const stateSelect = form.querySelector('select[name="state"]');
-    const routeRows = document.querySelectorAll("#inventoryTableView .inventory-route-row");
-    const routeDetailsUrl = "{% url 'road_inventory_route_details' %}";
-    const summaryPrompt = document.getElementById("segmentSummaryPrompt");
-    const summaryRoute = document.getElementById("segmentSummaryRoute");
-    const summaryLength = document.getElementById("segmentSummaryLength");
-    const summaryStartPoint = document.getElementById("segmentSummaryStartPoint");
-    const summaryEndPoint = document.getElementById("segmentSummaryEndPoint");
-    const summaryPassesThrough = document.getElementById("segmentSummaryPassesThrough");
-    const summaryCount = document.getElementById("segmentSummaryCount");
-    const segmentIdentityBody = document.getElementById("segmentIdentityBody");
-    const segmentCharacteristicsBody = document.getElementById("segmentCharacteristicsBody");
-
-    function displayValue(value) {
-      return value === null || value === undefined || value === "" ? "-" : value;
-    }
 
     function resetOtherFilters(changedSelect) {
       if (!roadSelect || !routeSelect || !stateSelect) return;
@@ -280,74 +204,8 @@
       });
     });
 
-    routeRows.forEach((row) => {
-      row.addEventListener("click", async () => {
-        const routeCode = row.dataset.route;
-        if (!routeCode) return;
-
-        try {
-          const url = new URL(routeDetailsUrl, window.location.origin);
-          url.searchParams.set("route", routeCode);
-          const resp = await fetch(url.toString(), { headers: { "X-Requested-With": "XMLHttpRequest" } });
-          const data = await resp.json();
-          if (!resp.ok || data.ok === false) return;
-
-          if (summaryPrompt) summaryPrompt.classList.add("is-hidden");
-          if (summaryRoute) summaryRoute.textContent = data.summary?.route || "";
-          if (summaryLength) summaryLength.textContent = data.summary?.length || "";
-          if (summaryStartPoint) summaryStartPoint.textContent = data.summary?.start_point || "";
-          if (summaryEndPoint) summaryEndPoint.textContent = data.summary?.end_point || "";
-          if (summaryPassesThrough) summaryPassesThrough.textContent = data.summary?.passes_through || "";
-          if (summaryCount) summaryCount.textContent = String(data.summary?.number_of_segments ?? "");
-
-          if (segmentIdentityBody) {
-            segmentIdentityBody.innerHTML = "";
-            if (!data.segments?.length) {
-              segmentIdentityBody.innerHTML = '<tr><td colspan="5" class="is-empty">No segments found for the selected route.</td></tr>';
-            } else {
-              data.segments.forEach((seg) => {
-                const tr = document.createElement("tr");
-                tr.innerHTML = `
-                  <td>${displayValue(seg.code)}</td>
-                  <td>${displayValue(seg.state)}</td>
-                  <td>${displayValue(seg.name)}</td>
-                  <td>${displayValue(seg.start_point)}</td>
-                  <td>${displayValue(seg.end_point)}</td>
-                `;
-                segmentIdentityBody.appendChild(tr);
-              });
-            }
-          }
-
-          if (segmentCharacteristicsBody) {
-            segmentCharacteristicsBody.innerHTML = "";
-            if (!data.segments?.length) {
-              segmentCharacteristicsBody.innerHTML = '<tr><td colspan="9" class="is-empty">No segments found for the selected route.</td></tr>';
-            } else {
-              data.segments.forEach((seg) => {
-                const tr = document.createElement("tr");
-                tr.innerHTML = `
-                  <td>${displayValue(seg.code)}</td>
-                  <td>${displayValue(seg.distance)}</td>
-                  <td>${displayValue(seg.settlement_type)}</td>
-                  <td>${displayValue(seg.carriages)}</td>
-                  <td>${displayValue(seg.lanes)}</td>
-                  <td>${displayValue(seg.pavement_type)}</td>
-                  <td>${displayValue(seg.junctions)}</td>
-                  <td>${displayValue(seg.culverts)}</td>
-                  <td>${displayValue(seg.bridges)}</td>
-                `;
-                segmentCharacteristicsBody.appendChild(tr);
-              });
-            }
-          }
-        } catch (error) {
-        }
-      });
-    });
-
     applyStatusContrast();
-    setView("{{ current_view|default:'map' }}");
+    window.dispatchEvent(new CustomEvent("shared-leaflet:refresh", { detail: { id: "roadInventoryLeafletMap" } }));
   })();
 </script>
 {% endblock %}

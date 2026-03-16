@@ -107,18 +107,18 @@
                 </thead>
                 <tbody>
                     {% for seg in segments %}
-                    <tr>
-                        <td>{{ seg.route.route }}</td>
-                        <td>{{ seg.code }}</td>
-                        <td>{{ seg.name|default:"-" }}</td>
-                        <td>{{ seg.state|default:"-" }}</td>
-                        <td>{{ seg.start_point.name|default:"-" }}</td>
-                        <td>{{ seg.start_lat }}</td>
-                        <td>{{ seg.start_lon }}</td>
-                        <td>{{ seg.end_point.name|default:"-" }}</td>
-                        <td>{{ seg.end_lat }}</td>
-                        <td>{{ seg.end_lon }}</td>
-                        <td>{{ seg.distance }}</td>
+                    <tr class="library-v2-row-action" tabindex="0" role="button" aria-label="Open segment row" data-segment-code="{{ seg.code }}">
+                        <td data-field="route">{{ seg.route.route }}</td>
+                        <td data-field="segment_code">{{ seg.code }}</td>
+                        <td data-field="name">{{ seg.name|default:"-" }}</td>
+                        <td data-field="state">{{ seg.state|default:"-" }}</td>
+                        <td data-field="start_name">{{ seg.start_point.name|default:"-" }}</td>
+                        <td data-field="northings">{{ seg.start_lat }}</td>
+                        <td data-field="eastings">{{ seg.start_lon }}</td>
+                        <td data-field="end_name">{{ seg.end_point.name|default:"-" }}</td>
+                        <td data-field="northings_2">{{ seg.end_lat }}</td>
+                        <td data-field="eastings_2">{{ seg.end_lon }}</td>
+                        <td data-field="distance">{{ seg.distance }}</td>
                     </tr>
                     {% empty %}
                     <tr>
@@ -143,7 +143,260 @@
     </article>
 </form>
 
+<div class="library-row-modal" id="libraryRowModal" hidden>
+    <div class="library-row-modal__backdrop" data-library-row-close></div>
+    <div class="library-row-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="libraryRowModalTitle">
+        <div class="library-row-modal__head">
+            <h2 id="libraryRowModalTitle">Segment details</h2>
+            <button type="button" class="library-row-modal__close" aria-label="Close" data-library-row-close>&times;</button>
+        </div>
+        <div class="library-row-modal__body" id="libraryRowModalBody"></div>
+        <p class="library-row-modal__message" id="libraryRowModalMessage" hidden></p>
+        <div class="library-row-modal__actions">
+            <button type="button" class="library-row-modal__secondary" data-library-row-close>Close</button>
+            <button type="button" class="library-row-modal__primary" id="libraryRowModalSave">Save</button>
+        </div>
+        <div class="library-row-modal__confirm" id="libraryRowModalConfirm" hidden>
+            <p>You have unsaved changes.</p>
+            <div class="library-row-modal__confirm-actions">
+                <button type="button" class="library-row-modal__secondary" id="libraryRowContinue">Continue editing</button>
+                <button type="button" class="library-row-modal__secondary" id="libraryRowDiscard">Discard changes</button>
+                <button type="button" class="library-row-modal__primary" id="libraryRowSaveClose">Save changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+  function initLibraryRowPreview() {
+    const modal = document.getElementById("libraryRowModal");
+    const modalBody = document.getElementById("libraryRowModalBody");
+    const modalTitle = document.getElementById("libraryRowModalTitle");
+    const message = document.getElementById("libraryRowModalMessage");
+    const saveButton = document.getElementById("libraryRowModalSave");
+    const confirmBox = document.getElementById("libraryRowModalConfirm");
+    const continueButton = document.getElementById("libraryRowContinue");
+    const discardButton = document.getElementById("libraryRowDiscard");
+    const saveCloseButton = document.getElementById("libraryRowSaveClose");
+    if (!modal || !modalBody || !modalTitle || !message || !saveButton || !confirmBox) return;
+    const fieldConfig = [
+      { header: "Route", field: "route" },
+      { header: "Segment code", field: "segment_code" },
+      { header: "Name", field: "name" },
+      { header: "State", field: "state" },
+      { header: "Start name", field: "start_name" },
+      { header: "Northings", field: "northings" },
+      { header: "Eastings", field: "eastings" },
+      { header: "End name", field: "end_name" },
+      { header: "Northings 2", field: "northings_2" },
+      { header: "Eastings 2", field: "eastings_2" }
+    ];
+    let activeRow = null;
+    let originalSegmentCode = "";
+    let initialState = "";
+    let pendingClose = false;
+
+    function getCsrfToken() {
+      const match = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+      return match ? decodeURIComponent(match[1]) : "";
+    }
+
+    function setMessage(text, isError) {
+      if (!text) {
+        message.hidden = true;
+        message.textContent = "";
+        message.classList.remove("is-error", "is-success");
+        return;
+      }
+      message.hidden = false;
+      message.textContent = text;
+      message.classList.toggle("is-error", !!isError);
+      message.classList.toggle("is-success", !isError);
+    }
+
+    function hideConfirm() {
+      confirmBox.hidden = true;
+    }
+
+    function serializeModalState() {
+      const payload = {};
+      modalBody.querySelectorAll("input[data-field]").forEach((input) => {
+        payload[input.dataset.field] = (input.value || "").trim();
+      });
+      return JSON.stringify(payload);
+    }
+
+    function updateDirtyHighlights() {
+      modalBody.querySelectorAll("input[data-field]").forEach((input) => {
+        const currentValue = (input.value || "").trim();
+        const originalValue = input.dataset.originalValue || "";
+        input.classList.toggle("is-dirty", currentValue !== originalValue);
+      });
+    }
+
+    function isDirty() {
+      return serializeModalState() !== initialState;
+    }
+
+    function closeModal() {
+      if (isDirty()) {
+        confirmBox.hidden = false;
+        return;
+      }
+      modal.hidden = true;
+      document.body.classList.remove("modal-open");
+      activeRow = null;
+      originalSegmentCode = "";
+      hideConfirm();
+      setMessage("", false);
+    }
+
+    function buildFields(row) {
+      modalBody.innerHTML = "";
+      fieldConfig.forEach(({ header, field }) => {
+        const cell = row.querySelector(`[data-field="${field}"]`);
+        const fieldEl = document.createElement("label");
+        fieldEl.className = "library-row-modal__field";
+
+        const key = document.createElement("span");
+        key.textContent = header;
+
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = cell ? cell.textContent.trim().replace(/^-$/, "") : "";
+        input.dataset.originalValue = input.value.trim();
+        input.dataset.field = field;
+        input.setAttribute("aria-label", header);
+        input.addEventListener("input", updateDirtyHighlights);
+
+        fieldEl.appendChild(key);
+        fieldEl.appendChild(input);
+        modalBody.appendChild(fieldEl);
+      });
+      modalTitle.textContent = row.dataset.segmentCode ? `Segment ${row.dataset.segmentCode}` : "Segment details";
+      initialState = serializeModalState();
+      updateDirtyHighlights();
+      hideConfirm();
+      setMessage("", false);
+    }
+
+    function openModal(row) {
+      activeRow = row;
+      originalSegmentCode = row.dataset.segmentCode || "";
+      buildFields(row);
+      modal.hidden = false;
+      document.body.classList.add("modal-open");
+    }
+
+    function updateRow(segment) {
+      if (!activeRow) return;
+      activeRow.dataset.segmentCode = segment.segment_code || "";
+      const rowMapping = {
+        route: segment.route || "-",
+        segment_code: segment.segment_code || "-",
+        name: segment.name || "-",
+        state: segment.state || "-",
+        start_name: segment.start_name || "-",
+        northings: segment.northings || "0",
+        eastings: segment.eastings || "0",
+        end_name: segment.end_name || "-",
+        northings_2: segment.northings_2 || "0",
+        eastings_2: segment.eastings_2 || "0"
+      };
+      Object.entries(rowMapping).forEach(([field, value]) => {
+        const cell = activeRow.querySelector(`[data-field="${field}"]`);
+        if (cell) cell.textContent = value;
+      });
+      modalTitle.textContent = segment.segment_code ? `Segment ${segment.segment_code}` : "Segment details";
+    }
+
+    function saveModal(closeAfterSave) {
+      if (!activeRow || !originalSegmentCode) return;
+      saveButton.disabled = true;
+      saveCloseButton.disabled = true;
+      setMessage("Saving changes...", false);
+      const payload = JSON.parse(serializeModalState());
+      fetch(`{% url "library_segment_editor" "__segment_code__" %}`.replace("__segment_code__", encodeURIComponent(originalSegmentCode)), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken(),
+          "X-Requested-With": "XMLHttpRequest"
+        },
+        body: JSON.stringify(payload)
+      })
+        .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => {
+          if (!ok || !data.ok || !data.segment) {
+            throw new Error((data && data.message) || "Could not save segment.");
+          }
+          updateRow(data.segment);
+          originalSegmentCode = data.segment.segment_code || originalSegmentCode;
+          modalBody.querySelectorAll("input[data-field]").forEach((input) => {
+            input.value = data.segment[input.dataset.field] || "";
+            input.dataset.originalValue = input.value.trim();
+          });
+          initialState = serializeModalState();
+          updateDirtyHighlights();
+          hideConfirm();
+          setMessage("Saved.", false);
+          if (closeAfterSave) {
+            pendingClose = false;
+            modal.hidden = true;
+            document.body.classList.remove("modal-open");
+            activeRow = null;
+          }
+        })
+        .catch((error) => {
+          pendingClose = false;
+          setMessage(error.message || "Could not save segment.", true);
+        })
+        .finally(() => {
+          saveButton.disabled = false;
+          saveCloseButton.disabled = false;
+        });
+    }
+
+    document.querySelectorAll(".library-v2-row-action").forEach((row) => {
+      if (row.dataset.previewBound === "true") return;
+      row.dataset.previewBound = "true";
+      row.addEventListener("click", () => openModal(row));
+      row.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openModal(row);
+        }
+      });
+    });
+
+    if (modal.dataset.closeBound !== "true") {
+      modal.dataset.closeBound = "true";
+      modal.querySelectorAll("[data-library-row-close]").forEach((trigger) => {
+        trigger.addEventListener("click", () => {
+          pendingClose = true;
+          closeModal();
+        });
+      });
+      saveButton.addEventListener("click", () => saveModal(false));
+      continueButton.addEventListener("click", () => {
+        pendingClose = false;
+        hideConfirm();
+      });
+      discardButton.addEventListener("click", () => {
+        pendingClose = false;
+        modal.hidden = true;
+        document.body.classList.remove("modal-open");
+        activeRow = null;
+        hideConfirm();
+        setMessage("", false);
+      });
+      saveCloseButton.addEventListener("click", () => {
+        pendingClose = true;
+        saveModal(true);
+      });
+    }
+  }
+
   function initLibraryInventoryFilters() {
     const form = document.getElementById("libraryLandingFilters");
     const roadSelect = document.getElementById("libraryRoadSelect");
@@ -176,6 +429,7 @@
       if (reboundForm) {
         delete reboundForm.dataset.inventoryAjaxBound;
       }
+      initLibraryRowPreview();
       initLibraryInventoryFilters();
     }
 
@@ -304,6 +558,7 @@
     });
   }
 
+  initLibraryRowPreview();
   initLibraryInventoryFilters();
 </script>
 {% endblock %}

@@ -3,7 +3,7 @@
 {% block body_class %}app-body{% endblock %}
 {% block page_title %}<h1>Road Condition</h1>{% endblock %}
 {% block content %}
-<section class="new-inventory-page">
+<section class="new-inventory-page road-condition-layout">
     <div class="new-inventory-main">
         <article class="table-card map-card">
             <div id="inventoryMapView" class="map-placeholder inventory-map" aria-label="Road inventory map">
@@ -11,18 +11,24 @@
                     <div class="workspace-main">
                         <article class="table-card speed-chart-card">
                             <header class="workspace-head">
-                                <h3 id="inventorySpeedChartTitle">Speed vs Position — Select a segment</h3>
+                                <h3 id="inventorySpeedChartTitle">Speed vs Distance — Select a segment</h3>
                                 <p>Each point represents a subsegment (position on x-axis, speed on y-axis). Colours follow the status legend.</p>
                             </header>
                             <div class="workspace-chart-wrap">
-                                <canvas id="inventorySpeedChart" aria-label="Speed vs Position chart"></canvas>
+                                <canvas id="inventorySpeedChart" aria-label="Speed vs Distance chart"></canvas>
                                 <p id="inventorySpeedChartPrompt" class="chart-empty-prompt">Select a segment on the right table to view the graph.</p>
                             </div>
                         </article>
 
                         <article class="table-card workspace-table-card">
                             <header class="workspace-table-headline">
-                                <h2>Sub segments</h2>
+                                <h2>
+                                    <span>Sub segments</span>
+                                    <button type="button" class="workspace-tooltip-trigger workspace-info-icon" aria-label="Sub segments information">
+                                        <span aria-hidden="true">i</span>
+                                        <span class="workspace-tooltip">Select sub-segments for further analysis or repair. They will appear in the bottom-left section of this page.</span>
+                                    </button>
+                                </h2>
                             </header>
                             <p id="subsegmentFeedback" class="subsegment-feedback">Select a segment on the right table to load subsegments.</p>
                             <div class="workspace-table-wrap">
@@ -69,33 +75,11 @@
     </div>
 
     <aside id="inventoryRightMapPanel" class="new-inventory-side">
-        <article class="table-card side-card analysis-detail-card">
-            <h3>Road Condition Analysis</h3>
-            <p>Flag defect locations for analysis.</p>
-            <div class="analysis-code-row">
-                <span>Sub-segment Code</span>
-                <a href="#" id="analysisClearSelection">Clear Selection</a>
-            </div>
-            <div id="analysisSelectedSubsegments" class="analysis-chip-box">
-                <span class="analysis-chip-placeholder">No sub-segment selected</span>
-            </div>
-            <p id="analysisDraftFeedback" class="analysis-draft-feedback"></p>
-            <button id="analysisSaveDraftBtn" class="btn btn-solid" type="button">Save Draft</button>
-        </article>
-
         <article class="table-card side-card map-filter-results-card">
             <div class="map-filter-results-top">
+                <p class="side-results-instruction side-results-instruction--emphasis">Select a segment from the table below to view its speed distribution.</p>
                 <form id="inventoryFiltersFormSide" class="toolbar-filters inventory-tools-controls inventory-tools-controls-secondary" method="get">
                     <input type="hidden" name="view" class="inventory-view-input" value="{{ current_view|default:'map' }}">
-                    <label class="inventory-field">
-                        <span>Select road</span>
-                        <select name="road" aria-label="All roads filter">
-                            <option value="">All roads</option>
-                            {% for r in roads %}
-                            <option value="{{ r.road }}" {% if selected_road == r.road %}selected{% endif %}>{{ r.road }}</option>
-                            {% endfor %}
-                        </select>
-                    </label>
                     <label class="inventory-field">
                         <span>Select route</span>
                         <select name="route" aria-label="Select route">
@@ -114,19 +98,9 @@
                             {% endfor %}
                         </select>
                     </label>
-                    <label class="inventory-field">
-                        <span>Select speed</span>
-                        <select name="speed" aria-label="Select speed">
-                            <option value="">Select speed</option>
-                            {% for value, label in speed_options %}
-                            <option value="{{ value }}" {% if selected_speed == value %}selected{% endif %}>{{ label }}</option>
-                            {% endfor %}
-                        </select>
-                    </label>
                 </form>
             </div>
             <div class="map-filter-results-bottom">
-                <p class="side-results-instruction">Select a segment to view its road condition</p>
                 <div class="workspace-table-wrap side-results-wrap">
                     <table class="data-table inventory-table side-results-table">
                         <thead>
@@ -154,6 +128,19 @@
                     </table>
                 </div>
             </div>
+        </article>
+
+        <article class="table-card side-card analysis-detail-card">
+            <h3>Sub-segments selected for further analysis</h3>
+            <div class="analysis-code-row">
+                <span>Sub-segment Code</span>
+                <a href="#" id="analysisClearSelection">Clear Selection</a>
+            </div>
+            <div id="analysisSelectedSubsegments" class="analysis-chip-box">
+                <span class="analysis-chip-placeholder">No sub-segment selected</span>
+            </div>
+            <p id="analysisDraftFeedback" class="analysis-draft-feedback"></p>
+            <button id="analysisSaveDraftBtn" class="btn btn-solid" type="button">Save draft for engineering analysis</button>
         </article>
     </aside>
 
@@ -223,7 +210,7 @@
         const ctx = chartCanvas.getContext("2d");
         if (ctx) ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
       }
-      if (chartTitle) chartTitle.textContent = "Speed vs Position — Select a segment";
+      if (chartTitle) chartTitle.textContent = "Speed vs Distance — Select a segment";
       setChartPrompt(message || "Select a segment on the right table to view the graph.");
     }
 
@@ -306,43 +293,27 @@
         }
       });
 
-      if (chartTitle) chartTitle.textContent = `Speed vs Position — ${segmentCode}`;
+      if (chartTitle) chartTitle.textContent = `Speed vs Distance — ${segmentCode}`;
       hideChartPrompt();
     }
 
     function resetOtherFilters(formEl, changedSelect) {
       if (!formEl) return;
-      const roadSelect = formEl.querySelector('select[name="road"]');
       const routeSelect = formEl.querySelector('select[name="route"]');
       const stateSelect = formEl.querySelector('select[name="state"]');
-      const speedSelect = formEl.querySelector('select[name="speed"]');
-      if (!roadSelect || !routeSelect || !stateSelect || !speedSelect) return;
-      if (changedSelect === roadSelect) {
-        routeSelect.value = "";
+      if (!routeSelect || !stateSelect) return;
+      if (changedSelect === routeSelect) {
         stateSelect.value = "";
-        speedSelect.value = "";
-      } else if (changedSelect === routeSelect) {
-        roadSelect.value = "";
-        stateSelect.value = "";
-        speedSelect.value = "";
       } else if (changedSelect === stateSelect) {
-        roadSelect.value = "";
         routeSelect.value = "";
-        speedSelect.value = "";
-      } else if (changedSelect === speedSelect) {
-        roadSelect.value = "";
-        routeSelect.value = "";
-        stateSelect.value = "";
       }
     }
 
     function bindFilterForm(formEl) {
       if (!formEl) return;
       const selects = [
-        formEl.querySelector('select[name="road"]'),
         formEl.querySelector('select[name="route"]'),
-        formEl.querySelector('select[name="state"]'),
-        formEl.querySelector('select[name="speed"]')
+        formEl.querySelector('select[name="state"]')
       ].filter(Boolean);
       selects.forEach((sel) => {
         sel.addEventListener("change", () => {
@@ -548,7 +519,7 @@
       } else {
         setSubsegmentMessage(`Loading subsegments for ${segmentCode}...`);
       }
-      if (chartTitle) chartTitle.textContent = `Speed vs Position — ${segmentCode}`;
+      if (chartTitle) chartTitle.textContent = `Speed vs Distance — ${segmentCode}`;
       if (forceRefresh) {
         setChartPrompt(`Fetching latest speed data from Google for "${segmentCode}"...`);
       } else {

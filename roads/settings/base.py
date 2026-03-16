@@ -37,6 +37,10 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+# Leaflet/OpenStreetMap tiles need a Referer on cross-origin requests.
+# Django's stricter defaults can suppress it, so use the browser-standard policy.
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
 ROOT_URLCONF = 'roads.urls'
 
 TEMPLATES = [
