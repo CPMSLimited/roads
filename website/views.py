@@ -30,6 +30,7 @@ from decimal import Decimal, InvalidOperation
 from django.contrib.auth import get_user_model
 from django.core.paginator import Paginator
 from django.db import models, transaction
+from django.db.models.deletion import ProtectedError
 from django.db.models import Sum, Count, Q, IntegerField, Max
 from django.db.models.functions import Cast, Trim, Upper
 from django.http import HttpResponse, JsonResponse
@@ -1121,6 +1122,60 @@ def library_segment_editor(request, segment_code):
 
     segment.refresh_from_db()
     return JsonResponse({"ok": True, "segment": _library_segment_editor_payload(segment)})
+
+
+def library_segments_bulk_delete(request):
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "message": "POST method required."}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return JsonResponse({"ok": False, "message": "Invalid request payload."}, status=400)
+
+    raw_codes = payload.get("segment_codes") or []
+    segment_codes = []
+    for code in raw_codes:
+        cleaned = str(code or "").strip().upper()
+        if cleaned and cleaned not in segment_codes:
+            segment_codes.append(cleaned)
+
+    if not segment_codes:
+        return JsonResponse({"ok": False, "message": "No segment codes were provided."}, status=400)
+
+    deleted_codes = []
+    failures = []
+
+    for code in segment_codes:
+        segment = Segment.objects.filter(code__iexact=code).first()
+        if segment is None:
+            failures.append({"segment_code": code, "reason": "Segment was not found."})
+            continue
+        try:
+            with transaction.atomic():
+                segment.delete()
+            deleted_codes.append(code)
+        except ProtectedError as exc:
+            protected_labels = []
+            for obj in list(exc.protected_objects)[:5]:
+                protected_labels.append(f"{obj.__class__.__name__} #{getattr(obj, 'pk', '?')}")
+            detail = ", ".join(protected_labels) if protected_labels else "Protected related records still exist."
+            failures.append(
+                {
+                    "segment_code": code,
+                    "reason": f"Deletion blocked by related records: {detail}",
+                }
+            )
+        except Exception as exc:
+            failures.append({"segment_code": code, "reason": str(exc) or "Unknown deletion error."})
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "deleted_codes": deleted_codes,
+            "failures": failures,
+        }
+    )
 
 
 def library_reports(request):

@@ -13,6 +13,7 @@ urlpatterns = [
     path("library/", views.library_landing, name="library"),
     path("library/road-inventory/", views.library_landing, name="library_road_inventory"),
     path("library/road-inventory/segments/<str:segment_code>/", views.library_segment_editor, name="library_segment_editor"),
+    path("library/road-inventory/delete/", views.library_segments_bulk_delete, name="library_segments_bulk_delete"),
     path("library/reports/", views.library_reports, name="library_reports"),
     path("library/technical-guide/", views.library_technical_guide, name="library_technical_guide"),
     path("library/user-guide/", views.library_user_guide, name="library_user_guide"),

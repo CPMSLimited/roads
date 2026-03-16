@@ -45,7 +45,10 @@
     <article class="library-v2-main">
         <div class="library-v2-default-content" id="libraryDefaultContent" {% if selected_documentation_slug %}hidden{% endif %}>
         <header class="library-v2-head">
-            <h1>Segments <span>({{ page_obj.paginator.count }})</span></h1>
+            <div class="library-v2-headline">
+                <h1>Segments <span id="librarySegmentCount">({{ page_obj.paginator.count }})</span></h1>
+                <button type="button" class="library-v2-table-note" id="libraryDeleteLabel" hidden>Delete</button>
+            </div>
             <div class="library-v2-filters">
                 <nav class="library-v2-pager library-v2-pager-top" aria-label="Library table pagination">
                     {% if page_obj.has_previous %}
@@ -92,6 +95,9 @@
             <table class="library-v2-table">
                 <thead>
                     <tr>
+                        <th class="library-v2-checkbox-col">
+                            <input type="checkbox" aria-label="Select all segments on this page">
+                        </th>
                         <th>Route</th>
                         <th>Segment code</th>
                         <th>Name</th>
@@ -108,6 +114,9 @@
                 <tbody>
                     {% for seg in segments %}
                     <tr class="library-v2-row-action" tabindex="0" role="button" aria-label="Open segment row" data-segment-code="{{ seg.code }}">
+                        <td class="library-v2-checkbox-col" data-no-row-editor onclick="event.stopPropagation();" onkeydown="event.stopPropagation();">
+                            <input type="checkbox" aria-label="Select segment {{ seg.code }}" onclick="event.stopPropagation();" onkeydown="event.stopPropagation();">
+                        </td>
                         <td data-field="route">{{ seg.route.route }}</td>
                         <td data-field="segment_code">{{ seg.code }}</td>
                         <td data-field="name">{{ seg.name|default:"-" }}</td>
@@ -122,7 +131,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="11" class="is-empty">No segment matched your filters.</td>
+                        <td colspan="12" class="is-empty">No segment matched your filters.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -167,7 +176,219 @@
     </div>
 </div>
 
+<div class="library-delete-modal" id="libraryDeleteModal" hidden>
+    <div class="library-delete-modal__backdrop" data-library-delete-close></div>
+    <div class="library-delete-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="libraryDeleteModalTitle">
+        <div class="library-delete-modal__head">
+            <h2 id="libraryDeleteModalTitle">Delete selected segments</h2>
+            <button type="button" class="library-delete-modal__close" aria-label="Close" data-library-delete-close>&times;</button>
+        </div>
+        <div class="library-delete-modal__body">
+            <p class="library-delete-modal__warning">These selected rows will be permanently deleted and cannot be restored.</p>
+            <p class="library-delete-modal__summary" id="libraryDeleteModalSummary"></p>
+            <p class="library-delete-modal__message" id="libraryDeleteModalMessage" hidden></p>
+            <div class="library-delete-modal__failures" id="libraryDeleteModalFailures" hidden>
+                <h3>Rows that could not be deleted</h3>
+                <ul id="libraryDeleteModalFailureList"></ul>
+            </div>
+        </div>
+        <div class="library-delete-modal__actions">
+            <button type="button" class="library-delete-modal__secondary" data-library-delete-close>Cancel</button>
+            <button type="button" class="library-delete-modal__primary" id="libraryDeleteModalConfirm">Delete selected</button>
+        </div>
+    </div>
+</div>
+
 <script>
+  function initLibraryDeleteVisibility() {
+    const deleteLabel = document.getElementById("libraryDeleteLabel");
+    const headerCheckbox = document.querySelector('.library-v2-table thead .library-v2-checkbox-col input[type="checkbox"]');
+    const rowCheckboxes = Array.from(document.querySelectorAll('.library-v2-table tbody .library-v2-checkbox-col input[type="checkbox"]'));
+    if (!deleteLabel || !headerCheckbox || !rowCheckboxes.length) return;
+    if (deleteLabel.dataset.visibilityBound === "true") return;
+    deleteLabel.dataset.visibilityBound = "true";
+
+    function syncDeleteVisibility() {
+      const checkedCount = rowCheckboxes.filter((checkbox) => checkbox.checked).length;
+      deleteLabel.hidden = checkedCount === 0;
+      headerCheckbox.checked = checkedCount > 0 && checkedCount === rowCheckboxes.length;
+      headerCheckbox.indeterminate = checkedCount > 0 && checkedCount < rowCheckboxes.length;
+    }
+
+    headerCheckbox.addEventListener("change", () => {
+      rowCheckboxes.forEach((checkbox) => {
+        checkbox.checked = headerCheckbox.checked;
+      });
+      syncDeleteVisibility();
+    });
+
+    rowCheckboxes.forEach((checkbox) => {
+      checkbox.addEventListener("change", syncDeleteVisibility);
+    });
+
+    syncDeleteVisibility();
+  }
+
+  function initLibraryBulkDelete() {
+    const deleteLabel = document.getElementById("libraryDeleteLabel");
+    const modal = document.getElementById("libraryDeleteModal");
+    const summary = document.getElementById("libraryDeleteModalSummary");
+    const message = document.getElementById("libraryDeleteModalMessage");
+    const failuresWrap = document.getElementById("libraryDeleteModalFailures");
+    const failuresList = document.getElementById("libraryDeleteModalFailureList");
+    const confirmButton = document.getElementById("libraryDeleteModalConfirm");
+    const countLabel = document.getElementById("librarySegmentCount");
+    if (!deleteLabel || !modal || !summary || !message || !failuresWrap || !failuresList || !confirmButton) return;
+    if (modal.dataset.initialized === "true") return;
+    modal.dataset.initialized = "true";
+
+    function getCsrfToken() {
+      const match = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+      return match ? decodeURIComponent(match[1]) : "";
+    }
+
+    function selectedRows() {
+      return Array.from(document.querySelectorAll(".library-v2-table tbody tr.library-v2-row-action"))
+        .filter((row) => row.querySelector('.library-v2-checkbox-col input[type="checkbox"]')?.checked);
+    }
+
+    function syncSelectionUi() {
+      const deleteButton = document.getElementById("libraryDeleteLabel");
+      const headerCheckbox = document.querySelector('.library-v2-table thead .library-v2-checkbox-col input[type="checkbox"]');
+      const rowCheckboxes = Array.from(document.querySelectorAll('.library-v2-table tbody .library-v2-checkbox-col input[type="checkbox"]'));
+      if (!deleteButton || !headerCheckbox) return;
+      const checkedCount = rowCheckboxes.filter((checkbox) => checkbox.checked).length;
+      deleteButton.hidden = checkedCount === 0;
+      headerCheckbox.checked = checkedCount > 0 && checkedCount === rowCheckboxes.length;
+      headerCheckbox.indeterminate = checkedCount > 0 && checkedCount < rowCheckboxes.length;
+    }
+
+    function updateEmptyState() {
+      const tbody = document.querySelector(".library-v2-table tbody");
+      if (!tbody) return;
+      const rows = Array.from(tbody.querySelectorAll("tr.library-v2-row-action"));
+      if (rows.length) return;
+      const emptyRow = document.createElement("tr");
+      const emptyCell = document.createElement("td");
+      emptyCell.colSpan = 12;
+      emptyCell.className = "is-empty";
+      emptyCell.textContent = "No segment matched your filters.";
+      emptyRow.appendChild(emptyCell);
+      tbody.appendChild(emptyRow);
+    }
+
+    function updateCount() {
+      if (!countLabel) return;
+      const rowCount = document.querySelectorAll(".library-v2-table tbody tr.library-v2-row-action").length;
+      countLabel.textContent = `(${rowCount})`;
+    }
+
+    function setMessage(text, isError) {
+      if (!text) {
+        message.hidden = true;
+        message.textContent = "";
+        message.classList.remove("is-error", "is-success");
+        return;
+      }
+      message.hidden = false;
+      message.textContent = text;
+      message.classList.toggle("is-error", !!isError);
+      message.classList.toggle("is-success", !isError);
+    }
+
+    function closeModal() {
+      modal.hidden = true;
+      document.body.classList.remove("modal-open");
+      setMessage("", false);
+      failuresWrap.hidden = true;
+      failuresList.innerHTML = "";
+    }
+
+    function openModal() {
+      const rows = selectedRows();
+      summary.textContent = `You are about to delete ${rows.length} selected segment${rows.length === 1 ? "" : "s"}.`;
+      setMessage("", false);
+      failuresWrap.hidden = true;
+      failuresList.innerHTML = "";
+      modal.hidden = false;
+      document.body.classList.add("modal-open");
+    }
+
+    function removeDeletedRows(codes) {
+      const codeSet = new Set(codes.map((code) => String(code || "").trim().toUpperCase()));
+      document.querySelectorAll(".library-v2-table tbody tr.library-v2-row-action").forEach((row) => {
+        const code = String(row.dataset.segmentCode || "").trim().toUpperCase();
+        if (codeSet.has(code)) {
+          row.remove();
+        }
+      });
+      updateEmptyState();
+      updateCount();
+      syncSelectionUi();
+    }
+
+    deleteLabel.addEventListener("click", openModal);
+
+    confirmButton.addEventListener("click", () => {
+      const rows = selectedRows();
+      const segmentCodes = rows.map((row) => row.dataset.segmentCode).filter(Boolean);
+      if (!segmentCodes.length) {
+        closeModal();
+        return;
+      }
+
+      confirmButton.disabled = true;
+      setMessage("Deleting selected rows...", false);
+      fetch('{% url "library_segments_bulk_delete" %}', {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken(),
+          "X-Requested-With": "XMLHttpRequest"
+        },
+        body: JSON.stringify({ segment_codes: segmentCodes })
+      })
+        .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => {
+          if (!ok || !data.ok) {
+            throw new Error((data && data.message) || "Could not delete selected segments.");
+          }
+          if (Array.isArray(data.deleted_codes) && data.deleted_codes.length) {
+            removeDeletedRows(data.deleted_codes);
+          }
+          const failures = Array.isArray(data.failures) ? data.failures : [];
+          if (failures.length) {
+            failuresWrap.hidden = false;
+            failuresList.innerHTML = "";
+            failures.forEach((failure) => {
+              const item = document.createElement("li");
+              item.textContent = `${failure.segment_code}: ${failure.reason}`;
+              failuresList.appendChild(item);
+            });
+            setMessage(
+              data.deleted_codes.length
+                ? `Deleted ${data.deleted_codes.length} segment${data.deleted_codes.length === 1 ? "" : "s"}. Some rows could not be deleted.`
+                : "No selected rows were deleted.",
+              true
+            );
+            summary.textContent = "Review the failures below.";
+            return;
+          }
+          closeModal();
+        })
+        .catch((error) => {
+          setMessage(error.message || "Could not delete selected segments.", true);
+        })
+        .finally(() => {
+          confirmButton.disabled = false;
+        });
+    });
+
+    modal.querySelectorAll("[data-library-delete-close]").forEach((trigger) => {
+      trigger.addEventListener("click", closeModal);
+    });
+  }
+
   function initLibraryRowPreview() {
     const modal = document.getElementById("libraryRowModal");
     const modalBody = document.getElementById("libraryRowModalBody");
@@ -372,8 +593,12 @@
     document.querySelectorAll(".library-v2-row-action").forEach((row) => {
       if (row.dataset.previewBound === "true") return;
       row.dataset.previewBound = "true";
-      row.addEventListener("click", () => openModal(row));
+      row.addEventListener("click", (event) => {
+        if (event.target.closest("[data-no-row-editor]")) return;
+        openModal(row);
+      });
       row.addEventListener("keydown", (event) => {
+        if (event.target.closest("[data-no-row-editor]")) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           openModal(row);
@@ -441,6 +666,8 @@
       if (reboundForm) {
         delete reboundForm.dataset.inventoryAjaxBound;
       }
+      initLibraryDeleteVisibility();
+      initLibraryBulkDelete();
       initLibraryRowPreview();
       initLibraryInventoryFilters();
     }
@@ -570,6 +797,8 @@
     });
   }
 
+  initLibraryDeleteVisibility();
+  initLibraryBulkDelete();
   initLibraryRowPreview();
   initLibraryInventoryFilters();
 </script>
