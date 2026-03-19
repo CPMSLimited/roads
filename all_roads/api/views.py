@@ -26,6 +26,8 @@ def task_status(request, task_id: uuid.UUID):
             payload["result"] = res.result
         elif res.failed():
             payload["error"] = str(res.result)
+        elif isinstance(res.info, dict):
+            payload["meta"] = res.info
         return Response(payload)
     except Exception as e:
         return Response(

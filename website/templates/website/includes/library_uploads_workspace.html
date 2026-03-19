@@ -2,6 +2,7 @@
   id="libraryUploadWorkspace"
   class="library-upload-workspace"
   data-upload-url="{% url 'library_upload_dispatch' %}"
+  data-task-status-url-template="{% url 'task_status' task_id='00000000-0000-0000-0000-000000000000' %}"
   hidden
 >
   <header class="library-upload-workspace__head">
@@ -30,7 +31,7 @@
   </div>
 
   <div id="libraryUploadProgress" class="library-upload-progress" hidden>
-    <p>Uploading, please wait...</p>
+    <p id="libraryUploadProgressText">Uploading, please wait...</p>
     <div class="library-upload-progress__track">
       <div class="library-upload-progress__bar"></div>
     </div>
@@ -66,11 +67,13 @@
     workspace.dataset.initialized = "true";
 
     const uploadUrl = workspace.dataset.uploadUrl;
+    const taskStatusUrlTemplate = workspace.dataset.taskStatusUrlTemplate || "";
     const workspaceTitle = document.getElementById("libraryUploadWorkspaceTitle");
     const workspaceInstructions = document.getElementById("libraryUploadWorkspaceInstructions");
     const fileInput = document.getElementById("libraryUploadFileInput");
     const beginButton = document.getElementById("libraryUploadBeginButton");
     const progressBox = document.getElementById("libraryUploadProgress");
+    const progressText = document.getElementById("libraryUploadProgressText");
     const summaryBox = document.getElementById("libraryUploadSummary");
     const summaryBody = document.getElementById("libraryUploadSummaryBody");
     const downloadErrorsBtn = document.getElementById("libraryUploadDownloadErrors");
@@ -266,6 +269,7 @@
 
     let selectedOption = "";
     let latestSummary = null;
+    let activeUploadTaskId = "";
 
     function escapeHtml(value) {
       return String(value || "")
@@ -300,6 +304,64 @@
       latestSummary = null;
       if (downloadErrorsBtn) {
         downloadErrorsBtn.hidden = true;
+      }
+    }
+
+    function setProgressMessage(message) {
+      if (!progressText) return;
+      progressText.textContent = message || "Uploading, please wait...";
+    }
+
+    function taskStatusUrl(taskId) {
+      if (!taskStatusUrlTemplate || !taskId) return "";
+      return taskStatusUrlTemplate.replace("00000000-0000-0000-0000-000000000000", encodeURIComponent(taskId));
+    }
+
+    async function pollUploadTask(taskId) {
+      const statusUrl = taskStatusUrl(taskId);
+      if (!statusUrl) {
+        throw new Error("Task status endpoint is not configured.");
+      }
+      while (true) {
+        const response = await fetch(statusUrl, {
+          headers: {
+            "X-Requested-With": "XMLHttpRequest"
+          }
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "Upload status check failed.");
+        }
+        const state = String(data.state || "").toUpperCase();
+        const meta = data.meta || {};
+        if (state === "SUCCESS") {
+          return data.result || {};
+        }
+        if (state === "FAILURE" || state === "REVOKED") {
+          throw new Error(data.error || "Upload failed.");
+        }
+        if (meta && typeof meta === "object") {
+          const processed = Number(meta.processed_rows || 0);
+          const total = Number(meta.total_rows || 0);
+          if (total > 0) {
+            setProgressMessage(
+              "Processing rows " +
+              processed +
+              " of " +
+              total +
+              " (" +
+              Number(meta.percent || 0) +
+              "%)..."
+            );
+          } else {
+            setProgressMessage("Upload queued...");
+          }
+        } else if (state === "PENDING") {
+          setProgressMessage("Upload queued...");
+        } else {
+          setProgressMessage("Processing upload...");
+        }
+        await new Promise(function (resolve) { window.setTimeout(resolve, 1500); });
       }
     }
 
@@ -404,6 +466,7 @@
       navLinks.forEach((link) => link.classList.remove("is-active"));
       clearSummary();
       if (fileInput) fileInput.value = "";
+      setProgressMessage("Uploading, please wait...");
       history.replaceState(null, "", window.location.pathname + "?upload_option=" + encodeURIComponent(option));
     }
 
@@ -459,6 +522,8 @@
 
       progressBox.hidden = false;
       beginButton.disabled = true;
+      activeUploadTaskId = "";
+      setProgressMessage("Uploading, please wait...");
       showSummary("<p>Upload started...</p>", false);
 
       fetch(uploadUrl, {
@@ -473,10 +538,20 @@
           if (!response.ok || !data.ok) {
             throw new Error(data.message || "Upload failed.");
           }
+          if (data.queued && data.task_id) {
+            activeUploadTaskId = data.task_id;
+            setProgressMessage("Upload queued...");
+            showSummary("<p>Upload queued. Processing in the background...</p>", false);
+            return pollUploadTask(data.task_id).then(function (summary) {
+              latestSummary = summary || {};
+              showSummary(summaryHtml(latestSummary), false);
+            });
+          }
           latestSummary = data.summary || {};
           showSummary(summaryHtml(data.summary || {}), false);
         })
         .catch(function (error) {
+          activeUploadTaskId = "";
           latestSummary = {
             skipped_details: [],
             errors: [error.message || "Upload failed."],
@@ -484,8 +559,10 @@
           showSummary("<p>" + escapeHtml(error.message || "Upload failed.") + "</p>", true);
         })
         .finally(function () {
+          activeUploadTaskId = "";
           progressBox.hidden = true;
           beginButton.disabled = false;
+          setProgressMessage("Uploading, please wait...");
         });
     });
 

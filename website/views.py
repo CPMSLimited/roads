@@ -5,6 +5,7 @@ import os
 import re
 import json
 import html
+import tempfile
 from pathlib import Path
 
 from all_roads.models import (
@@ -24,7 +25,7 @@ from all_roads.models import (
     Library,
 )
 from all_roads.services import refresh_segment_and_subsegments, refresh_subsegments_from_google
-from all_roads.tasks import refresh_segments_task
+from all_roads.tasks import import_new_subsegments_task, refresh_segments_task
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 from django.contrib.auth import get_user_model
@@ -42,6 +43,7 @@ from .forms import UploadSegmentsForm, UploadSubSegmentsForm
 import csv
 import io
 from django.utils.safestring import mark_safe
+from website.library_upload_jobs import process_new_subsegments_upload
 
 logger = logging.getLogger(__name__)
 
@@ -3119,114 +3121,7 @@ def _read_new_subsegment_rows(fileobj, filename):
 
 
 def _process_new_subsegments_upload(fileobj):
-    rows, read_errors = _read_new_subsegment_rows(fileobj, getattr(fileobj, "name", ""))
-    summary = {
-        "created": 0,
-        "created_details": [],
-        "skipped": 0,
-        "skipped_details": [],
-        "errors": [],
-        "rows_found": len(rows),
-    }
-    if read_errors:
-        summary["errors"].extend(read_errors)
-        return summary
-
-    segment_position_counter = defaultdict(int)
-    segment_cache = {}
-
-    for row in rows:
-        rownum = row.get("_rownum")
-        segment_code = str(row.get("SEGMENT") or "").strip().upper()
-        if not segment_code:
-            summary["skipped"] += 1
-            summary["skipped_details"].append(f"Row {rownum}: skipped because Segment is blank.")
-            summary["errors"].append(f"Row {rownum}: Segment is blank.")
-            continue
-
-        segment_obj = segment_cache.get(segment_code)
-        if segment_obj is None:
-            segment_obj = Segment.objects.filter(code__iexact=segment_code).first()
-            if segment_obj:
-                segment_cache[segment_code] = segment_obj
-        if segment_obj is None:
-            summary["skipped"] += 1
-            summary["skipped_details"].append(
-                f"Row {rownum}: skipped because segment {segment_code} was not found."
-            )
-            summary["errors"].append(f"Row {rownum}: segment {segment_code} was not found.")
-            continue
-
-        row_errors = []
-        x_start = _parse_decimal_required(row.get("X_START"), rownum, "X_Start", row_errors)
-        y_start = _parse_decimal_required(row.get("Y_START"), rownum, "Y_Start", row_errors)
-        x_end = _parse_decimal_required(row.get("X_END"), rownum, "X_End", row_errors)
-        y_end = _parse_decimal_required(row.get("Y_END"), rownum, "Y_End", row_errors)
-        length = _parse_decimal_required(
-            row.get("LENGTH"),
-            rownum,
-            "Length",
-            row_errors,
-            allow_blank_default=Decimal("0"),
-        )
-
-        if not row_errors:
-            if not _in_lon_range(x_start):
-                row_errors.append(f"Row {rownum}: X_Start must be between -180 and 180.")
-            if not _in_lat_range(y_start):
-                row_errors.append(f"Row {rownum}: Y_Start must be between -90 and 90.")
-            if not _in_lon_range(x_end):
-                row_errors.append(f"Row {rownum}: X_End must be between -180 and 180.")
-            if not _in_lat_range(y_end):
-                row_errors.append(f"Row {rownum}: Y_End must be between -90 and 90.")
-
-        if row_errors:
-            summary["skipped"] += 1
-            summary["skipped_details"].append(f"Row {rownum}: skipped due to invalid coordinates/length.")
-            summary["errors"].extend(row_errors)
-            continue
-
-        segment_position_counter[segment_code] += 1
-        position = segment_position_counter[segment_code]
-        subsegment_code = f"{segment_obj.code}-{position:02d}"
-
-        if SubSegment.objects.filter(code__iexact=subsegment_code).exists():
-            summary["skipped"] += 1
-            summary["skipped_details"].append(
-                f"Row {rownum}: skipped because subsegment code {subsegment_code} already exists."
-            )
-            continue
-
-        if SubSegment.objects.filter(segment=segment_obj, position=position).exists():
-            summary["skipped"] += 1
-            summary["skipped_details"].append(
-                f"Row {rownum}: skipped because position {position} already exists for segment {segment_obj.code}."
-            )
-            continue
-
-        try:
-            SubSegment.objects.create(
-                segment=segment_obj,
-                position=position,
-                code=subsegment_code,
-                start_lon=x_start,
-                start_lat=y_start,
-                end_lon=x_end,
-                end_lat=y_end,
-                distance=length,
-            )
-            summary["created"] += 1
-            summary["created_details"].append(
-                f"Row {rownum}: created subsegment {subsegment_code}."
-            )
-        except Exception as exc:
-            summary["skipped"] += 1
-            summary["skipped_details"].append(
-                f"Row {rownum}: skipped because subsegment {subsegment_code} could not be created."
-            )
-            summary["errors"].append(f"Row {rownum}: failed to create subsegment {subsegment_code}. ({exc})")
-
-    return summary
+    return process_new_subsegments_upload(fileobj, getattr(fileobj, "name", ""))
 
 
 def _process_edit_segments_upload(fileobj):
@@ -3532,13 +3427,33 @@ def library_upload_dispatch(request):
             }
         )
     if upload_option == "new_1km_subsegments":
-        summary = _process_new_subsegments_upload(upload_file)
+        suffix = os.path.splitext(upload_file.name or "")[1] or ".upload"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+            for chunk in upload_file.chunks():
+                temp_file.write(chunk)
+            temp_path = temp_file.name
+        try:
+            async_result = import_new_subsegments_task.delay(temp_path, upload_file.name)
+        except Exception as exc:
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "message": f"Could not queue upload. ({exc})",
+                    "option": upload_option,
+                },
+                status=500,
+            )
         return JsonResponse(
             {
                 "ok": True,
-                "message": "Upload processed.",
+                "message": "Upload queued.",
+                "queued": True,
+                "task_id": str(async_result.id),
                 "option": upload_option,
-                "summary": summary,
             }
         )
     if upload_option == "edit_segments":
