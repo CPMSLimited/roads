@@ -840,11 +840,11 @@ body.modal-open {
 }
 
 .library-report-chip.is-intolerable {
-  background: #ff8a1f;
+  background: #ff9966;
 }
 
 .library-report-chip.is-tolerable {
-  background: #2d6cdf;
+  background: #339933;
 }
 
 .library-report-chip.is-neutral {
@@ -1503,10 +1503,10 @@ body.modal-open {
 .kpi-card span { display: block; color: #67726f; margin-bottom: 7px; font-size: 0.82rem; }
 .kpi-card strong { font-size: 1.93rem; line-height: 1; }
 
-.kpi-good { border-color: #58b364; }
-.kpi-blue { border-color: #4c83d8; }
-.kpi-orange { border-color: #ee9f37; }
-.kpi-red { border-color: #e26868; }
+.kpi-good { border-color: #00cc00; }
+.kpi-tolerable { border-color: #339933; }
+.kpi-intolerable { border-color: #ff9966; }
+.kpi-failed { border-color: #ff5050; }
 
 .status-chip {
   display: inline-flex;
@@ -1517,12 +1517,12 @@ body.modal-open {
   font-weight: 700;
 }
 
-.status-ok { background: #11bc30; color: #fff; }
-.status-mid { background: #ff9326; color: #fff; }
-.status-blue { background: #2f72d9; color: #fff; }
+.status-ok { background: #00cc00; color: #fff; }
+.status-mid { background: #ff9966; color: #fff; }
+.status-blue { background: #339933; color: #fff; }
 .status-progress { background: #d7ebf7; color: #197bc2; }
-.status-mid-lite { background: #fff1d8; color: #bb7a00; }
-.status-ok-lite { background: #daf3dd; color: #27963c; }
+.status-mid-lite { background: #fff0e7; color: #c2642f; }
+.status-ok-lite { background: #daf3dd; color: #1f7e1f; }
 
 .split-grid {
   display: grid;
@@ -1601,10 +1601,10 @@ body.modal-open {
   font-weight: 600;
 }
 
-.speed-red { background: #ee1414; }
-.speed-orange { background: #ff9326; }
-.speed-green { background: #39a03c; }
-.speed-blue { background: #2f72d9; }
+.speed-red { background: #ff5050; }
+.speed-orange { background: #ff9966; }
+.speed-green { background: #00cc00; }
+.speed-blue { background: #339933; }
 
 .map-placeholder {
   min-height: 500px;
@@ -2948,11 +2948,11 @@ body.modal-open {
 }
 
 .library-condition-chip.is-tolerable {
-  background: #3370cf;
+  background: #339933;
 }
 
 .library-condition-chip.is-intolerable {
-  background: #f78d24;
+  background: #ff9966;
 }
 
 .library-row-action {
@@ -3165,11 +3165,11 @@ body.modal-open {
 }
 
 .library-view-status.is-intolerable {
-  background: #f68f26;
+  background: #ff9966;
 }
 
 .library-view-status.is-tolerable {
-  background: #3370cf;
+  background: #339933;
 }
 
 .library-view-status.is-neutral {

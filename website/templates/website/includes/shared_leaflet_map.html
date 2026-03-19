@@ -25,8 +25,16 @@
     let map = null;
     let geojsonLayer = null;
     let statesLayer = null;
+    let selectedStateLayer = null;
+    let outsideMaskLayer = null;
     let statesFetchPromise = null;
     const nigeriaBounds = L.latLngBounds([4.2, 2.7], [13.9, 14.7]);
+    const worldRing = [
+      [-90, -180],
+      [-90, 180],
+      [90, 180],
+      [90, -180]
+    ];
 
     function hasActiveDataFilters(params) {
       const filterKeys = ["road", "route", "state", "speed", "segment", "subsegment"];
@@ -39,6 +47,24 @@
     function statusToHex(raw) {
       const cleaned = String(raw || "").replace("#", "").trim();
       return /^[0-9a-fA-F]{6}$/.test(cleaned) ? cleaned.toUpperCase() : "666699";
+    }
+
+    function normalizeStateName(value) {
+      const cleaned = String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ")
+        .replace(/\s+/g, " ");
+      if (!cleaned) return "";
+      if (cleaned === "abuja" || cleaned === "fct" || cleaned === "f c t" || cleaned === "federal capital territory") {
+        return "fct";
+      }
+      return cleaned;
+    }
+
+    function featureStateName(feature) {
+      const props = feature?.properties || {};
+      return normalizeStateName(props.statename || props.state || props.name || "");
     }
 
     function featureColorHex(feature) {
@@ -54,23 +80,77 @@
     function ensureMap() {
       if (map) return;
       map = L.map(mapEl);
+      if (!map.getPane("maskPane")) {
+        map.createPane("maskPane");
+        map.getPane("maskPane").style.zIndex = "350";
+      }
+      if (!map.getPane("statesPane")) {
+        map.createPane("statesPane");
+        map.getPane("statesPane").style.zIndex = "360";
+      }
+      if (!map.getPane("selectedStatePane")) {
+        map.createPane("selectedStatePane");
+        map.getPane("selectedStatePane").style.zIndex = "370";
+      }
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "&copy; OpenStreetMap contributors"
       }).addTo(map);
     }
 
-    async function ensureStatesLayer() {
-      ensureMap();
-      if (statesLayer) return;
-      if (!statesFetchPromise) {
-        statesFetchPromise = fetch(statesGeojsonUrl, { headers: { "X-Requested-With": "XMLHttpRequest" } })
-          .then((response) => {
-            if (!response.ok) throw new Error("Could not load Nigeria states layer.");
-            return response.json();
+    function holesFromFeatures(features) {
+      const holes = [];
+      (features || []).forEach((feature) => {
+        const geometry = feature?.geometry || {};
+        const coords = geometry.coordinates || [];
+        if (geometry.type === "Polygon") {
+          if (coords[0]?.length) {
+            holes.push(coords[0].map(([lng, lat]) => [lat, lng]));
+          }
+          return;
+        }
+        if (geometry.type === "MultiPolygon") {
+          coords.forEach((polygon) => {
+            if (polygon?.[0]?.length) {
+              holes.push(polygon[0].map(([lng, lat]) => [lat, lng]));
+            }
           });
+        }
+      });
+      return holes;
+    }
+
+    function renderStatesOverlay(statesData, selectedStateName) {
+      const allFeatures = (statesData?.features || []).filter((feature) => feature?.geometry?.type);
+      const normalizedSelectedState = normalizeStateName(selectedStateName);
+      const matchedFeatures = normalizedSelectedState
+        ? allFeatures.filter((feature) => featureStateName(feature) === normalizedSelectedState)
+        : [];
+      const focusFeatures = matchedFeatures.length ? matchedFeatures : allFeatures;
+
+      if (selectedStateLayer) {
+        map.removeLayer(selectedStateLayer);
+        selectedStateLayer = null;
       }
-      const statesData = await statesFetchPromise;
+      if (statesLayer) {
+        map.removeLayer(statesLayer);
+        statesLayer = null;
+      }
+      if (outsideMaskLayer) {
+        map.removeLayer(outsideMaskLayer);
+        outsideMaskLayer = null;
+      }
+
+      outsideMaskLayer = L.polygon([worldRing, ...holesFromFeatures(focusFeatures)], {
+        pane: "maskPane",
+        interactive: false,
+        stroke: false,
+        fillColor: "#f4f6f5",
+        fillOpacity: 0.7,
+        fillRule: "evenodd"
+      }).addTo(map);
+
       statesLayer = L.geoJSON(statesData, {
+        pane: "statesPane",
         interactive: false,
         style: function () {
           return {
@@ -81,15 +161,47 @@
           };
         }
       }).addTo(map);
-      if (statesLayer && statesLayer.bringToBack) {
-        statesLayer.bringToBack();
+
+      if (matchedFeatures.length) {
+        selectedStateLayer = L.geoJSON(
+          { type: "FeatureCollection", features: matchedFeatures },
+          {
+            pane: "selectedStatePane",
+            interactive: false,
+            style: function () {
+              return {
+                color: "#40524d",
+                weight: 2.6,
+                opacity: 0.95,
+                fillOpacity: 0
+              };
+            }
+          }
+        ).addTo(map);
       }
+    }
+
+    async function ensureStatesData() {
+      ensureMap();
+      if (!statesFetchPromise) {
+        statesFetchPromise = fetch(statesGeojsonUrl, { headers: { "X-Requested-With": "XMLHttpRequest" } })
+          .then((response) => {
+            if (!response.ok) throw new Error("Could not load Nigeria states layer.");
+            return response.json();
+          });
+      }
+      return statesFetchPromise;
     }
 
     async function loadData() {
       ensureMap();
-      await ensureStatesLayer();
       const params = new URLSearchParams(window.location.search);
+      const statesData = await ensureStatesData();
+      try {
+        renderStatesOverlay(statesData, params.get("state"));
+      } catch (error) {
+        renderStatesOverlay(statesData, "");
+      }
       const url = new URL(dataUrl, window.location.origin);
       params.forEach((value, key) => url.searchParams.set(key, value));
 

@@ -3,10 +3,10 @@ from django import template
 register = template.Library()
 
 BUCKETS = {
-    "good":        {"codes": ["1F8A70"],                "canonical": "1F8A70"},
-    "tolerable":   {"codes": ["2A6FDD"],                "canonical": "2A6FDD"},
-    "intolerable": {"codes": ["FF8D28"],                "canonical": "FF8D28"},
-    "failed":      {"codes": ["F70202"],                "canonical": "F70202"},
+    "good":        {"codes": ["00CC00"],                "canonical": "00CC00"},
+    "tolerable":   {"codes": ["339933"],                "canonical": "339933"},
+    "intolerable": {"codes": ["FF9966"],                "canonical": "FF9966"},
+    "failed":      {"codes": ["FF5050"],                "canonical": "FF5050"},
     "no_response": {"codes": ["666699"],                "canonical": "666699"},
 }
 
