@@ -3854,6 +3854,20 @@ def road_condition_subsegments(request):
             refresh_warning = " Refresh failed; showing saved data."
 
     sub_qs = SubSegment.objects.filter(segment=segment).order_by("position", "id")
+    weighted_distance_total = Decimal("0")
+    weighted_speed_total = Decimal("0")
+    for row in sub_qs:
+        distance_value = row.distance or Decimal("0")
+        speed_value = row.avg_speed or Decimal("0")
+        if distance_value and distance_value > 0:
+            weighted_distance_total += distance_value
+            weighted_speed_total += distance_value * speed_value
+
+    if weighted_distance_total > 0:
+        segment_avg_speed = float((weighted_speed_total / weighted_distance_total).quantize(Decimal("0.1")))
+    else:
+        segment_avg_speed = 0.0
+
     rows = [
         {
             "segment_code": segment.code,
@@ -3874,7 +3888,7 @@ def road_condition_subsegments(request):
                 "ok": True,
                 "message": f'Segment "{segment.code}" has no subsegments.{refresh_warning}',
                 "rows": [],
-                "segment_avg_speed": float(segment.avg_speed or 0),
+                "segment_avg_speed": segment_avg_speed,
                 "segment_status": segment.status or "666699",
                 "refresh": refresh_meta,
             }
@@ -3893,7 +3907,7 @@ def road_condition_subsegments(request):
             "ok": True,
             "message": message,
             "rows": rows,
-            "segment_avg_speed": float(segment.avg_speed or 0),
+            "segment_avg_speed": segment_avg_speed,
             "segment_status": segment.status or "666699",
             "refresh": refresh_meta,
         }

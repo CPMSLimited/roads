@@ -127,7 +127,7 @@
                             <td>{{ seg.end_lat }}</td>
                             <td>{{ seg.end_lon }}</td>
                             <td>{{ seg.distance }}</td>
-                            <td class="inventory-status-cell" data-status="{{ seg.status|default:'666699' }}">{{ seg.get_status_display }}</td>
+                            <td class="inventory-status-cell" data-status="{{ seg.status|default:'666699' }}">{{ seg.avg_speed|default:"0" }} km/h - {{ seg.get_status_display }}</td>
                         </tr>
                         {% empty %}
                         <tr>

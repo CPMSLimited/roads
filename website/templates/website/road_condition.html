@@ -40,7 +40,7 @@
                                             <th>Northings</th>
                                             <th>Eastings</th>
                                             <th>Distance(km)</th>
-                                            <th>Status (km/hr)</th>
+                                            <th>Avg speed / Status</th>
                                         </tr>
                                     </thead>
                                     <tbody id="subsegmentTableBody">
@@ -55,7 +55,7 @@
                                             <td>{{ sub.start_lon }}</td>
                                             <td>{{ sub.distance }}</td>
                                             <td class="inventory-status-cell" data-status="{{ sub.status|default:'666699' }}">
-                                                {{ sub.avg_speed }} (km/hr)
+                                                {{ sub.avg_speed }} km/h - {{ sub.get_status_display }}
                                             </td>
                                         </tr>
                                         {% endfor %}
@@ -117,7 +117,7 @@
                                 <td>{{ seg.code }}</td>
                                 <td>{{ seg.state|default:"-" }}</td>
                                 <td>{{ seg.distance }}</td>
-                                <td class="inventory-status-cell" data-status="{{ seg.status|default:'666699' }}">{{ seg.get_status_display }}</td>
+                                <td class="inventory-status-cell" data-status="{{ seg.status|default:'666699' }}">{{ seg.avg_speed|default:"0" }} km/h - {{ seg.get_status_display }}</td>
                             </tr>
                             {% empty %}
                             <tr>
@@ -188,6 +188,15 @@
     function statusToHex(raw) {
       const cleaned = String(raw || "").replace("#", "").trim();
       return /^[0-9a-fA-F]{6}$/.test(cleaned) ? cleaned.toUpperCase() : "666699";
+    }
+
+    function statusLabelFromHex(raw) {
+      const hex = statusToHex(raw);
+      if (hex === "FF5050") return "Failed";
+      if (hex === "FF9966") return "Intolerable";
+      if (hex === "339933") return "Tolerable";
+      if (hex === "00CC00") return "Good";
+      return "No response";
     }
 
     function setChartPrompt(message) {
@@ -522,7 +531,12 @@
         subsegmentCell(tr, row.start_lat ?? "-");
         subsegmentCell(tr, row.start_lon ?? "-");
         subsegmentCell(tr, row.distance ?? "-");
-        const statusTd = subsegmentCell(tr, `${row.avg_speed ?? 0} (km/hr)`, "inventory-status-cell");
+        const speedValue = Number(row.avg_speed ?? 0);
+        const statusTd = subsegmentCell(
+          tr,
+          `${speedValue.toFixed(1)} km/h - ${statusLabelFromHex(row.status)}`,
+          "inventory-status-cell"
+        );
         statusTd.dataset.status = (row.status || "666699").replace("#", "");
         subsegmentTableBody.appendChild(tr);
       });
