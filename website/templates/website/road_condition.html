@@ -299,6 +299,12 @@
             legend: { display: false },
             tooltip: {
               callbacks: {
+                title: function(items) {
+                  if (items && items.length && items[0].datasetIndex === 1) {
+                    return "";
+                  }
+                  return items;
+                },
                 label: function(ctx) {
                   if (ctx.datasetIndex === 1) {
                     return `Weighted average speed: ${ctx.parsed.y.toFixed(1)} km/h`;

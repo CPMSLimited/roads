@@ -149,15 +149,15 @@ class Segment(models.Model):
     
 class SubSegment(models.Model):
     """
-    A sub-division of a Segment (typically up to 50 per Segment).
+    A sub-division of a Segment (typically up to 100 per Segment).
     SubSegments inherit most properties of Segment, but deliberately
     exclude: index, name, state, start_point, end_point.
     """
     segment = models.ForeignKey( Segment, on_delete=models.CASCADE,related_name="subsegments", db_index=True,)
     code = models.CharField(max_length=16, unique=True, blank=True)
     position = models.PositiveSmallIntegerField(
-        validators=[MinValueValidator(1), MaxValueValidator(50)],
-        help_text="Order of this sub-segment within its parent segment (1–50)."
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        help_text="Order of this sub-segment within its parent segment (1–100)."
     )
     start_lat = models.DecimalField(max_digits=18, decimal_places=5, default=0.00)
     start_lon = models.DecimalField(max_digits=18, decimal_places=5, default=0.00)
@@ -185,8 +185,8 @@ class SubSegment(models.Model):
                 name="uq_subsegment_segment_position"
             ),
             models.CheckConstraint(
-                check=models.Q(position__gte=1) & models.Q(position__lte=50),
-                name="ck_subsegment_position_1_50",
+                check=models.Q(position__gte=1) & models.Q(position__lte=100),
+                name="ck_subsegment_position_1_100",
             ),
         ]
         ordering = ["segment_id", "position"]

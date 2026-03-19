@@ -298,13 +298,13 @@ def process_new_subsegments_upload(fileobj, filename, chunk_size=1000, progress_
             continue
 
         position = int(segment_position_counter.get(segment_code, 0)) + 1
-        if position > 50:
+        if position > 100:
             summary["skipped"] += 1
             summary["skipped_details"].append(
-                f"Row {rownum}: skipped because segment {segment_obj.code} cannot exceed 50 subsegments."
+                f"Row {rownum}: skipped because segment {segment_obj.code} cannot exceed 100 subsegments."
             )
             summary["errors"].append(
-                f"Row {rownum}: position {position} exceeds the max of 50 for segment {segment_obj.code}."
+                f"Row {rownum}: position {position} exceeds the max of 100 for segment {segment_obj.code}."
             )
             _report_progress(processed_rows)
             continue
