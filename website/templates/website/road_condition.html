@@ -214,7 +214,7 @@
       setChartPrompt(message || "Select a segment on the right table to view the graph.");
     }
 
-    function renderSubsegmentChart(rows, segmentCode) {
+    function renderSubsegmentChart(rows, segmentCode, segmentAvgSpeed, segmentStatusHex) {
       if (!chartCanvas || typeof Chart === "undefined") {
         setChartPrompt("Chart library unavailable.");
         return;
@@ -230,15 +230,23 @@
         label: row.code || "",
         color: `#${statusToHex(row.status)}`
       }));
+      const parentAverageValue = Number(segmentAvgSpeed ?? 0);
+      const averageLineColor = `#${statusToHex(segmentStatusHex || "666699")}`;
 
       const totalPositions = points.length || 0;
-      const speeds = points.map((p) => p.y);
+      const speeds = points.map((p) => p.y).concat(parentAverageValue);
       const minSpeed = speeds.length ? Math.min(...speeds) : 0;
       const maxSpeed = speeds.length ? Math.max(...speeds) : 1;
       const speedRange = maxSpeed - minSpeed;
       const padding = speedRange > 0 ? speedRange * 0.1 : 5;
       const yMin = Math.max(0, minSpeed - padding);
       const yMax = maxSpeed + padding;
+      const averageLinePoints = totalPositions > 1
+        ? [
+            { x: 1, y: parentAverageValue },
+            { x: totalPositions, y: parentAverageValue }
+          ]
+        : [{ x: 1, y: parentAverageValue }];
 
       if (subsegmentChart) {
         subsegmentChart.destroy();
@@ -252,13 +260,23 @@
             data: points,
             parsing: { xAxisKey: "x", yAxisKey: "y" },
             fill: false,
-            borderColor: "#000",
-            borderWidth: 1,
-            tension: 0.35,
+            showLine: false,
+            borderWidth: 0,
             pointBackgroundColor: points.map((p) => p.color),
             pointBorderColor: points.map((p) => p.color),
             pointRadius: 5,
             pointHoverRadius: 6
+          }, {
+            label: "Segment average speed",
+            data: averageLinePoints,
+            parsing: { xAxisKey: "x", yAxisKey: "y" },
+            fill: false,
+            showLine: true,
+            borderColor: averageLineColor,
+            borderWidth: 3,
+            tension: 0,
+            pointRadius: 0,
+            pointHoverRadius: 0
           }]
         },
         options: {
@@ -268,6 +286,9 @@
             tooltip: {
               callbacks: {
                 label: function(ctx) {
+                  if (ctx.datasetIndex === 1) {
+                    return `Segment average speed: ${ctx.parsed.y.toFixed(1)} km/h`;
+                  }
                   const item = ctx.raw || {};
                   const code = item.label ? ` (${item.label})` : "";
                   return `Speed${code}: ${ctx.parsed.y.toFixed(1)} km/h at position ${ctx.parsed.x}`;
@@ -509,7 +530,12 @@
       syncSubsegmentSelectionUi();
       applyStatusContrast();
       setSubsegmentMessage(message || (isError ? "Could not load subsegments." : `Loaded ${rows.length} subsegments.`));
-      renderSubsegmentChart(rows, rows[0].segment_code || "Selected segment");
+      renderSubsegmentChart(
+        rows,
+        rows[0].segment_code || "Selected segment",
+        rows[0].segment_avg_speed ?? 0,
+        rows[0].segment_status || "666699"
+      );
     }
 
     async function loadSubsegmentsForSegment(segmentCode, forceRefresh) {
@@ -537,7 +563,14 @@
           renderSubsegments([], data.message || `Segment ${segmentCode} was not found.`, true);
           return;
         }
-        renderSubsegments(data.rows || [], data.message || "", false);
+        const segmentAvgSpeed = data.segment_avg_speed ?? 0;
+        const segmentStatus = data.segment_status || "666699";
+        const rows = (data.rows || []).map((row) => ({
+          ...row,
+          segment_avg_speed: segmentAvgSpeed,
+          segment_status: segmentStatus
+        }));
+        renderSubsegments(rows, data.message || "", false);
       } catch (error) {
         renderSubsegments([], "Could not load subsegments. Please try again.", true);
       }
