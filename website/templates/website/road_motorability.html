@@ -144,10 +144,10 @@
         <article class="table-card side-card route-info-card">
             <h2>Motorability summary</h2>
             <div class="kpi-grid kpi-grid-status">
-                <article class="kpi-card kpi-good"><span>Good</span><strong>{{ counts.good }}</strong></article>
-                <article class="kpi-card kpi-blue"><span>Tolerable</span><strong>{{ counts.tolerable }}</strong></article>
-                <article class="kpi-card kpi-orange"><span>Intolerable</span><strong>{{ counts.intolerable }}</strong></article>
-                <article class="kpi-card kpi-red"><span>Failed</span><strong>{{ counts.failed }}</strong></article>
+                <article class="kpi-card kpi-good"><span>Good</span><strong>{{ kpi_good_display }}</strong></article>
+                <article class="kpi-card kpi-blue"><span>Tolerable</span><strong>{{ kpi_tolerable_display }}</strong></article>
+                <article class="kpi-card kpi-orange"><span>Intolerable</span><strong>{{ kpi_intolerable_display }}</strong></article>
+                <article class="kpi-card kpi-red"><span>Failed</span><strong>{{ kpi_failed_display }}</strong></article>
             </div>
             <p><strong>Total lenght of selected segments:</strong> {{ summary_total_length_selected }}</p>
             <p><strong>Number of routes:</strong> {{ summary_number_routes }}</p>
@@ -190,7 +190,7 @@
     const refreshBtn = document.querySelector(".inventory-refresh-btn");
     const refreshFeedback = document.getElementById("motorabilityRefreshFeedback");
     const refreshSummary = document.getElementById("motorabilityRefreshSummary");
-    if (!form || !viewInput || !inlinePager || !mapView || !tableView || !buttons.length) return;
+    if (!form || !viewInput || !inlinePager || !mapView || !tableView) return;
     const REFRESHED_SESSION_KEY = "motorability_refreshed_segment_codes_v1";
     const ACTIVE_TASK_SESSION_KEY = "motorability_refresh_active_task_v1";
 
@@ -495,9 +495,11 @@
       window.initRoadMotorabilityPage();
     }
 
-    buttons.forEach((btn) => {
-      btn.addEventListener("click", () => setView(btn.dataset.viewTarget));
-    });
+    if (buttons.length) {
+      buttons.forEach((btn) => {
+        btn.addEventListener("click", () => setView(btn.dataset.viewTarget));
+      });
+    }
 
     const roadSelect = form.querySelector('select[name="road"]');
     const routeSelect = form.querySelector('select[name="route"]');

@@ -860,6 +860,10 @@ def _build_road_motorability_context(request):
         "summary_total_length_tolerable": tolerable_total_length,
         "summary_total_length_intolerable": intolerable_total_length,
         "summary_total_length_failed": failed_total_length,
+        "kpi_good_display": kpi_lengths["good"],
+        "kpi_tolerable_display": kpi_lengths["tolerable"],
+        "kpi_intolerable_display": kpi_lengths["intolerable"],
+        "kpi_failed_display": kpi_lengths["failed"],
         **metrics,
         "counts": kpi_lengths,
     }
