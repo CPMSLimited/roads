@@ -296,7 +296,7 @@
               callbacks: {
                 label: function(ctx) {
                   if (ctx.datasetIndex === 1) {
-                    return `Segment average speed: ${ctx.parsed.y.toFixed(1)} km/h`;
+                    return `Weighted average speed: ${ctx.parsed.y.toFixed(1)} km/h`;
                   }
                   const item = ctx.raw || {};
                   const code = item.label ? ` (${item.label})` : "";
