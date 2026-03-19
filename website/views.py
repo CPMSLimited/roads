@@ -3874,6 +3874,8 @@ def road_condition_subsegments(request):
                 "ok": True,
                 "message": f'Segment "{segment.code}" has no subsegments.{refresh_warning}',
                 "rows": [],
+                "segment_avg_speed": float(segment.avg_speed or 0),
+                "segment_status": segment.status or "666699",
                 "refresh": refresh_meta,
             }
         )
@@ -3891,6 +3893,8 @@ def road_condition_subsegments(request):
             "ok": True,
             "message": message,
             "rows": rows,
+            "segment_avg_speed": float(segment.avg_speed or 0),
+            "segment_status": segment.status or "666699",
             "refresh": refresh_meta,
         }
     )
