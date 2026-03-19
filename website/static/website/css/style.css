@@ -844,7 +844,7 @@ body.modal-open {
 }
 
 .library-report-chip.is-tolerable {
-  background: #339933;
+  background: #00cc00;
 }
 
 .library-report-chip.is-neutral {
@@ -1503,8 +1503,8 @@ body.modal-open {
 .kpi-card span { display: block; color: #67726f; margin-bottom: 7px; font-size: 0.82rem; }
 .kpi-card strong { font-size: 1.93rem; line-height: 1; }
 
-.kpi-good { border-color: #00cc00; }
-.kpi-tolerable { border-color: #339933; }
+.kpi-good { border-color: #05700b; }
+.kpi-tolerable { border-color: #00cc00; }
 .kpi-intolerable { border-color: #ff9966; }
 .kpi-failed { border-color: #ff5050; }
 
@@ -1517,9 +1517,9 @@ body.modal-open {
   font-weight: 700;
 }
 
-.status-ok { background: #00cc00; color: #fff; }
+.status-ok { background: #05700b; color: #fff; }
 .status-mid { background: #ff9966; color: #fff; }
-.status-blue { background: #339933; color: #fff; }
+.status-blue { background: #00cc00; color: #fff; }
 .status-progress { background: #d7ebf7; color: #197bc2; }
 .status-mid-lite { background: #fff0e7; color: #c2642f; }
 .status-ok-lite { background: #daf3dd; color: #1f7e1f; }
@@ -1603,8 +1603,8 @@ body.modal-open {
 
 .speed-red { background: #ff5050; }
 .speed-orange { background: #ff9966; }
-.speed-green { background: #00cc00; }
-.speed-blue { background: #339933; }
+.speed-green { background: #05700b; }
+.speed-blue { background: #00cc00; }
 
 .map-placeholder {
   min-height: 500px;
@@ -2948,7 +2948,7 @@ body.modal-open {
 }
 
 .library-condition-chip.is-tolerable {
-  background: #339933;
+  background: #00cc00;
 }
 
 .library-condition-chip.is-intolerable {
@@ -3169,7 +3169,7 @@ body.modal-open {
 }
 
 .library-view-status.is-tolerable {
-  background: #339933;
+  background: #00cc00;
 }
 
 .library-view-status.is-neutral {

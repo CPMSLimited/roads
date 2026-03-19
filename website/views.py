@@ -47,8 +47,8 @@ logger = logging.getLogger(__name__)
 
 # ---- Status buckets used for counts/mini-chart (hex codes) ----
 STATUS_BUCKETS = {
-    "good": {"codes": ["00CC00"]},                   # Good (>=80 km/h)
-    "tolerable": {"codes": ["339933"]},              # Tolerable (70 to <80 km/h)
+    "good": {"codes": ["05700B"]},                   # Good (>=80 km/h)
+    "tolerable": {"codes": ["00CC00"]},              # Tolerable (70 to <80 km/h)
     "intolerable": {"codes": ["FF9966"]},            # Intolerable (60 to <70 km/h)
     "failed": {"codes": ["FF5050"]},                 # Failed (<60 km/h)
     "no_response": {"codes": ["666699"]},            # Unknown / no response
@@ -298,7 +298,7 @@ def _defect_condition_from_subsegment(subsegment):
         return Defect.CONDITION_FAILED
     if status_code == "FF9966":
         return Defect.CONDITION_INTOLERABLE
-    if status_code in {"339933", "00CC00"}:
+    if status_code in {"00CC00", "05700B"}:
         return Defect.CONDITION_TOLERABLE
     return Defect.CONDITION_BAD
 
@@ -1203,7 +1203,7 @@ def library_reports(request):
             return "Failed", "is-intolerable"
         if status_code == "FF9966":
             return "Intolerable", "is-intolerable"
-        if status_code in {"339933", "00CC00"}:
+        if status_code in {"00CC00", "05700B"}:
             return "Tolerable", "is-tolerable"
         return "No response", "is-neutral"
 
@@ -1660,7 +1660,7 @@ def engineering_admin_root_cause(request):
         elif segment_status_code == "FF9966":
             view_segment_status_text = "Intolerable"
             view_segment_status_class = "intolerable"
-        elif segment_status_code in {"339933", "00CC00"}:
+        elif segment_status_code in {"00CC00", "05700B"}:
             view_segment_status_text = "Tolerable"
             view_segment_status_class = "tolerable"
         else:
@@ -2129,7 +2129,7 @@ def physical_inspection(request):
         elif segment_status_code == "FF9966":
             physical_view_segment_status_text = "Intolerable"
             physical_view_segment_status_class = "intolerable"
-        elif segment_status_code in {"339933", "00CC00"}:
+        elif segment_status_code in {"00CC00", "05700B"}:
             physical_view_segment_status_text = "Tolerable"
             physical_view_segment_status_class = "tolerable"
 
