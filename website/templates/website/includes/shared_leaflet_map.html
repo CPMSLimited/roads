@@ -1,3 +1,4 @@
+{% load static %}
 <div
     id="{{ map_dom_id|default:'sharedLeafletMap' }}"
     class="shared-leaflet-map"
@@ -20,8 +21,11 @@
     if (!mapEl || typeof L === "undefined") return;
 
     const dataUrl = mapEl.dataset.mapDataUrl;
+    const statesGeojsonUrl = "{% static 'website/data/nigeria_states.geojson' %}";
     let map = null;
     let geojsonLayer = null;
+    let statesLayer = null;
+    let statesFetchPromise = null;
     const nigeriaBounds = L.latLngBounds([4.2, 2.7], [13.9, 14.7]);
 
     function hasActiveDataFilters(params) {
@@ -55,8 +59,36 @@
       }).addTo(map);
     }
 
+    async function ensureStatesLayer() {
+      ensureMap();
+      if (statesLayer) return;
+      if (!statesFetchPromise) {
+        statesFetchPromise = fetch(statesGeojsonUrl, { headers: { "X-Requested-With": "XMLHttpRequest" } })
+          .then((response) => {
+            if (!response.ok) throw new Error("Could not load Nigeria states layer.");
+            return response.json();
+          });
+      }
+      const statesData = await statesFetchPromise;
+      statesLayer = L.geoJSON(statesData, {
+        interactive: false,
+        style: function () {
+          return {
+            color: "#7d8e8a",
+            weight: 1,
+            opacity: 0.75,
+            fillOpacity: 0
+          };
+        }
+      }).addTo(map);
+      if (statesLayer && statesLayer.bringToBack) {
+        statesLayer.bringToBack();
+      }
+    }
+
     async function loadData() {
       ensureMap();
+      await ensureStatesLayer();
       const params = new URLSearchParams(window.location.search);
       const url = new URL(dataUrl, window.location.origin);
       params.forEach((value, key) => url.searchParams.set(key, value));
@@ -94,6 +126,9 @@
             );
           }
         }).addTo(map);
+        if (geojsonLayer && geojsonLayer.bringToFront) {
+          geojsonLayer.bringToFront();
+        }
 
         const bounds = geojsonLayer.getBounds();
         const hasFilters = hasActiveDataFilters(params);

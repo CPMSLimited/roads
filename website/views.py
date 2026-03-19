@@ -414,7 +414,7 @@ def _format_km_total(value):
     if value is None:
         return ""
     try:
-        return f"{Decimal(value).quantize(Decimal('0.01'))} km"
+        return f"{Decimal(value).quantize(Decimal('0.01')):,.2f} km"
     except (InvalidOperation, ValueError, TypeError):
         return ""
 
@@ -787,6 +787,20 @@ def _build_road_motorability_context(request):
         total = base_qs.aggregate(total_length=Sum("distance")).get("total_length")
         return _format_km_total(total) if total is not None else "-"
 
+    visible_status_keys = ["good", "tolerable", "intolerable", "failed"]
+    kpi_raw_lengths = {
+        key: (qs.filter(status__in=STATUS_BUCKETS[key]["codes"]).aggregate(total_length=Sum("distance")).get("total_length") or Decimal("0.00"))
+        for key in visible_status_keys
+    }
+    kpi_denominator = sum(kpi_raw_lengths.values(), Decimal("0.00"))
+    kpi_lengths = {}
+    for key in visible_status_keys:
+        length_value = kpi_raw_lengths[key]
+        percent_value = Decimal("0.00")
+        if kpi_denominator > 0:
+            percent_value = (Decimal(length_value) / kpi_denominator) * Decimal("100")
+        kpi_lengths[key] = f"{_format_km_total(length_value)} / {percent_value.quantize(Decimal('0.01')):.2f}%"
+
     selected_total_length = _sum_length_or_dash(qs) if has_rows else "-"
     good_total_length = (
         _sum_length_or_dash(qs.filter(status__in=STATUS_BUCKETS["good"]["codes"])) if has_rows else "-"
@@ -847,6 +861,7 @@ def _build_road_motorability_context(request):
         "summary_total_length_intolerable": intolerable_total_length,
         "summary_total_length_failed": failed_total_length,
         **metrics,
+        "counts": kpi_lengths,
     }
 
 

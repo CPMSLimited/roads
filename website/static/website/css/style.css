@@ -1698,7 +1698,8 @@ body.modal-open {
 
 .kpi-grid-four .kpi-card strong,
 .kpi-grid-status .kpi-card strong {
-  font-size: 1.37rem;
+  font-size: 0.92rem;
+  white-space: nowrap;
 }
 
 .kpi-grid-status {
@@ -1712,6 +1713,12 @@ body.modal-open {
 
 .kpi-grid-status .kpi-card {
   background: #fafcfc;
+}
+
+.kpi-grid-status .kpi-card span {
+  font-size: 0.94rem;
+  font-weight: 700;
+  color: #334744;
 }
 
 .inventory-tools-row {
