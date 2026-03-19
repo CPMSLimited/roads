@@ -274,7 +274,8 @@
             pointBackgroundColor: points.map((p) => p.color),
             pointBorderColor: points.map((p) => p.color),
             pointRadius: 5,
-            pointHoverRadius: 6
+            pointHoverRadius: 6,
+            pointHitRadius: 8
           }, {
             label: "Segment average speed",
             data: averageLinePoints,
@@ -284,14 +285,15 @@
             borderWidth: 1,
             tension: 0,
             pointRadius: 0,
-            pointHoverRadius: 0
+            pointHoverRadius: 0,
+            pointHitRadius: 6
           }]
         },
         options: {
           responsive: true,
           interaction: {
             mode: "nearest",
-            intersect: false
+            intersect: true
           },
           plugins: {
             legend: { display: false },
