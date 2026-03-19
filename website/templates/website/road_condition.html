@@ -250,11 +250,10 @@
       const padding = speedRange > 0 ? speedRange * 0.1 : 5;
       const yMin = Math.max(0, minSpeed - padding);
       const yMax = maxSpeed + padding;
-      const averageLinePoints = totalPositions > 1
-        ? [
-            { x: 1, y: parentAverageValue },
-            { x: totalPositions, y: parentAverageValue }
-          ]
+      const averageLinePoints = totalPositions > 0
+        ? Array.from({ length: totalPositions }, function (_, idx) {
+            return { x: idx + 1, y: parentAverageValue };
+          })
         : [{ x: 1, y: parentAverageValue }];
 
       if (subsegmentChart) {
@@ -290,6 +289,10 @@
         },
         options: {
           responsive: true,
+          interaction: {
+            mode: "nearest",
+            intersect: false
+          },
           plugins: {
             legend: { display: false },
             tooltip: {
