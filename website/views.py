@@ -3733,6 +3733,8 @@ def road_condition_subsegments(request):
     Case-insensitive segment lookup by code, then return its subsegments.
     """
     segment_code = (request.GET.get("segment") or "").strip()
+    requested_mode = (request.GET.get("mode") or "static").strip().lower()
+    mode = "live" if requested_mode == "live" else "static"
     if not segment_code:
         return JsonResponse(
             {"ok": False, "message": "Please select a segment code.", "rows": []},
@@ -3746,11 +3748,10 @@ def road_condition_subsegments(request):
             status=404,
         )
 
-    refresh_requested = (request.GET.get("refresh") or "").strip() in {"1", "true", "yes"}
     refresh_meta = {"attempted": False, "failed": False, "updated": 0, "failed_count": 0, "total": 0}
     refresh_warning = ""
 
-    if refresh_requested:
+    if mode == "live":
         refresh_meta["attempted"] = True
         try:
             refresh_result = refresh_subsegments_from_google(
@@ -3769,6 +3770,9 @@ def road_condition_subsegments(request):
             refresh_warning = " Refresh failed; showing saved data."
 
     sub_qs = SubSegment.objects.filter(segment=segment).order_by("position", "id")
+    chart_message = ""
+    has_coordinates = sub_qs.exists()
+    has_usable_speed_data = sub_qs.filter(avg_speed__gt=0).exists()
     weighted_distance_total = Decimal("0")
     weighted_speed_total = Decimal("0")
     for row in sub_qs:
@@ -3798,18 +3802,25 @@ def road_condition_subsegments(request):
     ]
 
     if not rows:
+        chart_message = "There are no subsegment coordinates for this segment."
         return JsonResponse(
             {
                 "ok": True,
                 "message": f'Segment "{segment.code}" has no subsegments.{refresh_warning}',
+                "chart_message": chart_message,
                 "rows": [],
                 "segment_avg_speed": segment_avg_speed,
                 "segment_status": segment.status or "666699",
                 "refresh": refresh_meta,
+                "mode": mode,
+                "has_usable_speed_data": False,
             }
         )
 
-    if refresh_meta["attempted"] and not refresh_meta["failed"]:
+    if mode == "static" and not has_usable_speed_data:
+        chart_message = "Switch to Live mode so that data can be fetched from Google."
+        message = f'Loaded {len(rows)} subsegments for "{segment.code}".'
+    elif refresh_meta["attempted"] and not refresh_meta["failed"]:
         message = (
             f'Refreshed {refresh_meta["updated"]}/{refresh_meta["total"]} subsegments '
             f'for "{segment.code}" (failed: {refresh_meta["failed_count"]}).'
@@ -3821,9 +3832,12 @@ def road_condition_subsegments(request):
         {
             "ok": True,
             "message": message,
+            "chart_message": chart_message,
             "rows": rows,
             "segment_avg_speed": segment_avg_speed,
             "segment_status": segment.status or "666699",
             "refresh": refresh_meta,
+            "mode": mode,
+            "has_usable_speed_data": has_usable_speed_data,
         }
     )

@@ -11,7 +11,17 @@
                     <div class="workspace-main">
                         <article class="table-card speed-chart-card">
                             <header class="workspace-head">
-                                <h3 id="inventorySpeedChartTitle">Speed vs Distance — Select a segment</h3>
+                                <div class="workspace-head__topline">
+                                    <h3 id="inventorySpeedChartTitle">Speed vs Distance — Select a segment</h3>
+                                    <label class="road-condition-chart-mode" aria-label="Chart mode">
+                                        <input type="checkbox" class="road-condition-chart-mode__input" aria-label="Toggle chart mode">
+                                        <span class="road-condition-chart-mode__label road-condition-chart-mode__label--static">Static</span>
+                                        <span class="road-condition-chart-mode__switch" aria-hidden="true">
+                                            <span class="road-condition-chart-mode__thumb"></span>
+                                        </span>
+                                        <span class="road-condition-chart-mode__label road-condition-chart-mode__label--live">Live</span>
+                                    </label>
+                                </div>
                                 <p>Each point represents a subsegment (position on x-axis, speed on y-axis). Colours follow the status legend.</p>
                             </header>
                             <div class="workspace-chart-wrap">
@@ -160,9 +170,10 @@
     const chartTitle = document.getElementById("inventorySpeedChartTitle");
     const chartCanvas = document.getElementById("inventorySpeedChart");
     const chartPrompt = document.getElementById("inventorySpeedChartPrompt");
+    const chartModeInput = document.querySelector(".road-condition-chart-mode__input");
     const selectedSubsegmentMap = new Map();
-    const refreshedSegments = new Set();
     let subsegmentChart = null;
+    let activeSegmentCode = "";
     if (!sideForm || !mapView || !rightMapPanel) return;
 
     viewInputs.forEach((input) => {
@@ -208,6 +219,10 @@
     function hideChartPrompt() {
       if (!chartPrompt) return;
       chartPrompt.hidden = true;
+    }
+
+    function currentChartMode() {
+      return chartModeInput && chartModeInput.checked ? "live" : "static";
     }
 
     function clearSubsegmentChart(message) {
@@ -510,7 +525,8 @@
       });
     }
 
-    function renderSubsegments(rows, message, isError) {
+    function renderSubsegments(rows, message, isError, options) {
+      const renderOptions = options || {};
       if (!subsegmentTableBody) return;
       subsegmentTableBody.innerHTML = "";
       if (!rows.length) {
@@ -522,7 +538,7 @@
         tr.appendChild(td);
         subsegmentTableBody.appendChild(tr);
         setSubsegmentMessage(message || "No subsegments found.");
-        clearSubsegmentChart(message || "No subsegments found for this segment.");
+        clearSubsegmentChart(renderOptions.chartMessage || message || "No subsegments found for this segment.");
         return;
       }
 
@@ -555,23 +571,30 @@
       syncSubsegmentSelectionUi();
       applyStatusContrast();
       setSubsegmentMessage(message || (isError ? "Could not load subsegments." : `Loaded ${rows.length} subsegments.`));
-      renderSubsegmentChart(
-        rows,
-        rows[0].segment_code || "Selected segment",
-        rows[0].segment_avg_speed ?? 0,
-        rows[0].segment_status || "666699"
-      );
+      if (renderOptions.chartMessage) {
+        clearSubsegmentChart(renderOptions.chartMessage);
+        if (chartTitle) chartTitle.textContent = `Speed vs Distance — ${rows[0].segment_code || "Selected segment"}`;
+      } else {
+        renderSubsegmentChart(
+          rows,
+          rows[0].segment_code || "Selected segment",
+          rows[0].segment_avg_speed ?? 0,
+          rows[0].segment_status || "666699"
+        );
+      }
     }
 
-    async function loadSubsegmentsForSegment(segmentCode, forceRefresh) {
+    async function loadSubsegmentsForSegment(segmentCode) {
       if (!segmentCode) return;
-      if (forceRefresh) {
+      const mode = currentChartMode();
+      activeSegmentCode = segmentCode;
+      if (mode === "live") {
         setSubsegmentMessage(`Refreshing subsegments for ${segmentCode} from Google...`);
       } else {
         setSubsegmentMessage(`Loading subsegments for ${segmentCode}...`);
       }
       if (chartTitle) chartTitle.textContent = `Speed vs Distance — ${segmentCode}`;
-      if (forceRefresh) {
+      if (mode === "live") {
         setChartPrompt(`Fetching latest speed data from Google for "${segmentCode}"...`);
       } else {
         setChartPrompt(`Loading graph for "${segmentCode}"...`);
@@ -579,13 +602,13 @@
       try {
         const url = new URL('{% url "road_condition_subsegments" %}', window.location.origin);
         url.searchParams.set("segment", segmentCode);
-        if (forceRefresh) {
-          url.searchParams.set("refresh", "1");
-        }
+        url.searchParams.set("mode", mode);
         const resp = await fetch(url.toString(), { headers: { "X-Requested-With": "XMLHttpRequest" } });
         const data = await resp.json();
         if (!resp.ok || data.ok === false) {
-          renderSubsegments([], data.message || `Segment ${segmentCode} was not found.`, true);
+          renderSubsegments([], data.message || `Segment ${segmentCode} was not found.`, true, {
+            chartMessage: data.chart_message || data.message || `Segment ${segmentCode} was not found.`
+          });
           return;
         }
         const segmentAvgSpeed = data.segment_avg_speed ?? 0;
@@ -595,9 +618,14 @@
           segment_avg_speed: segmentAvgSpeed,
           segment_status: segmentStatus
         }));
-        renderSubsegments(rows, data.message || "", false);
+        const chartMessage = data.chart_message || "";
+        renderSubsegments(rows, data.message || "", false, {
+          chartMessage: chartMessage
+        });
       } catch (error) {
-        renderSubsegments([], "Could not load subsegments. Please try again.", true);
+        renderSubsegments([], "Could not load subsegments. Please try again.", true, {
+          chartMessage: "Could not load subsegments. Please try again."
+        });
       }
     }
 
@@ -605,13 +633,17 @@
       row.addEventListener("click", () => {
         const segmentCode = row.dataset.segmentCode || "";
         markActiveSegmentRow(segmentCode);
-        const shouldRefresh = !refreshedSegments.has(segmentCode);
-        if (shouldRefresh) {
-          refreshedSegments.add(segmentCode);
-        }
-        loadSubsegmentsForSegment(segmentCode, shouldRefresh);
+        loadSubsegmentsForSegment(segmentCode);
       });
     });
+
+    if (chartModeInput) {
+      chartModeInput.addEventListener("change", () => {
+        if (activeSegmentCode) {
+          loadSubsegmentsForSegment(activeSegmentCode);
+        }
+      });
+    }
 
     bindSubsegmentRowSelection(document);
     syncSubsegmentSelectionUi();
@@ -619,7 +651,7 @@
     clearSubsegmentChart("Select a segment on the right table to view the graph.");
     const defaultSegmentCode = "A1LAS1";
     markActiveSegmentRow(defaultSegmentCode);
-    loadSubsegmentsForSegment(defaultSegmentCode, false);
+    loadSubsegmentsForSegment(defaultSegmentCode);
   })();
 </script>
 {% endblock %}

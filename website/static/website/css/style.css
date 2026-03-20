@@ -1989,8 +1989,84 @@ body.modal-open {
   border-bottom: 1px solid #e5ece9;
 }
 
+.workspace-head__topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 6px;
+}
+
+.road-condition-chart-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  position: relative;
+  cursor: default;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.road-condition-chart-mode__label {
+  color: #5f6d69;
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.road-condition-chart-mode__label--static {
+  color: #1f2a27;
+}
+
+.road-condition-chart-mode__input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 1px;
+  height: 1px;
+}
+
+.road-condition-chart-mode__switch {
+  position: relative;
+  width: 46px;
+  height: 26px;
+  border-radius: 999px;
+  background: #d7dfdc;
+  transition: background-color 0.2s ease;
+  flex: 0 0 auto;
+}
+
+.road-condition-chart-mode__thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.18);
+  transition: transform 0.2s ease;
+}
+
+.road-condition-chart-mode__input:checked + .road-condition-chart-mode__label--static {
+  color: #5f6d69;
+}
+
+.road-condition-chart-mode__input:checked + .road-condition-chart-mode__label--static + .road-condition-chart-mode__switch {
+  background: #8da4b8;
+}
+
+.road-condition-chart-mode__input:checked + .road-condition-chart-mode__label--static + .road-condition-chart-mode__switch .road-condition-chart-mode__thumb {
+  transform: translateX(20px);
+}
+
+.road-condition-chart-mode__input:checked + .road-condition-chart-mode__label--static + .road-condition-chart-mode__switch + .road-condition-chart-mode__label--live {
+  color: #1f2a27;
+}
+
 .workspace-head h3 {
-  margin: 0 0 6px;
+  margin: 0;
   font-size: 1.28rem;
   font-weight: 700;
   color: #2f3f3b;
