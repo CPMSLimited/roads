@@ -5,10 +5,6 @@
 {% block content %}
 <section class="library-landing-v2">
     <aside class="library-v2-side">
-        <form class="library-v2-search" method="get" action="{% url guide_url_name %}">
-            <input type="text" name="q" value="{{ search_query }}" placeholder="Search" aria-label="Search {{ guide_search_label }}">
-            <button type="submit" class="library-v2-search-btn" aria-label="Search {{ guide_search_label }}">&#128269;</button>
-        </form>
         <nav class="library-v2-nav" aria-label="Library sections">
             <a href="{% url 'library_road_inventory' %}"><span aria-hidden="true">&#128193;</span> Road inventory</a>
             <a href="{% url 'library_reports' %}"><span aria-hidden="true">&#128193;</span> Reports</a>
@@ -44,12 +40,35 @@
     <article class="library-v2-main">
         <div class="library-v2-default-content" id="libraryDefaultContent" {% if selected_documentation_slug %}hidden{% endif %}>
         <header class="library-v2-head library-tech-head">
-            <h1>Articles <span>({{ guide_documents_count }})</span></h1>
+            <h1>{% if active_library_section == "user_guide" %}User Guides{% else %}Technical Guides{% endif %} <span>({{ guide_documents_count }})</span></h1>
+            <div class="library-reports-head-actions">
+                <button type="button" class="library-reports-delete-link" id="libraryGuideDeleteLabel" hidden>Delete</button>
+                <button type="button" class="library-reports-upload-btn" id="libraryGuideUploadBtn">Upload</button>
+                <input
+                    id="libraryGuideUploadInput"
+                    type="file"
+                    name="guide_files"
+                    accept=".pdf,.doc,.docx,.csv,.xls,.xlsx,.ppt,.pptx,.numbers,.pages,.key,.png,.jpg,.jpeg,.gif,.webp,.bmp,.tif,.tiff"
+                    multiple
+                    hidden
+                >
+                <form class="library-v2-search library-reports-search" method="get" action="{% url guide_url_name %}">
+                    <input type="text" name="q" value="{{ search_query }}" placeholder="Search {{ guide_search_label }}" aria-label="Search {{ guide_search_label }}">
+                    <button type="submit" class="library-v2-search-btn" aria-label="Search {{ guide_search_label }}">&#128269;</button>
+                </form>
+                {% if search_query %}
+                <a class="library-reports-reset-link" href="{% url guide_url_name %}">Reset</a>
+                {% endif %}
+            </div>
         </header>
 
         <section class="library-tech-grid" aria-label="{{ guide_search_label|capfirst }} articles">
             {% for guide in guide_documents %}
-            <article class="library-tech-card">
+            <article class="library-tech-card" data-library-id="{{ guide.id }}">
+                <label class="library-tech-select">
+                    <input type="checkbox" aria-label="Select {{ guide.name }}" data-library-id="{{ guide.id }}">
+                    <span></span>
+                </label>
                 <div class="library-tech-thumb" aria-hidden="true"></div>
                 <h2>
                     <a href="{{ guide.file.url }}" target="_blank" rel="noopener noreferrer">
@@ -86,4 +105,204 @@
         {% include "website/includes/library_uploads_workspace.html" %}
     </article>
 </section>
+<div class="library-delete-modal" id="libraryGuideDeleteModal" hidden>
+    <div class="library-delete-modal__backdrop" data-library-delete-close></div>
+    <div class="library-delete-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="libraryGuideDeleteModalTitle">
+        <div class="library-delete-modal__head">
+            <h2 id="libraryGuideDeleteModalTitle">Delete selected items</h2>
+            <button type="button" class="library-delete-modal__close" aria-label="Close" data-library-delete-close>&times;</button>
+        </div>
+        <div class="library-delete-modal__body">
+            <p class="library-delete-modal__warning">These selected rows will be permanently deleted and cannot be restored.</p>
+            <p class="library-delete-modal__summary" id="libraryGuideDeleteModalSummary"></p>
+            <p class="library-delete-modal__message" id="libraryGuideDeleteModalMessage" hidden></p>
+            <div class="library-delete-modal__failures" id="libraryGuideDeleteModalFailures" hidden>
+                <h3>Items that could not be deleted</h3>
+                <ul id="libraryGuideDeleteModalFailureList"></ul>
+            </div>
+        </div>
+        <div class="library-delete-modal__actions">
+            <button type="button" class="library-delete-modal__secondary" data-library-delete-close>Cancel</button>
+            <button type="button" class="library-delete-modal__primary" id="libraryGuideDeleteModalConfirm">Delete selected</button>
+        </div>
+    </div>
+</div>
+<script>
+  (function () {
+    const uploadBtn = document.getElementById("libraryGuideUploadBtn");
+    const uploadInput = document.getElementById("libraryGuideUploadInput");
+    const deleteLabel = document.getElementById("libraryGuideDeleteLabel");
+    const cardCheckboxes = Array.from(document.querySelectorAll('.library-tech-card input[type="checkbox"][data-library-id]'));
+    const deleteModal = document.getElementById("libraryGuideDeleteModal");
+    const deleteSummary = document.getElementById("libraryGuideDeleteModalSummary");
+    const deleteMessage = document.getElementById("libraryGuideDeleteModalMessage");
+    const deleteFailuresWrap = document.getElementById("libraryGuideDeleteModalFailures");
+    const deleteFailuresList = document.getElementById("libraryGuideDeleteModalFailureList");
+    const deleteConfirm = document.getElementById("libraryGuideDeleteModalConfirm");
+    if (!uploadBtn || !uploadInput) return;
+
+    function getCsrfToken() {
+      const cookies = document.cookie ? document.cookie.split(";") : [];
+      for (let i = 0; i < cookies.length; i += 1) {
+        const cookie = cookies[i].trim();
+        if (cookie.startsWith("csrftoken=")) {
+          return decodeURIComponent(cookie.substring("csrftoken=".length));
+        }
+      }
+      return "";
+    }
+    function selectedCheckboxes() {
+      return cardCheckboxes.filter((checkbox) => checkbox.isConnected && checkbox.checked);
+    }
+    function syncDeleteVisibility() {
+      if (!deleteLabel) return;
+      deleteLabel.hidden = selectedCheckboxes().length === 0;
+      cardCheckboxes.filter((checkbox) => checkbox.isConnected).forEach((checkbox) => {
+        const card = checkbox.closest(".library-tech-card");
+        if (card) card.classList.toggle("is-selected", checkbox.checked);
+      });
+    }
+    function setDeleteMessage(text, isError) {
+      if (!deleteMessage) return;
+      if (!text) {
+        deleteMessage.hidden = true;
+        deleteMessage.textContent = "";
+        deleteMessage.classList.remove("is-error", "is-success");
+        return;
+      }
+      deleteMessage.hidden = false;
+      deleteMessage.textContent = text;
+      deleteMessage.classList.toggle("is-error", !!isError);
+      deleteMessage.classList.toggle("is-success", !isError);
+    }
+    function closeDeleteModal() {
+      if (!deleteModal) return;
+      deleteModal.hidden = true;
+      document.body.classList.remove("modal-open");
+      setDeleteMessage("", false);
+      if (deleteFailuresWrap) deleteFailuresWrap.hidden = true;
+      if (deleteFailuresList) deleteFailuresList.innerHTML = "";
+    }
+    function openDeleteModal() {
+      const selected = selectedCheckboxes();
+      if (!deleteModal || !deleteSummary || !selected.length) return;
+      deleteSummary.textContent = `You are about to delete ${selected.length} selected item${selected.length === 1 ? "" : "s"}.`;
+      setDeleteMessage("", false);
+      if (deleteFailuresWrap) deleteFailuresWrap.hidden = true;
+      if (deleteFailuresList) deleteFailuresList.innerHTML = "";
+      deleteModal.hidden = false;
+      document.body.classList.add("modal-open");
+    }
+    function removeDeletedCards(deletedIds) {
+      const idSet = new Set((deletedIds || []).map((value) => String(value)));
+      cardCheckboxes.forEach((checkbox) => {
+        if (!idSet.has(String(checkbox.dataset.libraryId || ""))) return;
+        const card = checkbox.closest(".library-tech-card");
+        if (card) card.remove();
+      });
+      const countLabel = document.querySelector(".library-v2-head h1 span");
+      const grid = document.querySelector(".library-tech-grid");
+      const remainingCards = document.querySelectorAll(".library-tech-grid .library-tech-card[data-library-id]").length;
+      if (grid && remainingCards === 0 && !grid.querySelector(".library-tech-card:not([data-library-id])")) {
+        const emptyCard = document.createElement("article");
+        emptyCard.className = "library-tech-card";
+        emptyCard.innerHTML = `
+          <div class="library-tech-thumb" aria-hidden="true"></div>
+          <h2>No {{ guide_search_label }} documents yet</h2>
+          <p>Upload records in the Library model to populate this page.</p>
+          <span class="library-tech-pages">0 files</span>
+        `;
+        grid.appendChild(emptyCard);
+      }
+      if (countLabel) {
+        countLabel.textContent = `(${remainingCards})`;
+      }
+      syncDeleteVisibility();
+    }
+
+    uploadBtn.addEventListener("click", function () {
+      uploadInput.click();
+    });
+
+    uploadInput.addEventListener("change", async function () {
+      const files = Array.from(uploadInput.files || []);
+      if (!files.length) return;
+      const formData = new FormData();
+      files.forEach((file) => formData.append("guide_files", file));
+      try {
+        uploadBtn.disabled = true;
+        const response = await fetch('{{ guide_upload_url }}', {
+          method: "POST",
+          headers: {
+            "X-CSRFToken": getCsrfToken(),
+          },
+          body: formData,
+        });
+        const payload = await response.json();
+        if (!response.ok || payload.ok === false) {
+          throw new Error((payload.errors && payload.errors.join(" ")) || payload.message || "Upload failed.");
+        }
+        window.location.reload();
+      } catch (error) {
+        window.alert(error.message || "Upload failed.");
+      } finally {
+        uploadBtn.disabled = false;
+        uploadInput.value = "";
+      }
+    });
+    cardCheckboxes.forEach((checkbox) => {
+      checkbox.addEventListener("change", syncDeleteVisibility);
+    });
+    syncDeleteVisibility();
+    if (deleteLabel && deleteModal && deleteConfirm) {
+      deleteLabel.addEventListener("click", openDeleteModal);
+      deleteModal.querySelectorAll("[data-library-delete-close]").forEach((node) => {
+        node.addEventListener("click", closeDeleteModal);
+      });
+      deleteConfirm.addEventListener("click", async function () {
+        const selected = selectedCheckboxes();
+        if (!selected.length) {
+          closeDeleteModal();
+          syncDeleteVisibility();
+          return;
+        }
+        const formData = new FormData();
+        selected.forEach((checkbox) => formData.append("library_ids[]", checkbox.dataset.libraryId));
+        try {
+          deleteConfirm.disabled = true;
+          const response = await fetch('{{ library_content_delete_url }}', {
+            method: "POST",
+            headers: {
+              "X-CSRFToken": getCsrfToken(),
+            },
+            body: formData,
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.message || "Delete failed.");
+          }
+          removeDeletedCards(payload.deleted_ids || []);
+          if (payload.failures && payload.failures.length) {
+            setDeleteMessage(payload.message || "Some items could not be deleted.", true);
+            if (deleteFailuresWrap && deleteFailuresList) {
+              deleteFailuresWrap.hidden = false;
+              deleteFailuresList.innerHTML = "";
+              payload.failures.forEach((failure) => {
+                const item = document.createElement("li");
+                item.textContent = failure.reason || `Item ${failure.id} could not be deleted.`;
+                deleteFailuresList.appendChild(item);
+              });
+            }
+            return;
+          }
+          closeDeleteModal();
+        } catch (error) {
+          setDeleteMessage(error.message || "Delete failed.", true);
+        } finally {
+          deleteConfirm.disabled = false;
+        }
+      });
+    }
+  })();
+</script>
 {% endblock %}

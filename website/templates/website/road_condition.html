@@ -213,11 +213,16 @@
     function setChartPrompt(message) {
       if (!chartPrompt) return;
       chartPrompt.textContent = message;
+      chartPrompt.classList.toggle(
+        "chart-empty-prompt--warning",
+        String(message || "").trim() === "There are no subsegment coordinates for this segment."
+      );
       chartPrompt.hidden = false;
     }
 
     function hideChartPrompt() {
       if (!chartPrompt) return;
+      chartPrompt.classList.remove("chart-empty-prompt--warning");
       chartPrompt.hidden = true;
     }
 

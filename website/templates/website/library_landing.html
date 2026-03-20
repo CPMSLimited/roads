@@ -5,11 +5,6 @@
 {% block content %}
 <form id="libraryLandingFilters" class="library-landing-v2" method="get" action="{% url 'library' %}" autocomplete="off">
     <aside class="library-v2-side">
-        <div class="library-v2-search">
-            <input id="segmentCodeSearch" type="text" name="segment_code" placeholder="Search" aria-label="Search by segment code" value="{{ segment_code_query }}" minlength="2" autocomplete="off">
-            <button type="submit" class="library-v2-search-btn" aria-label="Search segment code">&#128269;</button>
-            <div id="segmentCodeSuggestions" class="library-v2-suggestions" role="listbox" aria-label="Segment code suggestions"></div>
-        </div>
         <nav class="library-v2-nav" aria-label="Library sections">
             <a class="{% if active_library_section == 'road_inventory' %}is-active{% endif %}" href="{% url 'library_road_inventory' %}"><span aria-hidden="true">&#128193;</span> Road inventory</a>
             <a class="{% if active_library_section == 'reports' %}is-active{% endif %}" href="{% url 'library_reports' %}"><span aria-hidden="true">&#128193;</span> Reports</a>
@@ -639,9 +634,7 @@
     const roadSelect = document.getElementById("libraryRoadSelect");
     const routeSelect = document.getElementById("libraryRouteSelect");
     const stateSelect = document.getElementById("libraryStateSelect");
-    const searchInput = document.getElementById("segmentCodeSearch");
-    const suggestionsEl = document.getElementById("segmentCodeSuggestions");
-    if (!form || !roadSelect || !routeSelect || !stateSelect || !searchInput || !suggestionsEl) return;
+    if (!form || !roadSelect || !routeSelect || !stateSelect) return;
     if (form.dataset.inventoryAjaxBound === "true") return;
     form.dataset.inventoryAjaxBound = "true";
 
@@ -696,105 +689,6 @@
     roadSelect.addEventListener("change", submitFiltersAjax);
     routeSelect.addEventListener("change", submitFiltersAjax);
     stateSelect.addEventListener("change", submitFiltersAjax);
-
-    let debounceId = null;
-    let suggestionIndex = -1;
-
-    function clearSuggestions() {
-      suggestionsEl.innerHTML = "";
-      suggestionsEl.classList.remove("is-open");
-      suggestionIndex = -1;
-    }
-
-    function applyActiveSuggestion() {
-      const items = suggestionsEl.querySelectorAll("button");
-      items.forEach((btn, idx) => btn.classList.toggle("is-active", idx === suggestionIndex));
-    }
-
-    function renderSuggestions(values) {
-      if (!values.length) {
-        clearSuggestions();
-        return;
-      }
-      suggestionsEl.innerHTML = "";
-      values.forEach((value) => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.textContent = value;
-        btn.setAttribute("role", "option");
-        btn.addEventListener("mousedown", (event) => {
-          event.preventDefault();
-          searchInput.value = value;
-          clearSuggestions();
-          submitFiltersAjax();
-        });
-        suggestionsEl.appendChild(btn);
-      });
-      suggestionsEl.classList.add("is-open");
-      suggestionIndex = -1;
-    }
-
-    function fetchSuggestions() {
-      const q = searchInput.value.trim();
-      if (q.length < 2) {
-        clearSuggestions();
-        return;
-      }
-      const url = new URL('{% url "segment_code_search" %}', window.location.origin);
-      url.searchParams.set("q", q);
-      fetch(url.toString(), { headers: { "X-Requested-With": "XMLHttpRequest" } })
-        .then((response) => response.json())
-        .then((data) => {
-          renderSuggestions(data.results || []);
-        })
-        .catch(() => clearSuggestions());
-    }
-
-    searchInput.addEventListener("input", () => {
-      window.clearTimeout(debounceId);
-      debounceId = window.setTimeout(fetchSuggestions, 180);
-    });
-
-    searchInput.addEventListener("keydown", (event) => {
-      const items = suggestionsEl.querySelectorAll("button");
-      if (!items.length) {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          submitFiltersAjax();
-        }
-        return;
-      }
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        suggestionIndex = Math.min(suggestionIndex + 1, items.length - 1);
-        applyActiveSuggestion();
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        suggestionIndex = Math.max(suggestionIndex - 1, -1);
-        applyActiveSuggestion();
-      } else if (event.key === "Escape") {
-        clearSuggestions();
-      } else if (event.key === "Enter") {
-        if (suggestionIndex >= 0 && items[suggestionIndex]) {
-          event.preventDefault();
-          searchInput.value = items[suggestionIndex].textContent || "";
-        }
-        clearSuggestions();
-        submitFiltersAjax();
-      }
-    });
-
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      submitFiltersAjax();
-    });
-
-    document.addEventListener("click", (event) => {
-      if (!suggestionsEl.contains(event.target) && event.target !== searchInput) {
-        clearSuggestions();
-      }
-    });
   }
 
   initLibraryDeleteVisibility();

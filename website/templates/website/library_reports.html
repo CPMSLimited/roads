@@ -5,10 +5,6 @@
 {% block content %}
 <form id="libraryReportsFilters" class="library-landing-v2" method="get" action="{% url 'library_reports' %}">
     <aside class="library-v2-side">
-        <div class="library-v2-search">
-            <input type="text" placeholder="Search" aria-label="Search reports">
-            <button type="button" class="library-v2-search-btn" aria-label="Search reports">&#128269;</button>
-        </div>
         <nav class="library-v2-nav" aria-label="Library sections">
             <a href="{% url 'library_road_inventory' %}"><span aria-hidden="true">&#128193;</span> Road inventory</a>
             <a class="is-active" href="{% url 'library_reports' %}"><span aria-hidden="true">&#128193;</span> Reports</a>
@@ -45,32 +41,30 @@
         <div class="library-v2-default-content" id="libraryDefaultContent" {% if selected_documentation_slug %}hidden{% endif %}>
         <header class="library-v2-head">
             <h1>All Reports <span>({{ page_obj.paginator.count }})</span></h1>
-            <div class="library-v2-filters">
-                <nav class="library-v2-pager library-v2-pager-top" aria-label="Reports pagination">
-                    {% if page_obj.has_previous %}
-                    <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
-                    {% else %}
-                    <span class="is-disabled">Previous</span>
-                    {% endif %}
-                    {% if page_obj.paginator.count == 0 %}
-                    <span>Page 0 of 0</span>
-                    {% else %}
-                    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
-                    {% endif %}
-                    {% if page_obj.has_next %}
-                    <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
-                    {% else %}
-                    <span class="is-disabled">Next</span>
-                    {% endif %}
-                </nav>
-                <select name="state" id="libraryReportsStateSelect" aria-label="Select state">
-                    <option>Select state</option>
-                    {% for s in states %}
-                    <option value="{{ s.state }}" {% if selected_state == s.state %}selected{% endif %}>{{ s.state }}</option>
-                    {% endfor %}
-                </select>
-                <a class="library-v2-reset" href="{% url 'library_reports' %}">Reset</a>
-                <button type="button" aria-label="More filters">&#9776;</button>
+            <div class="library-reports-head-actions">
+                <button type="button" class="library-reports-delete-link" id="libraryReportsDeleteLabel" hidden>Delete</button>
+                <button type="button" class="library-reports-upload-btn" id="libraryReportsUploadBtn">Upload</button>
+                <input
+                    id="libraryReportsUploadInput"
+                    type="file"
+                    name="report_files"
+                    accept=".pdf,.doc,.docx,.csv,.xls,.xlsx,.ppt,.pptx,.numbers,.pages,.key,.png,.jpg,.jpeg,.gif,.webp,.bmp,.tif,.tiff"
+                    multiple
+                    hidden
+                >
+                <div class="library-v2-search library-reports-search">
+                    <input
+                        type="text"
+                        name="q"
+                        value="{{ search_query }}"
+                        placeholder="Search reports"
+                        aria-label="Search reports"
+                    >
+                    <button type="submit" class="library-v2-search-btn" aria-label="Search reports">&#128269;</button>
+                </div>
+                {% if search_query %}
+                <a class="library-reports-reset-link" href="{% url 'library_reports' %}">Reset</a>
+                {% endif %}
             </div>
         </header>
 
@@ -78,39 +72,31 @@
             <table class="library-v2-table library-v2-reports-table">
                 <thead>
                     <tr>
+                        <th class="library-v2-checkbox-col">
+                            <input type="checkbox" aria-label="Select all deletable report rows">
+                        </th>
                         <th>File Name</th>
                         <th>Type</th>
-                        <th>Road Condition</th>
                         <th>Last Updated</th>
                         <th>Uploaded by</th>
-                        <th>Attachments</th>
-                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for row in report_rows %}
                     <tr>
-                        <td>{{ row.file_name }}</td>
-                        <td>{{ row.report_type }}</td>
-                        <td><span class="library-report-chip {{ row.road_condition_class }}">{{ row.road_condition }}</span></td>
-                        <td>{{ row.last_updated }}</td>
-                        <td>{{ row.uploaded_by }}</td>
-                        <td>
-                            {% if row.attachment_url %}
-                            <a class="library-attachment-cell" href="{{ row.attachment_url }}" target="_blank" rel="noopener noreferrer" title="{{ row.attachment_name }}">
-                                <span aria-hidden="true">&#128196;</span> {{ row.attachments_count }}
-                            </a>
-                            {% else %}
-                            <span class="library-attachment-cell"><span aria-hidden="true">&#128196;</span> {{ row.attachments_count }}</span>
+                        <td class="library-v2-checkbox-col">
+                            {% if row.can_delete %}
+                            <input type="checkbox" aria-label="Select {{ row.file_name }}" data-library-id="{{ row.library_id }}">
                             {% endif %}
                         </td>
-                        <td>
-                            <a class="library-report-action" href="{{ row.details_url }}">&#128065; view details</a>
-                        </td>
+                        <td>{{ row.file_name }}</td>
+                        <td>{{ row.report_type }}</td>
+                        <td>{{ row.last_updated }}</td>
+                        <td>{{ row.uploaded_by }}</td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="7" class="is-empty">No report rows available yet.</td>
+                        <td colspan="5" class="is-empty">No report rows available yet.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -130,12 +116,216 @@
         {% include "website/includes/library_uploads_workspace.html" %}
     </article>
 </form>
+<div class="library-delete-modal" id="libraryReportsDeleteModal" hidden>
+    <div class="library-delete-modal__backdrop" data-library-delete-close></div>
+    <div class="library-delete-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="libraryReportsDeleteModalTitle">
+        <div class="library-delete-modal__head">
+            <h2 id="libraryReportsDeleteModalTitle">Delete selected items</h2>
+            <button type="button" class="library-delete-modal__close" aria-label="Close" data-library-delete-close>&times;</button>
+        </div>
+        <div class="library-delete-modal__body">
+            <p class="library-delete-modal__warning">These selected rows will be permanently deleted and cannot be restored.</p>
+            <p class="library-delete-modal__summary" id="libraryReportsDeleteModalSummary"></p>
+            <p class="library-delete-modal__message" id="libraryReportsDeleteModalMessage" hidden></p>
+            <div class="library-delete-modal__failures" id="libraryReportsDeleteModalFailures" hidden>
+                <h3>Rows that could not be deleted</h3>
+                <ul id="libraryReportsDeleteModalFailureList"></ul>
+            </div>
+        </div>
+        <div class="library-delete-modal__actions">
+            <button type="button" class="library-delete-modal__secondary" data-library-delete-close>Cancel</button>
+            <button type="button" class="library-delete-modal__primary" id="libraryReportsDeleteModalConfirm">Delete selected</button>
+        </div>
+    </div>
+</div>
 <script>
   (function () {
     const form = document.getElementById("libraryReportsFilters");
-    const stateSelect = document.getElementById("libraryReportsStateSelect");
-    if (!form || !stateSelect) return;
-    stateSelect.addEventListener("change", () => form.submit());
+    const uploadBtn = document.getElementById("libraryReportsUploadBtn");
+    const uploadInput = document.getElementById("libraryReportsUploadInput");
+    const deleteLabel = document.getElementById("libraryReportsDeleteLabel");
+    const headerCheckbox = document.querySelector('.library-v2-reports-table thead .library-v2-checkbox-col input[type="checkbox"]');
+    const rowCheckboxes = Array.from(document.querySelectorAll('.library-v2-reports-table tbody .library-v2-checkbox-col input[type="checkbox"][data-library-id]'));
+    const deleteModal = document.getElementById("libraryReportsDeleteModal");
+    const deleteSummary = document.getElementById("libraryReportsDeleteModalSummary");
+    const deleteMessage = document.getElementById("libraryReportsDeleteModalMessage");
+    const deleteFailuresWrap = document.getElementById("libraryReportsDeleteModalFailures");
+    const deleteFailuresList = document.getElementById("libraryReportsDeleteModalFailureList");
+    const deleteConfirm = document.getElementById("libraryReportsDeleteModalConfirm");
+    if (!form) return;
+    function getCsrfToken() {
+      const cookies = document.cookie ? document.cookie.split(";") : [];
+      for (let i = 0; i < cookies.length; i += 1) {
+        const cookie = cookies[i].trim();
+        if (cookie.startsWith("csrftoken=")) {
+          return decodeURIComponent(cookie.substring("csrftoken=".length));
+        }
+      }
+      return "";
+    }
+    function selectedCheckboxes() {
+      return rowCheckboxes.filter((checkbox) => checkbox.isConnected && checkbox.checked);
+    }
+    function syncDeleteVisibility() {
+      if (!deleteLabel || !headerCheckbox) return;
+      const activeCheckboxes = rowCheckboxes.filter((checkbox) => checkbox.isConnected);
+      const checkedCount = selectedCheckboxes().length;
+      deleteLabel.hidden = checkedCount === 0;
+      headerCheckbox.checked = checkedCount > 0 && checkedCount === activeCheckboxes.length;
+      headerCheckbox.indeterminate = checkedCount > 0 && checkedCount < activeCheckboxes.length;
+    }
+    function setDeleteMessage(text, isError) {
+      if (!deleteMessage) return;
+      if (!text) {
+        deleteMessage.hidden = true;
+        deleteMessage.textContent = "";
+        deleteMessage.classList.remove("is-error", "is-success");
+        return;
+      }
+      deleteMessage.hidden = false;
+      deleteMessage.textContent = text;
+      deleteMessage.classList.toggle("is-error", !!isError);
+      deleteMessage.classList.toggle("is-success", !isError);
+    }
+    function closeDeleteModal() {
+      if (!deleteModal) return;
+      deleteModal.hidden = true;
+      document.body.classList.remove("modal-open");
+      setDeleteMessage("", false);
+      if (deleteFailuresWrap) deleteFailuresWrap.hidden = true;
+      if (deleteFailuresList) deleteFailuresList.innerHTML = "";
+    }
+    function openDeleteModal() {
+      const selected = selectedCheckboxes();
+      if (!deleteModal || !deleteSummary || !selected.length) return;
+      deleteSummary.textContent = `You are about to delete ${selected.length} selected item${selected.length === 1 ? "" : "s"}.`;
+      setDeleteMessage("", false);
+      if (deleteFailuresWrap) deleteFailuresWrap.hidden = true;
+      if (deleteFailuresList) deleteFailuresList.innerHTML = "";
+      deleteModal.hidden = false;
+      document.body.classList.add("modal-open");
+    }
+    function removeDeletedRows(deletedIds) {
+      const idSet = new Set((deletedIds || []).map((value) => String(value)));
+      rowCheckboxes.forEach((checkbox) => {
+        if (!idSet.has(String(checkbox.dataset.libraryId || ""))) return;
+        const row = checkbox.closest("tr");
+        if (row) row.remove();
+      });
+      const tbody = document.querySelector(".library-v2-reports-table tbody");
+      const remainingRows = tbody ? Array.from(tbody.querySelectorAll("tr")) : [];
+      const dataRows = remainingRows.filter((row) => row.querySelector('input[type="checkbox"][data-library-id]') || row.children.length > 1);
+      const countLabel = document.querySelector(".library-v2-head h1 span");
+      const existingEmpty = tbody ? tbody.querySelector("tr td.is-empty") : null;
+      if (tbody && !dataRows.length && !existingEmpty) {
+        const emptyRow = document.createElement("tr");
+        const emptyCell = document.createElement("td");
+        emptyCell.colSpan = 5;
+        emptyCell.className = "is-empty";
+        emptyCell.textContent = "No report rows available yet.";
+        emptyRow.appendChild(emptyCell);
+        tbody.appendChild(emptyRow);
+      }
+      if (countLabel) {
+        countLabel.textContent = `(${dataRows.length})`;
+      }
+      syncDeleteVisibility();
+    }
+    if (uploadBtn && uploadInput) {
+      uploadBtn.addEventListener("click", function () {
+        uploadInput.click();
+      });
+      uploadInput.addEventListener("change", async function () {
+        const files = Array.from(uploadInput.files || []);
+        if (!files.length) return;
+        const formData = new FormData();
+        files.forEach((file) => formData.append("report_files", file));
+        try {
+          uploadBtn.disabled = true;
+          const response = await fetch('{% url "library_reports_upload" %}', {
+            method: "POST",
+            headers: {
+              "X-CSRFToken": getCsrfToken(),
+            },
+            body: formData,
+          });
+          const payload = await response.json();
+          if (!response.ok || payload.ok === false) {
+            throw new Error((payload.errors && payload.errors.join(" ")) || payload.message || "Upload failed.");
+          }
+          window.location.reload();
+        } catch (error) {
+          window.alert(error.message || "Upload failed.");
+        } finally {
+          uploadBtn.disabled = false;
+          uploadInput.value = "";
+        }
+      });
+    }
+    if (headerCheckbox && rowCheckboxes.length) {
+      headerCheckbox.addEventListener("change", function () {
+        rowCheckboxes.filter((checkbox) => checkbox.isConnected).forEach((checkbox) => {
+          checkbox.checked = headerCheckbox.checked;
+        });
+        syncDeleteVisibility();
+      });
+      rowCheckboxes.forEach((checkbox) => {
+        checkbox.addEventListener("change", syncDeleteVisibility);
+      });
+      syncDeleteVisibility();
+    } else if (deleteLabel) {
+      deleteLabel.hidden = true;
+      if (headerCheckbox) headerCheckbox.disabled = true;
+    }
+    if (deleteLabel && deleteModal && deleteConfirm) {
+      deleteLabel.addEventListener("click", openDeleteModal);
+      deleteModal.querySelectorAll("[data-library-delete-close]").forEach((node) => {
+        node.addEventListener("click", closeDeleteModal);
+      });
+      deleteConfirm.addEventListener("click", async function () {
+        const selected = selectedCheckboxes();
+        if (!selected.length) {
+          closeDeleteModal();
+          syncDeleteVisibility();
+          return;
+        }
+        const formData = new FormData();
+        selected.forEach((checkbox) => formData.append("library_ids[]", checkbox.dataset.libraryId));
+        try {
+          deleteConfirm.disabled = true;
+          const response = await fetch('{{ library_content_delete_url }}', {
+            method: "POST",
+            headers: {
+              "X-CSRFToken": getCsrfToken(),
+            },
+            body: formData,
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.message || "Delete failed.");
+          }
+          removeDeletedRows(payload.deleted_ids || []);
+          if (payload.failures && payload.failures.length) {
+            setDeleteMessage(payload.message || "Some items could not be deleted.", true);
+            if (deleteFailuresWrap && deleteFailuresList) {
+              deleteFailuresWrap.hidden = false;
+              deleteFailuresList.innerHTML = "";
+              payload.failures.forEach((failure) => {
+                const item = document.createElement("li");
+                item.textContent = failure.reason || `Item ${failure.id} could not be deleted.`;
+                deleteFailuresList.appendChild(item);
+              });
+            }
+            return;
+          }
+          closeDeleteModal();
+        } catch (error) {
+          setDeleteMessage(error.message || "Delete failed.", true);
+        } finally {
+          deleteConfirm.disabled = false;
+        }
+      });
+    }
   })();
 </script>
 {% endblock %}

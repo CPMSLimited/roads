@@ -800,6 +800,7 @@ class PhysicalInspectionCharacteristic(models.Model):
 
 
 class Library(models.Model):
+    TYPE_REPORT_UPLOAD = "report_upload"
     TYPE_TECHNICAL_GUIDE = "technical_guide"
     TYPE_USER_GUIDE = "user_guide"
     TYPE_ROOT_CAUSE_ANALYSIS = "root_cause_analysis"
@@ -807,6 +808,7 @@ class Library(models.Model):
     TYPE_SOLUTION_DESIGN = "solution_design"
 
     TYPE_CHOICES = [
+        (TYPE_REPORT_UPLOAD, "Report Upload"),
         (TYPE_TECHNICAL_GUIDE, "Technical Guide"),
         (TYPE_USER_GUIDE, "User Guide"),
         (TYPE_ROOT_CAUSE_ANALYSIS, "Root Cause Analysis"),
@@ -874,3 +876,9 @@ class Library(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.get_entry_type_display()})"
+
+    def delete(self, *args, **kwargs):
+        stored_file = self.file
+        super().delete(*args, **kwargs)
+        if stored_file:
+            stored_file.delete(save=False)

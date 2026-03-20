@@ -85,21 +85,70 @@ DOC_FILENAME_ORDER = [
 
 def _library_file_type_from_name(filename):
     ext = os.path.splitext((filename or "").lower())[1]
-    if ext in {".doc", ".docx", ".txt", ".rtf", ".odt"}:
+    if ext in {".doc", ".docx", ".txt", ".rtf", ".odt", ".pages"}:
         return Library.FILE_TYPE_DOCUMENT
-    if ext in {".xls", ".xlsx", ".ods"}:
+    if ext in {".xls", ".xlsx", ".ods", ".numbers"}:
         return Library.FILE_TYPE_SPREADSHEET
     if ext == ".pdf":
         return Library.FILE_TYPE_PDF
     if ext == ".csv":
         return Library.FILE_TYPE_CSV
-    if ext in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}:
+    if ext in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tif", ".tiff"}:
         return Library.FILE_TYPE_IMAGE
-    if ext in {".ppt", ".pptx", ".odp"}:
+    if ext in {".ppt", ".pptx", ".odp", ".key"}:
         return Library.FILE_TYPE_PRESENTATION
     if ext in {".geojson", ".json", ".kml", ".kmz", ".shp"}:
         return Library.FILE_TYPE_GEO_DATA
     return Library.FILE_TYPE_OTHER
+
+
+LIBRARY_ALLOWED_UPLOAD_EXTENSIONS = {
+    ".pdf",
+    ".doc",
+    ".docx",
+    ".csv",
+    ".xls",
+    ".xlsx",
+    ".ppt",
+    ".pptx",
+    ".numbers",
+    ".pages",
+    ".key",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".bmp",
+    ".tif",
+    ".tiff",
+}
+
+
+def _save_library_uploads(files, entry_type):
+    uploaded_by = _get_assumed_project_user()
+    created = 0
+    errors = []
+
+    for uploaded_file in files:
+        ext = os.path.splitext((uploaded_file.name or "").lower())[1]
+        if ext not in LIBRARY_ALLOWED_UPLOAD_EXTENSIONS:
+            errors.append(f"{uploaded_file.name}: file type is not allowed.")
+            continue
+
+        try:
+            Library.objects.create(
+                entry_type=entry_type,
+                file_type=_library_file_type_from_name(uploaded_file.name),
+                name=os.path.basename(uploaded_file.name),
+                file=uploaded_file,
+                uploaded_by=uploaded_by,
+            )
+            created += 1
+        except Exception as exc:
+            errors.append(f"{uploaded_file.name}: upload failed. ({exc})")
+
+    return created, errors
 
 
 def _slugify_doc_name(value):
@@ -1200,17 +1249,19 @@ def library_segments_bulk_delete(request):
 
 
 def library_reports(request):
-    def _status_label_and_class(status_code):
-        if status_code == "FF5050":
-            return "Failed", "is-intolerable"
-        if status_code == "FF9966":
-            return "Intolerable", "is-intolerable"
-        if status_code in {"00CC00", "05700B"}:
-            return "Tolerable", "is-tolerable"
-        return "No response", "is-neutral"
+    def _matches_query(*values):
+        if not query:
+            return True
+        haystack = " ".join(str(value or "") for value in values).lower()
+        return query in haystack
+
+    def _file_extension(filename):
+        ext = os.path.splitext(str(filename or "").strip())[1].lstrip(".").lower()
+        return ext or "-"
 
     report_rows = []
     selected_state = (request.GET.get("state") or "").strip()
+    query = (request.GET.get("q") or "").strip().lower()
 
     rca_qs = (
         RootCauseAnalysis.objects.select_related("subsegment", "subsegment__segment")
@@ -1226,28 +1277,22 @@ def library_reports(request):
     if selected_state:
         rca_qs = rca_qs.filter(subsegment__segment__state__iexact=selected_state)
     for idx, report in enumerate(rca_qs):
-        segment = getattr(report.subsegment, "segment", None)
-        status_code = getattr(segment, "status", "666699")
-        status_label, status_class = _status_label_and_class(status_code)
         linked_file = (
             report.library_files.filter(entry_type=Library.TYPE_ROOT_CAUSE_ANALYSIS)
             .order_by("-created", "-id")
             .first()
         )
-        report_rows.append(
-            {
-                "file_name": report.subsegment.code if report.subsegment else "-",
-                "report_type": "Root cause report",
-                "road_condition": status_label,
-                "road_condition_class": status_class,
-                "last_updated": f"{timesince(report.updated_at).split(',')[0]} ago",
-                "uploaded_by": "Engineer Ridwan Bankole",
-                "attachments_count": (report.library_attachments_count or 0),
-                "attachment_url": linked_file.file.url if linked_file else "",
-                "attachment_name": linked_file.name if linked_file else "",
-                "details_url": f"{reverse('engineering_admin')}?mode=view&analysis={report.pk}",
-            }
-        )
+        attachment_name = linked_file.name if linked_file else ""
+        row = {
+            "file_name": report.subsegment.code if report.subsegment else "-",
+            "report_type": _file_extension(attachment_name),
+            "last_updated": f"{timesince(report.updated_at).split(',')[0]} ago",
+            "uploaded_by": "Engineer Ridwan Bankole",
+            "library_id": "",
+            "can_delete": False,
+        }
+        if _matches_query(row["file_name"], row["report_type"], row["uploaded_by"], attachment_name):
+            report_rows.append(row)
 
     physical_qs = (
         PhysicalInspection.objects.select_related("subsegment", "subsegment__segment")
@@ -1263,28 +1308,40 @@ def library_reports(request):
     if selected_state:
         physical_qs = physical_qs.filter(subsegment__segment__state__iexact=selected_state)
     for idx, report in enumerate(physical_qs):
-        segment = getattr(report.subsegment, "segment", None)
-        status_code = getattr(segment, "status", "666699")
-        status_label, status_class = _status_label_and_class(status_code)
         linked_file = (
             report.library_files.filter(entry_type=Library.TYPE_PHYSICAL_INSPECTION)
             .order_by("-created", "-id")
             .first()
         )
-        report_rows.append(
-            {
-                "file_name": report.subsegment.code if report.subsegment else "-",
-                "report_type": "Physical inspection report",
-                "road_condition": status_label,
-                "road_condition_class": status_class,
-                "last_updated": f"{timesince(report.updated_at).split(',')[0]} ago",
-                "uploaded_by": "Engineer Ridwan Bankole",
-                "attachments_count": (report.library_attachments_count or 0),
-                "attachment_url": linked_file.file.url if linked_file else "",
-                "attachment_name": linked_file.name if linked_file else "",
-                "details_url": f"{reverse('physical_inspection')}?mode=view&inspection={report.pk}",
-            }
-        )
+        attachment_name = linked_file.name if linked_file else ""
+        row = {
+            "file_name": report.subsegment.code if report.subsegment else "-",
+            "report_type": _file_extension(attachment_name),
+            "last_updated": f"{timesince(report.updated_at).split(',')[0]} ago",
+            "uploaded_by": "Engineer Ridwan Bankole",
+            "library_id": "",
+            "can_delete": False,
+        }
+        if _matches_query(row["file_name"], row["report_type"], row["uploaded_by"], attachment_name):
+            report_rows.append(row)
+
+    uploaded_reports_qs = Library.objects.filter(entry_type=Library.TYPE_REPORT_UPLOAD).select_related("uploaded_by")
+    for item in uploaded_reports_qs:
+        uploader = "Unassigned"
+        if item.uploaded_by:
+            uploader_name = f"{item.uploaded_by.first_name} {item.uploaded_by.last_name}".strip()
+            uploader = uploader_name or item.uploaded_by.get_username()
+        row = {
+            "file_name": item.name or os.path.basename(item.file.name),
+            "report_type": _file_extension(item.name or item.file.name),
+            "last_updated": f"{timesince(item.updated).split(',')[0]} ago",
+            "uploaded_by": uploader,
+            "attachment_name": item.name or os.path.basename(item.file.name),
+            "library_id": item.id,
+            "can_delete": True,
+        }
+        if _matches_query(row["file_name"], row["report_type"], row["uploaded_by"], row["attachment_name"]):
+            report_rows.append(row)
 
     report_rows.sort(key=lambda row: row["file_name"])
     paginator = Paginator(report_rows, 50)
@@ -1304,9 +1361,130 @@ def library_reports(request):
             "page_obj": page_obj,
             "states": State.objects.only("state").order_by("state"),
             "selected_state": selected_state,
+            "search_query": request.GET.get("q", "").strip(),
             "filters_qs": filters_qs,
+            "library_content_delete_url": reverse("library_content_bulk_delete"),
             **documentation,
         },
+    )
+
+
+def library_reports_upload(request):
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "message": "POST method required."}, status=405)
+
+    files = [uploaded_file for uploaded_file in request.FILES.getlist("report_files") if uploaded_file]
+    if not files:
+        return JsonResponse({"ok": False, "message": "Select at least one file to upload."}, status=400)
+
+    created, errors = _save_library_uploads(files, Library.TYPE_REPORT_UPLOAD)
+
+    status_code = 200 if created else 400
+    return JsonResponse(
+        {
+            "ok": created > 0 and not errors or created > 0,
+            "created": created,
+            "errors": errors,
+            "message": (
+                f"Uploaded {created} file{'s' if created != 1 else ''}."
+                if created and not errors
+                else f"Uploaded {created} file{'s' if created != 1 else ''} with some errors."
+                if created
+                else "No files were uploaded."
+            ),
+        },
+        status=status_code,
+    )
+
+
+def library_guide_upload(request, entry_type):
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "message": "POST method required."}, status=405)
+
+    allowed_entry_types = {
+        "technical_guide": Library.TYPE_TECHNICAL_GUIDE,
+        "user_guide": Library.TYPE_USER_GUIDE,
+    }
+    normalized_entry_type = allowed_entry_types.get((entry_type or "").strip().lower())
+    if not normalized_entry_type:
+        return JsonResponse({"ok": False, "message": "Unsupported guide upload target."}, status=400)
+
+    files = [uploaded_file for uploaded_file in request.FILES.getlist("guide_files") if uploaded_file]
+    if not files:
+        return JsonResponse({"ok": False, "message": "Select at least one file to upload."}, status=400)
+
+    created, errors = _save_library_uploads(files, normalized_entry_type)
+    status_code = 200 if created else 400
+    return JsonResponse(
+        {
+            "ok": created > 0,
+            "created": created,
+            "errors": errors,
+            "message": (
+                f"Uploaded {created} file{'s' if created != 1 else ''}."
+                if created and not errors
+                else f"Uploaded {created} file{'s' if created != 1 else ''} with some errors."
+                if created
+                else "No files were uploaded."
+            ),
+        },
+        status=status_code,
+    )
+
+
+def library_content_bulk_delete(request):
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "message": "POST method required."}, status=405)
+
+    raw_ids = request.POST.getlist("library_ids[]") or request.POST.getlist("library_ids")
+    normalized_ids = []
+    for raw_id in raw_ids:
+        try:
+            normalized_ids.append(int(str(raw_id).strip()))
+        except (TypeError, ValueError):
+            continue
+
+    if not normalized_ids:
+        return JsonResponse({"ok": False, "message": "Select at least one item to delete."}, status=400)
+
+    allowed_entry_types = {
+        Library.TYPE_REPORT_UPLOAD,
+        Library.TYPE_TECHNICAL_GUIDE,
+        Library.TYPE_USER_GUIDE,
+    }
+    items = list(
+        Library.objects.filter(id__in=normalized_ids, entry_type__in=allowed_entry_types)
+        .only("id", "name", "entry_type", "file")
+        .order_by("id")
+    )
+    item_map = {item.id: item for item in items}
+
+    deleted_ids = []
+    failures = []
+    for requested_id in normalized_ids:
+        item = item_map.get(requested_id)
+        if item is None:
+            failures.append({"id": requested_id, "reason": "Item was not found or cannot be deleted from this page."})
+            continue
+        try:
+            item.delete()
+            deleted_ids.append(requested_id)
+        except Exception as exc:
+            failures.append({"id": requested_id, "reason": f"{item.name}: {exc}"})
+
+    return JsonResponse(
+        {
+            "ok": bool(deleted_ids),
+            "deleted_ids": deleted_ids,
+            "failures": failures,
+            "message": (
+                f"Deleted {len(deleted_ids)} item{'s' if len(deleted_ids) != 1 else ''}."
+                if deleted_ids and not failures
+                else f"Deleted {len(deleted_ids)} item{'s' if len(deleted_ids) != 1 else ''} with some failures."
+                if deleted_ids
+                else "No items were deleted."
+            ),
+        }
     )
 
 
@@ -1316,6 +1494,7 @@ def _render_library_guide(request, *, entry_type, active_section, search_label, 
     if query:
         guides_qs = guides_qs.filter(name__icontains=query)
     documentation = _load_library_documentation((request.GET.get("doc") or "").strip())
+    upload_target = "technical_guide" if entry_type == Library.TYPE_TECHNICAL_GUIDE else "user_guide"
 
     return render(
         request,
@@ -1328,6 +1507,8 @@ def _render_library_guide(request, *, entry_type, active_section, search_label, 
             "search_query": query,
             "guide_search_label": search_label,
             "guide_url_name": url_name,
+            "guide_upload_url": reverse("library_guide_upload", args=[upload_target]),
+            "library_content_delete_url": reverse("library_content_bulk_delete"),
             **documentation,
         },
     )
