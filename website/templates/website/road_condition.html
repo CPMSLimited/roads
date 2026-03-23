@@ -131,7 +131,7 @@
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="4" class="is-empty">No routes found for the selected filter.</td>
+                                <td colspan="4" class="is-empty">No segments found for the selected filter.</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -653,10 +653,15 @@
     bindSubsegmentRowSelection(document);
     syncSubsegmentSelectionUi();
     applyStatusContrast();
-    clearSubsegmentChart("Select a segment on the right table to view the graph.");
-    const defaultSegmentCode = "A1LAS1";
-    markActiveSegmentRow(defaultSegmentCode);
-    loadSubsegmentsForSegment(defaultSegmentCode);
+    const firstVisibleSegmentRow = document.querySelector(".segment-select-row");
+    const firstVisibleSegmentCode = (firstVisibleSegmentRow?.dataset.segmentCode || "").trim();
+    if (firstVisibleSegmentCode) {
+      markActiveSegmentRow(firstVisibleSegmentCode);
+      loadSubsegmentsForSegment(firstVisibleSegmentCode);
+    } else {
+      clearSubsegmentChart("No segments found for the selected filter.");
+      setSubsegmentMessage("No segments found for the selected filter.");
+    }
   })();
 </script>
 {% endblock %}
