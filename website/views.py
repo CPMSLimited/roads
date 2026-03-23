@@ -589,34 +589,24 @@ def _build_road_condition_context(request):
     current_view = request.GET.get("view") or "map"
     selected_road = request.GET.get("road") or ""
     selected_route = request.GET.get("route") or ""
-    selected_state = (request.GET.get("state") or "").strip()
     selected_speed = (request.GET.get("speed") or "").strip().lower()
 
     # Keep one active filter at a time.
     if selected_road:
         selected_route = ""
-        selected_state = ""
         selected_speed = ""
         qs = qs.filter(route__road__road=selected_road)
     elif selected_route:
         selected_road = ""
-        selected_state = ""
         selected_speed = ""
         qs = qs.filter(route__route=selected_route)
-    elif selected_state:
-        selected_road = ""
-        selected_route = ""
-        selected_speed = ""
-        qs = qs.filter(state__iexact=selected_state)
     elif selected_speed in STATUS_BUCKETS:
         selected_road = ""
         selected_route = ""
-        selected_state = ""
         qs = qs.filter(status__in=STATUS_BUCKETS[selected_speed]["codes"])
 
     roads = Road.objects.only("road").order_by("road")
     routes = Route.objects.only("route").order_by("route")
-    states = State.objects.only("state").order_by("state").values_list("state", flat=True)
     speed_options = [
         ("good", "Good"),
         ("tolerable", "Tolerable"),
@@ -634,8 +624,6 @@ def _build_road_condition_context(request):
         filters["road"] = selected_road
     if selected_route:
         filters["route"] = selected_route
-    if selected_state:
-        filters["state"] = selected_state
     if selected_speed:
         filters["speed"] = selected_speed
 
@@ -648,11 +636,9 @@ def _build_road_condition_context(request):
         "page_obj": page_obj,
         "roads": roads,
         "routes": routes,
-        "states": list(states),
         "speed_options": speed_options,
         "selected_road": selected_road,
         "selected_route": selected_route,
-        "selected_state": selected_state,
         "selected_speed": selected_speed,
         "current_view": current_view,
         "filters_qs": urlencode(filters),
@@ -1285,7 +1271,7 @@ def library_reports(request):
         attachment_name = linked_file.name if linked_file else ""
         row = {
             "file_name": report.subsegment.code if report.subsegment else "-",
-            "report_type": _file_extension(attachment_name),
+            "report_type": "RCA",
             "last_updated": f"{timesince(report.updated_at).split(',')[0]} ago",
             "uploaded_by": "Engineer Ridwan Bankole",
             "library_id": "",
@@ -1316,7 +1302,7 @@ def library_reports(request):
         attachment_name = linked_file.name if linked_file else ""
         row = {
             "file_name": report.subsegment.code if report.subsegment else "-",
-            "report_type": _file_extension(attachment_name),
+            "report_type": "Physical Inspection",
             "last_updated": f"{timesince(report.updated_at).split(',')[0]} ago",
             "uploaded_by": "Engineer Ridwan Bankole",
             "library_id": "",

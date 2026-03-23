@@ -67,9 +67,9 @@
                         </select>
                     </label>
                     <label class="inventory-field">
-                        <span>Select speed</span>
-                        <select name="speed" aria-label="Select speed">
-                            <option value="">Select speed</option>
+                        <span>Select condition</span>
+                        <select name="speed" aria-label="Select condition">
+                            <option value="">Select condition</option>
                             {% for value, label in speed_options %}
                             <option value="{{ value }}" {% if selected_speed == value %}selected{% endif %}>{{ label }}</option>
                             {% endfor %}

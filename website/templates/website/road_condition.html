@@ -100,11 +100,11 @@
                         </select>
                     </label>
                     <label class="inventory-field">
-                        <span>Select state</span>
-                        <select name="state" aria-label="Select state">
-                            <option value="">Select state</option>
-                            {% for state in states %}
-                            <option value="{{ state }}" {% if selected_state == state %}selected{% endif %}>{{ state }}</option>
+                        <span>Select condition</span>
+                        <select name="speed" aria-label="Select condition">
+                            <option value="">Select condition</option>
+                            {% for value, label in speed_options %}
+                            <option value="{{ value }}" {% if selected_speed == value %}selected{% endif %}>{{ label }}</option>
                             {% endfor %}
                         </select>
                     </label>
@@ -361,11 +361,11 @@
     function resetOtherFilters(formEl, changedSelect) {
       if (!formEl) return;
       const routeSelect = formEl.querySelector('select[name="route"]');
-      const stateSelect = formEl.querySelector('select[name="state"]');
-      if (!routeSelect || !stateSelect) return;
+      const conditionSelect = formEl.querySelector('select[name="speed"]');
+      if (!routeSelect || !conditionSelect) return;
       if (changedSelect === routeSelect) {
-        stateSelect.value = "";
-      } else if (changedSelect === stateSelect) {
+        conditionSelect.value = "";
+      } else if (changedSelect === conditionSelect) {
         routeSelect.value = "";
       }
     }
@@ -374,7 +374,7 @@
       if (!formEl) return;
       const selects = [
         formEl.querySelector('select[name="route"]'),
-        formEl.querySelector('select[name="state"]')
+        formEl.querySelector('select[name="speed"]')
       ].filter(Boolean);
       selects.forEach((sel) => {
         sel.addEventListener("change", () => {
