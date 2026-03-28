@@ -48,10 +48,11 @@ def cleanup_duplicate_subsegments(apps, schema_editor):
         with transaction.atomic():
             # First move kept rows to temporary unique codes so final renumbering
             # cannot collide with existing duplicate rows that still hold the target code.
-            for subsegment in keep:
+            for offset, subsegment in enumerate(keep, start=1):
                 subsegment.code = f"TMP-{subsegment.id}"
+                subsegment.position = 1000 + offset
             if keep:
-                SubSegment.objects.bulk_update(keep, ["code"], batch_size=SEGMENT_CHUNK_SIZE)
+                SubSegment.objects.bulk_update(keep, ["code", "position"], batch_size=SEGMENT_CHUNK_SIZE)
 
             if delete_ids:
                 SubSegment.objects.filter(id__in=delete_ids).delete()
@@ -59,8 +60,7 @@ def cleanup_duplicate_subsegments(apps, schema_editor):
             for position, subsegment in enumerate(keep, start=1):
                 subsegment.position = position
                 subsegment.code = f"{subsegment.segment.code}-{position:02d}"
-            if keep:
-                SubSegment.objects.bulk_update(keep, ["position", "code"], batch_size=SEGMENT_CHUNK_SIZE)
+                subsegment.save(update_fields=["position", "code"])
 
 
 class Migration(migrations.Migration):
