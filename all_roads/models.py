@@ -114,6 +114,37 @@ def has_two_digit_segment_suffix(value):
     return bool(SEGMENT_CODE_TWO_DIGIT_SUFFIX_RE.match(str(value or "")))
 
 
+def build_subsegment_repeat_signature(start_lat, start_lon, end_lat, end_lon, distance=None):
+    return (
+        str(start_lat) if start_lat is not None else "",
+        str(start_lon) if start_lon is not None else "",
+        str(end_lat) if end_lat is not None else "",
+        str(end_lon) if end_lon is not None else "",
+        str(distance) if distance is not None else "",
+    )
+
+
+def find_repeating_prefix_length(signatures, min_repeat_items=2):
+    total = len(signatures)
+    if total < 2:
+        return None
+    for prefix_len in range(1, total):
+        repeated_count = total - prefix_len
+        if repeated_count < min_repeat_items:
+            continue
+        if all(signatures[idx] == signatures[idx % prefix_len] for idx in range(prefix_len, total)):
+            return prefix_len
+    return None
+
+
+def collapse_repeated_subsegment_rows(rows, signature_getter, min_repeat_items=2):
+    signatures = [signature_getter(row) for row in rows]
+    prefix_len = find_repeating_prefix_length(signatures, min_repeat_items=min_repeat_items)
+    if prefix_len is None:
+        return list(rows), 0
+    return list(rows[:prefix_len]), max(0, len(rows) - prefix_len)
+
+
 def apply_segment_code_ordering(queryset, *leading_fields, code_field="code", trailing_fields=None):
     trailing_fields = tuple(trailing_fields or ())
     valid_lookup = {f"{code_field}__regex": r".*\d{2}$"}
@@ -274,8 +305,8 @@ class SubSegment(models.Model):
     segment = models.ForeignKey( Segment, on_delete=models.CASCADE,related_name="subsegments", db_index=True,)
     code = models.CharField(max_length=16, unique=True, blank=True)
     position = models.PositiveSmallIntegerField(
-        validators=[MinValueValidator(1), MaxValueValidator(100)],
-        help_text="Order of this sub-segment within its parent segment (1–100)."
+        validators=[MinValueValidator(1), MaxValueValidator(35)],
+        help_text="Order of this sub-segment within its parent segment (1–35)."
     )
     start_lat = models.DecimalField(max_digits=18, decimal_places=5, default=0.00)
     start_lon = models.DecimalField(max_digits=18, decimal_places=5, default=0.00)
@@ -303,8 +334,8 @@ class SubSegment(models.Model):
                 name="uq_subsegment_segment_position"
             ),
             models.CheckConstraint(
-                check=models.Q(position__gte=1) & models.Q(position__lte=100),
-                name="ck_subsegment_position_1_100",
+                check=models.Q(position__gte=1) & models.Q(position__lte=35),
+                name="ck_subsegment_position_1_35",
             ),
         ]
         ordering = ["segment_id", "position"]

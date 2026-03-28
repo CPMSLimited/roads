@@ -8,7 +8,13 @@ from django.db import transaction
 from django.db.models import Max
 from django.db.models.functions import Trim, Upper
 
-from all_roads.models import Segment, SubSegment, normalize_segment_code
+from all_roads.models import (
+    Segment,
+    SubSegment,
+    build_subsegment_repeat_signature,
+    collapse_repeated_subsegment_rows,
+    normalize_segment_code,
+)
 
 try:
     import openpyxl
@@ -214,6 +220,7 @@ def process_new_subsegments_upload(fileobj, filename, chunk_size=1000, progress_
         code: max_positions.get(segment.id, 0)
         for code, segment in segment_map.items()
     }
+    prepared_rows_by_segment = defaultdict(list)
     pending = []
 
     def _report_progress(processed_rows):
@@ -297,41 +304,72 @@ def process_new_subsegments_upload(fileobj, filename, chunk_size=1000, progress_
             _report_progress(processed_rows)
             continue
 
-        position = int(segment_position_counter.get(segment_code, 0)) + 1
-        if position > 100:
-            summary["skipped"] += 1
-            summary["skipped_details"].append(
-                f"Row {rownum}: skipped because segment {segment_obj.code} cannot exceed 100 subsegments."
-            )
-            summary["errors"].append(
-                f"Row {rownum}: position {position} exceeds the max of 100 for segment {segment_obj.code}."
-            )
-            _report_progress(processed_rows)
-            continue
-
-        segment_position_counter[segment_code] = position
-        subsegment_code = f"{segment_obj.code}-{position:02d}"
-        pending.append(
+        prepared_rows_by_segment[segment_code].append(
             {
                 "rownum": rownum,
-                "code": subsegment_code,
-                "detail": f"Row {rownum}: created subsegment {subsegment_code}.",
-                "obj": SubSegment(
-                    segment=segment_obj,
-                    position=position,
-                    code=subsegment_code,
-                    start_lon=x_start,
-                    start_lat=y_start,
-                    end_lon=x_end,
-                    end_lat=y_end,
-                    distance=length,
-                ),
+                "segment": segment_obj,
+                "start_lon": x_start,
+                "start_lat": y_start,
+                "end_lon": x_end,
+                "end_lat": y_end,
+                "distance": length,
             }
         )
-
-        if len(pending) >= chunk_size:
-            _flush_pending()
         _report_progress(processed_rows)
+
+    for segment_code, prepared_rows in prepared_rows_by_segment.items():
+        deduped_rows, removed_count = collapse_repeated_subsegment_rows(
+            prepared_rows,
+            lambda row: build_subsegment_repeat_signature(
+                row["start_lat"],
+                row["start_lon"],
+                row["end_lat"],
+                row["end_lon"],
+                row["distance"],
+            ),
+        )
+        if removed_count:
+            summary["skipped"] += removed_count
+            summary["skipped_details"].append(
+                f"Segment {segment_code}: skipped {removed_count} repeated subsegment row(s) from the upload tail."
+            )
+
+        next_position = int(segment_position_counter.get(segment_code, 0))
+        for row in deduped_rows:
+            position = next_position + 1
+            if position > 35:
+                summary["skipped"] += 1
+                summary["skipped_details"].append(
+                    f"Row {row['rownum']}: skipped because segment {row['segment'].code} cannot exceed 35 subsegments."
+                )
+                summary["errors"].append(
+                    f"Row {row['rownum']}: position {position} exceeds the max of 35 for segment {row['segment'].code}."
+                )
+                continue
+
+            next_position = position
+            subsegment_code = f"{row['segment'].code}-{position:02d}"
+            pending.append(
+                {
+                    "rownum": row["rownum"],
+                    "code": subsegment_code,
+                    "detail": f"Row {row['rownum']}: created subsegment {subsegment_code}.",
+                    "obj": SubSegment(
+                        segment=row["segment"],
+                        position=position,
+                        code=subsegment_code,
+                        start_lon=row["start_lon"],
+                        start_lat=row["start_lat"],
+                        end_lon=row["end_lon"],
+                        end_lat=row["end_lat"],
+                        distance=row["distance"],
+                    ),
+                }
+            )
+            if len(pending) >= chunk_size:
+                _flush_pending()
+
+        segment_position_counter[segment_code] = next_position
 
     _flush_pending()
     return summary

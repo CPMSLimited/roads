@@ -27,6 +27,8 @@ from all_roads.models import (
     normalize_segment_code,
     apply_segment_code_ordering,
     apply_subsegment_code_ordering,
+    build_subsegment_repeat_signature,
+    collapse_repeated_subsegment_rows,
 )
 from all_roads.services import refresh_segment_and_subsegments, refresh_subsegments_from_google
 from all_roads.tasks import import_new_subsegments_task, refresh_segments_task
@@ -3800,6 +3802,16 @@ def _process_subsegment_upload(segment_code, start_row, end_row, fileobj):
     if errors:
         return {"created": 0, "replaced": 0, "errors": errors}
 
+    cleaned_rows, removed_count = collapse_repeated_subsegment_rows(
+        cleaned_rows,
+        lambda row: build_subsegment_repeat_signature(
+            row["start_lat"],
+            row["start_lon"],
+            row["end_lat"],
+            row["end_lon"],
+        ),
+    )
+
     with transaction.atomic():
         replaced = SubSegment.objects.filter(segment=segment_obj).count()
         SubSegment.objects.filter(segment=segment_obj).delete()
@@ -3816,7 +3828,10 @@ def _process_subsegment_upload(segment_code, start_row, end_row, fileobj):
             ))
         SubSegment.objects.bulk_create(objs)
 
-    return {"created": len(cleaned_rows), "replaced": replaced, "errors": []}
+    response = {"created": len(cleaned_rows), "replaced": replaced, "errors": []}
+    if removed_count:
+        response["message"] = f"Skipped {removed_count} repeated subsegment row(s) from the upload tail."
+    return response
 
 def segment_code_search(request):
     """
