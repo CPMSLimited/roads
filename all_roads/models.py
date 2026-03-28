@@ -98,6 +98,8 @@ def normalize_segment_code(value):
     code = str(value or "")
     if not code:
         return code
+    if SEGMENT_CODE_TWO_DIGIT_SUFFIX_RE.match(code):
+        return code
     match = SEGMENT_CODE_ONE_DIGIT_SUFFIX_RE.match(code)
     if match:
         return f"{match.group('prefix')}0{match.group('suffix')}"
