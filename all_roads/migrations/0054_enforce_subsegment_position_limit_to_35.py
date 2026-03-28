@@ -153,5 +153,4 @@ def trim_subsegments_to_35(apps):
             for position, subsegment in enumerate(keep, start=1):
                 subsegment.position = position
                 subsegment.code = f"{subsegment.segment.code}-{position:02d}"
-            if keep:
-                SubSegment.objects.bulk_update(keep, ["position", "code"], batch_size=SEGMENT_CHUNK_SIZE)
+                subsegment.save(update_fields=["position", "code"])
