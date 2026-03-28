@@ -4,6 +4,9 @@ from decimal import Decimal
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.db.models import Case, CharField, F, IntegerField, Value, When
+from django.db.models.expressions import OrderBy
+from django.db.models.functions import Cast, Left, Length, Right, Substr
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
@@ -92,6 +95,7 @@ class Address(models.Model):
 
 SEGMENT_CODE_TWO_DIGIT_SUFFIX_RE = re.compile(r"^(?P<prefix>.*?)(?P<suffix>\d{2})$")
 SEGMENT_CODE_ONE_DIGIT_SUFFIX_RE = re.compile(r"^(?P<prefix>.*?)(?P<suffix>\d)$")
+SUBSEGMENT_CODE_RE = re.compile(r"^(?P<segment>.*\d{2})-(?P<suffix>\d{2})$")
 
 
 def normalize_segment_code(value):
@@ -108,6 +112,74 @@ def normalize_segment_code(value):
 
 def has_two_digit_segment_suffix(value):
     return bool(SEGMENT_CODE_TWO_DIGIT_SUFFIX_RE.match(str(value or "")))
+
+
+def apply_segment_code_ordering(queryset, *leading_fields, code_field="code", trailing_fields=None):
+    trailing_fields = tuple(trailing_fields or ())
+    valid_lookup = {f"{code_field}__regex": r".*\d{2}$"}
+    prefix_annotation = "__segment_code_prefix_sort"
+    suffix_annotation = "__segment_code_suffix_sort"
+
+    queryset = queryset.annotate(
+        **{
+            prefix_annotation: Case(
+                When(**valid_lookup, then=Left(code_field, Length(code_field) - Value(2))),
+                default=F(code_field),
+                output_field=CharField(),
+            ),
+            suffix_annotation: Case(
+                When(**valid_lookup, then=Cast(Right(code_field, 2), IntegerField())),
+                default=Value(None),
+                output_field=IntegerField(),
+            ),
+        }
+    )
+    return queryset.order_by(
+        *leading_fields,
+        prefix_annotation,
+        OrderBy(F(suffix_annotation), nulls_last=True),
+        code_field,
+        *trailing_fields,
+    )
+
+
+def apply_subsegment_code_ordering(queryset, *leading_fields, code_field="code", trailing_fields=None):
+    trailing_fields = tuple(trailing_fields or ())
+    valid_lookup = {f"{code_field}__regex": r".*\d{2}-\d{2}$"}
+    prefix_annotation = "__subsegment_code_prefix_sort"
+    segment_suffix_annotation = "__subsegment_segment_suffix_sort"
+    subsegment_suffix_annotation = "__subsegment_suffix_sort"
+
+    queryset = queryset.annotate(
+        **{
+            prefix_annotation: Case(
+                When(**valid_lookup, then=Left(code_field, Length(code_field) - Value(5))),
+                default=F(code_field),
+                output_field=CharField(),
+            ),
+            segment_suffix_annotation: Case(
+                When(
+                    **valid_lookup,
+                    then=Cast(Substr(code_field, Length(code_field) - Value(4), Value(2)), IntegerField()),
+                ),
+                default=Value(None),
+                output_field=IntegerField(),
+            ),
+            subsegment_suffix_annotation: Case(
+                When(**valid_lookup, then=Cast(Right(code_field, 2), IntegerField())),
+                default=Value(None),
+                output_field=IntegerField(),
+            ),
+        }
+    )
+    return queryset.order_by(
+        *leading_fields,
+        prefix_annotation,
+        OrderBy(F(segment_suffix_annotation), nulls_last=True),
+        OrderBy(F(subsegment_suffix_annotation), nulls_last=True),
+        code_field,
+        *trailing_fields,
+    )
 
 class Segment(models.Model):
     STATUS_CHOICES = [

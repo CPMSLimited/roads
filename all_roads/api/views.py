@@ -1,7 +1,7 @@
 import uuid
 from celery.result import AsyncResult
 
-from all_roads.models import Segment
+from all_roads.models import Segment, apply_segment_code_ordering
 from all_roads.tasks import refresh_segments_task
 from .serializers import SegmentSerializer
 
@@ -57,7 +57,7 @@ def queue_refresh(request):
 
 @api_view(['GET'])
 def all_segments_view(request):
-    segments = Segment.objects.all()
+    segments = apply_segment_code_ordering(Segment.objects.all())
     serializer = SegmentSerializer(segments, many=True)
     return Response(serializer.data)
     

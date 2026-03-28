@@ -25,6 +25,8 @@ from all_roads.models import (
     Library,
     has_two_digit_segment_suffix,
     normalize_segment_code,
+    apply_segment_code_ordering,
+    apply_subsegment_code_ordering,
 )
 from all_roads.services import refresh_segment_and_subsegments, refresh_subsegments_from_google
 from all_roads.tasks import import_new_subsegments_task, refresh_segments_task
@@ -505,7 +507,8 @@ def _build_inventory_context(request, active_page="inventory"):
         filters["state"] = selected_state
 
     metrics = _overview_metrics(qs)
-    all_rows = list(qs.order_by("route__route", "code")[:12])
+    ordered_qs = apply_segment_code_ordering(qs, "route__route")
+    all_rows = list(ordered_qs[:12])
     focus_segment = all_rows[0] if all_rows else None
     unique_route_count = qs.values("route_id").distinct().count()
     selected_route_obj = Route.objects.filter(route=selected_route).only("route", "details").first() if selected_route else None
@@ -513,9 +516,10 @@ def _build_inventory_context(request, active_page="inventory"):
         Segment.objects.filter(route__route=selected_route).count() if selected_route else None
     )
     selected_route_segments = (
-        Segment.objects.select_related("route", "start_point", "end_point")
-        .filter(route__route=selected_route)
-        .order_by("index", "code")
+        apply_segment_code_ordering(
+            Segment.objects.select_related("route", "start_point", "end_point")
+            .filter(route__route=selected_route)
+        )
         if selected_route
         else Segment.objects.none()
     )
@@ -562,7 +566,7 @@ def _build_inventory_context(request, active_page="inventory"):
 
     return {
         "active_page": active_page,
-        "segments": qs.order_by("route__route", "index", "code")[:50],
+        "segments": apply_segment_code_ordering(qs, "route__route")[:50],
         "roads": roads,
         "routes": routes,
         "states": list(states),
@@ -617,7 +621,8 @@ def _build_road_condition_context(request):
         ("no_response", "No response"),
     ]
 
-    paginator = Paginator(qs.order_by("route__route", "index", "code"), 50)
+    ordered_qs = apply_segment_code_ordering(qs, "route__route")
+    paginator = Paginator(ordered_qs, 50)
     page_obj = paginator.get_page(request.GET.get("page") or 1)
     filters = {}
     if current_view:
@@ -630,7 +635,7 @@ def _build_road_condition_context(request):
         filters["speed"] = selected_speed
 
     metrics = _overview_metrics(qs)
-    all_rows = list(qs.order_by("route__route", "code")[:12])
+    all_rows = list(ordered_qs[:12])
 
     return {
         "active_page": "road_condition",
@@ -802,7 +807,8 @@ def _build_road_motorability_context(request):
         ("no_response", "No response"),
     ]
 
-    paginator = Paginator(qs.order_by("route__route", "index", "code"), 50)
+    ordered_qs = apply_segment_code_ordering(qs, "route__route")
+    paginator = Paginator(ordered_qs, 50)
     page_obj = paginator.get_page(request.GET.get("page") or 1)
     filters = {}
     if filtered["current_view"]:
@@ -817,7 +823,7 @@ def _build_road_motorability_context(request):
         filters["speed"] = filtered["selected_speed"]
 
     metrics = _overview_metrics(qs)
-    all_rows = list(qs.order_by("route__route", "code")[:12])
+    all_rows = list(ordered_qs[:12])
     focus_segment = all_rows[0] if all_rows else None
     unique_route_count = qs.values("route_id").distinct().count()
     has_rows = qs.exists()
@@ -1022,7 +1028,7 @@ def _segments_geojson_response(segments):
 
 def segments_map_data(request):
     filtered = _filtered_segments_for_road_motorability(request)
-    segments = filtered["qs"].order_by("route__route", "index", "code")
+    segments = apply_segment_code_ordering(filtered["qs"], "route__route")
     return _segments_geojson_response(segments)
 
 
@@ -1042,7 +1048,7 @@ def library_landing(request, active_section="road_inventory"):
     if segment_code_query:
         qs = qs.filter(code__icontains=segment_code_query)
 
-    qs = qs.order_by("route__route", "index", "code")
+    qs = apply_segment_code_ordering(qs, "route__route")
     paginator = Paginator(qs, 50)
     page_obj = paginator.get_page(request.GET.get("page") or 1)
 
@@ -1539,7 +1545,7 @@ def engineering_admin_root_cause(request):
     analysis_id = request.GET.get("analysis") or request.POST.get("analysis_id")
     defect_id = request.GET.get("defect") or request.POST.get("defect_id")
     subsegment_id = request.GET.get("subsegment") or request.POST.get("subsegment_id")
-    subsegments_qs = SubSegment.objects.select_related("segment").order_by("segment_id", "position")
+    subsegments_qs = apply_subsegment_code_ordering(SubSegment.objects.select_related("segment"))
     selected_defect = None
     if defect_id:
         selected_defect = Defect.objects.select_related("subsegment", "engineer").filter(pk=defect_id).first()
@@ -2766,7 +2772,7 @@ def road_analysis(request):
             parent_segment.refresh_from_db(fields=["avg_speed", "status", "distance", "travel_time"])
         except Exception as exc:
             logger.warning("Unable to refresh segment %s before rendering subsegments: %s", parent_segment.code, exc)
-        sub_qs = SubSegment.objects.filter(segment=parent_segment).order_by("position", "id")
+        sub_qs = apply_subsegment_code_ordering(SubSegment.objects.filter(segment=parent_segment))
         is_subsegment_view = True
 
     # Aggregates & counts (only meaningful for the normal segment view)
@@ -2804,7 +2810,7 @@ def road_analysis(request):
     if is_subsegment_view:
         paginator = Paginator(sub_qs, page_size)
     else:
-        qs = qs.order_by("route__route", "index", "code")
+        qs = apply_segment_code_ordering(qs, "route__route")
         paginator = Paginator(qs, page_size)
 
     page_obj = paginator.get_page(request.GET.get("page") or 1)
@@ -3820,7 +3826,7 @@ def segment_code_search(request):
     q = (request.GET.get("q") or "").strip()
     if len(q) < 2:
         return JsonResponse({"results": []})
-    qs = Segment.objects.order_by("code")
+    qs = apply_segment_code_ordering(Segment.objects.all())
     qs = qs.filter(code__icontains=q)
     codes = list(qs.values_list("code", flat=True).distinct()[:20])  # cap results
     return JsonResponse({"results": codes})
@@ -3835,7 +3841,7 @@ def road_inventory_route_details(request):
     if not route_obj:
         return JsonResponse({"ok": False, "message": f'Route "{route_code}" was not found.'}, status=404)
 
-    seg_qs = Segment.objects.filter(route__route=route_code).order_by("index", "code")
+    seg_qs = apply_segment_code_ordering(Segment.objects.filter(route__route=route_code))
     first_segment = seg_qs.select_related("start_point").first()
     last_segment = seg_qs.select_related("end_point").last()
     summary_start_point = ""
@@ -3940,7 +3946,7 @@ def road_condition_subsegments(request):
             refresh_meta["failed"] = True
             refresh_warning = " Refresh failed; showing saved data."
 
-    sub_qs = SubSegment.objects.filter(segment=segment).order_by("position", "id")
+    sub_qs = apply_subsegment_code_ordering(SubSegment.objects.filter(segment=segment))
     chart_message = ""
     has_coordinates = sub_qs.exists()
     has_usable_speed_data = sub_qs.filter(avg_speed__gt=0).exists()
