@@ -93,6 +93,7 @@
                         <th class="library-v2-checkbox-col">
                             <input type="checkbox" aria-label="Select all segments on this page">
                         </th>
+                        <th class="library-v2-edit-col" aria-label="Edit segment"></th>
                         <th>Route</th>
                         <th>Segment code</th>
                         <th>Name</th>
@@ -108,9 +109,20 @@
                 </thead>
                 <tbody>
                     {% for seg in segments %}
-                    <tr class="library-v2-row-action" tabindex="0" role="button" aria-label="Open segment row" data-segment-code="{{ seg.code }}">
+                    <tr class="library-v2-row-action" data-segment-code="{{ seg.code }}">
                         <td class="library-v2-checkbox-col" data-no-row-editor onclick="event.stopPropagation();" onkeydown="event.stopPropagation();">
                             <input type="checkbox" aria-label="Select segment {{ seg.code }}" onclick="event.stopPropagation();" onkeydown="event.stopPropagation();">
+                        </td>
+                        <td class="library-v2-edit-col" data-no-row-editor>
+                            <button
+                                type="button"
+                                class="library-v2-edit-trigger"
+                                data-open-row-editor
+                                aria-label="Edit segment {{ seg.code }}"
+                                title="Edit segment {{ seg.code }}"
+                            >
+                                &#9998;
+                            </button>
                         </td>
                         <td data-field="route">{{ seg.route.route }}</td>
                         <td data-field="segment_code">{{ seg.code }}</td>
@@ -126,7 +138,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="12" class="is-empty">No segment matched your filters.</td>
+                        <td colspan="13" class="is-empty">No segment matched your filters.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -171,6 +183,30 @@
     </div>
 </div>
 
+<div class="library-row-modal" id="librarySubsegmentModal" hidden>
+    <div class="library-row-modal__backdrop" data-library-subsegment-close></div>
+    <div class="library-row-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="librarySubsegmentModalTitle">
+        <div class="library-row-modal__head">
+            <h2 id="librarySubsegmentModalTitle">Subsegment details</h2>
+            <button type="button" class="library-row-modal__close" aria-label="Close" data-library-subsegment-close>&times;</button>
+        </div>
+        <div class="library-row-modal__body" id="librarySubsegmentModalBody"></div>
+        <p class="library-row-modal__message" id="librarySubsegmentModalMessage" hidden></p>
+        <div class="library-row-modal__actions">
+            <button type="button" class="library-row-modal__secondary" data-library-subsegment-close>Close</button>
+            <button type="button" class="library-row-modal__primary" id="librarySubsegmentModalSave">Save</button>
+        </div>
+        <div class="library-row-modal__confirm" id="librarySubsegmentModalConfirm" hidden>
+            <p>You have unsaved changes.</p>
+            <div class="library-row-modal__confirm-actions">
+                <button type="button" class="library-row-modal__secondary" id="librarySubsegmentContinue">Continue editing</button>
+                <button type="button" class="library-row-modal__secondary" id="librarySubsegmentDiscard">Discard changes</button>
+                <button type="button" class="library-row-modal__primary" id="librarySubsegmentSaveClose">Save changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="library-delete-modal" id="libraryDeleteModal" hidden>
     <div class="library-delete-modal__backdrop" data-library-delete-close></div>
     <div class="library-delete-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="libraryDeleteModalTitle">
@@ -190,6 +226,25 @@
         <div class="library-delete-modal__actions">
             <button type="button" class="library-delete-modal__secondary" data-library-delete-close>Cancel</button>
             <button type="button" class="library-delete-modal__primary" id="libraryDeleteModalConfirm">Delete selected</button>
+        </div>
+    </div>
+</div>
+
+<div class="library-delete-modal" id="librarySubsegmentDeleteModal" hidden>
+    <div class="library-delete-modal__backdrop" data-library-subsegment-delete-close></div>
+    <div class="library-delete-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="librarySubsegmentDeleteModalTitle">
+        <div class="library-delete-modal__head">
+            <h2 id="librarySubsegmentDeleteModalTitle">Delete selected subsegments</h2>
+            <button type="button" class="library-delete-modal__close" aria-label="Close" data-library-subsegment-delete-close>&times;</button>
+        </div>
+        <div class="library-delete-modal__body">
+            <p class="library-delete-modal__warning">These selected subsegments will be permanently deleted and the remaining subsegments will be renumbered.</p>
+            <p class="library-delete-modal__summary" id="librarySubsegmentDeleteModalSummary"></p>
+            <p class="library-delete-modal__message" id="librarySubsegmentDeleteModalMessage" hidden></p>
+        </div>
+        <div class="library-delete-modal__actions">
+            <button type="button" class="library-delete-modal__secondary" data-library-subsegment-delete-close>Cancel</button>
+            <button type="button" class="library-delete-modal__primary" id="librarySubsegmentDeleteModalConfirm">Delete selected</button>
         </div>
     </div>
 </div>
@@ -265,7 +320,7 @@
       if (rows.length) return;
       const emptyRow = document.createElement("tr");
       const emptyCell = document.createElement("td");
-      emptyCell.colSpan = 12;
+      emptyCell.colSpan = 13;
       emptyCell.className = "is-empty";
       emptyCell.textContent = "No segment matched your filters.";
       emptyRow.appendChild(emptyCell);
@@ -314,6 +369,10 @@
       document.querySelectorAll(".library-v2-table tbody tr.library-v2-row-action").forEach((row) => {
         const code = String(row.dataset.segmentCode || "").trim().toUpperCase();
         if (codeSet.has(code)) {
+          const nextRow = row.nextElementSibling;
+          if (nextRow && nextRow.classList.contains("library-subsegments-row")) {
+            nextRow.remove();
+          }
           row.remove();
         }
       });
@@ -586,18 +645,13 @@
     window.saveLibraryRowModal = saveModal;
 
     document.querySelectorAll(".library-v2-row-action").forEach((row) => {
-      if (row.dataset.previewBound === "true") return;
-      row.dataset.previewBound = "true";
-      row.addEventListener("click", (event) => {
-        if (event.target.closest("[data-no-row-editor]")) return;
+      const trigger = row.querySelector("[data-open-row-editor]");
+      if (!trigger || trigger.dataset.previewBound === "true") return;
+      trigger.dataset.previewBound = "true";
+      trigger.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
         openModal(row);
-      });
-      row.addEventListener("keydown", (event) => {
-        if (event.target.closest("[data-no-row-editor]")) return;
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          openModal(row);
-        }
       });
     });
 
@@ -627,6 +681,502 @@
         saveModal(true);
       });
     }
+  }
+
+  function initLibrarySubsegmentEditor() {
+    const modal = document.getElementById("librarySubsegmentModal");
+    const modalBody = document.getElementById("librarySubsegmentModalBody");
+    const modalTitle = document.getElementById("librarySubsegmentModalTitle");
+    const message = document.getElementById("librarySubsegmentModalMessage");
+    const saveButton = document.getElementById("librarySubsegmentModalSave");
+    const confirmBox = document.getElementById("librarySubsegmentModalConfirm");
+    const continueButton = document.getElementById("librarySubsegmentContinue");
+    const discardButton = document.getElementById("librarySubsegmentDiscard");
+    const saveCloseButton = document.getElementById("librarySubsegmentSaveClose");
+    if (!modal || !modalBody || !modalTitle || !message || !saveButton || !confirmBox) return;
+    if (modal.dataset.initialized === "true") return;
+    modal.dataset.initialized = "true";
+
+    const fieldConfig = [
+      { header: "Start point", field: "start_point" },
+      { header: "End point", field: "end_point" }
+    ];
+    let activeRow = null;
+    let originalSubsegmentCode = "";
+    let initialState = "";
+
+    function normalizeFieldValue(field, value) {
+      const raw = String(value || "").trim();
+      if (!raw || raw === "-") return "";
+      return raw;
+    }
+
+    function getCsrfToken() {
+      const match = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+      return match ? decodeURIComponent(match[1]) : "";
+    }
+
+    function setMessage(text, isError) {
+      if (!text) {
+        message.hidden = true;
+        message.textContent = "";
+        message.classList.remove("is-error", "is-success");
+        return;
+      }
+      message.hidden = false;
+      message.textContent = text;
+      message.classList.toggle("is-error", !!isError);
+      message.classList.toggle("is-success", !isError);
+    }
+
+    function hideConfirm() {
+      confirmBox.hidden = true;
+    }
+
+    function serializeModalState() {
+      const payload = {};
+      modalBody.querySelectorAll("input[data-field]").forEach((input) => {
+        payload[input.dataset.field] = normalizeFieldValue(input.dataset.field, input.value);
+      });
+      return JSON.stringify(payload);
+    }
+
+    function updateDirtyHighlights() {
+      modalBody.querySelectorAll("input[data-field]").forEach((input) => {
+        const currentValue = normalizeFieldValue(input.dataset.field, input.value);
+        const originalValue = input.dataset.originalValue || "";
+        input.classList.toggle("is-dirty", currentValue !== originalValue);
+      });
+    }
+
+    function isDirty() {
+      return serializeModalState() !== initialState;
+    }
+
+    function closeModal() {
+      if (isDirty()) {
+        confirmBox.hidden = false;
+        return;
+      }
+      modal.hidden = true;
+      document.body.classList.remove("modal-open");
+      activeRow = null;
+      originalSubsegmentCode = "";
+      hideConfirm();
+      setMessage("", false);
+    }
+
+    function buildFields(row) {
+      modalBody.innerHTML = "";
+      fieldConfig.forEach(({ header, field }) => {
+        const cell = row.querySelector(`[data-field="${field}"]`);
+        const fieldEl = document.createElement("label");
+        fieldEl.className = "library-row-modal__field";
+
+        const key = document.createElement("span");
+        key.textContent = header;
+
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = cell ? cell.textContent.trim().replace(/^-$/, "") : "";
+        input.dataset.originalValue = normalizeFieldValue(field, input.value);
+        input.dataset.field = field;
+        input.setAttribute("aria-label", header);
+        input.addEventListener("input", updateDirtyHighlights);
+
+        fieldEl.appendChild(key);
+        fieldEl.appendChild(input);
+        modalBody.appendChild(fieldEl);
+      });
+      modalTitle.textContent = originalSubsegmentCode ? `Subsegment ${originalSubsegmentCode}` : "Subsegment details";
+      initialState = serializeModalState();
+      updateDirtyHighlights();
+      hideConfirm();
+      setMessage("", false);
+    }
+
+    function openModal(row) {
+      activeRow = row;
+      originalSubsegmentCode = row.dataset.subsegmentCode || "";
+      buildFields(row);
+      modal.hidden = false;
+      document.body.classList.add("modal-open");
+    }
+
+    function updateRow(subsegment) {
+      if (!activeRow) return;
+      activeRow.dataset.subsegmentCode = subsegment.subsegment_code || "";
+      const rowMapping = {
+        subsegment_code: subsegment.subsegment_code || "-",
+        start_point: subsegment.start_point || "-",
+        end_point: subsegment.end_point || "-"
+      };
+      Object.entries(rowMapping).forEach(([field, value]) => {
+        const cell = activeRow.querySelector(`[data-field="${field}"]`);
+        if (cell) cell.textContent = value;
+      });
+      modalTitle.textContent = subsegment.subsegment_code ? `Subsegment ${subsegment.subsegment_code}` : "Subsegment details";
+    }
+
+    function saveModal(closeAfterSave) {
+      if (!activeRow || !originalSubsegmentCode) return;
+      saveButton.disabled = true;
+      saveCloseButton.disabled = true;
+      setMessage("Saving changes...", false);
+      const payload = JSON.parse(serializeModalState());
+      fetch(`{% url "library_subsegment_editor" "__subsegment_code__" %}`.replace("__subsegment_code__", encodeURIComponent(originalSubsegmentCode)), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken(),
+          "X-Requested-With": "XMLHttpRequest"
+        },
+        body: JSON.stringify(payload)
+      })
+        .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => {
+          if (!ok || !data.ok || !data.subsegment) {
+            throw new Error((data && data.message) || "Could not save subsegment.");
+          }
+          updateRow(data.subsegment);
+          originalSubsegmentCode = data.subsegment.subsegment_code || originalSubsegmentCode;
+          modalBody.querySelectorAll("input[data-field]").forEach((input) => {
+            input.value = data.subsegment[input.dataset.field] || "";
+            input.dataset.originalValue = normalizeFieldValue(input.dataset.field, input.value);
+          });
+          initialState = serializeModalState();
+          updateDirtyHighlights();
+          hideConfirm();
+          setMessage("Saved.", false);
+          if (closeAfterSave) {
+            modal.hidden = true;
+            document.body.classList.remove("modal-open");
+            activeRow = null;
+          }
+        })
+        .catch((error) => {
+          setMessage(error.message || "Could not save subsegment.", true);
+        })
+        .finally(() => {
+          saveButton.disabled = false;
+          saveCloseButton.disabled = false;
+        });
+    }
+
+    document.addEventListener("click", (event) => {
+      const trigger = event.target.closest("[data-open-subsegment-editor]");
+      if (!trigger) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const row = trigger.closest("tr[data-subsegment-code]");
+      if (!row) return;
+      openModal(row);
+    });
+
+    modal.querySelectorAll("[data-library-subsegment-close]").forEach((trigger) => {
+      trigger.addEventListener("click", closeModal);
+    });
+    saveButton.addEventListener("click", () => saveModal(false));
+    continueButton.addEventListener("click", hideConfirm);
+    discardButton.addEventListener("click", () => {
+      modal.hidden = true;
+      document.body.classList.remove("modal-open");
+      activeRow = null;
+      hideConfirm();
+      setMessage("", false);
+    });
+    saveCloseButton.addEventListener("click", () => saveModal(true));
+  }
+
+  function initLibraryRowAccordion() {
+    const tableBody = document.querySelector(".library-v2-table tbody");
+    if (!tableBody) return;
+    if (tableBody.dataset.accordionBound === "true") return;
+    tableBody.dataset.accordionBound = "true";
+
+    let activeSegmentCode = "";
+    let activeDetailRow = null;
+
+    function getDetailColspan() {
+      return document.querySelectorAll(".library-v2-table thead th").length || 13;
+    }
+
+    function closeActiveDetail() {
+      if (activeDetailRow) {
+        activeDetailRow.remove();
+        activeDetailRow = null;
+      }
+      activeSegmentCode = "";
+      document.querySelectorAll(".library-v2-row-action.is-expanded").forEach((row) => {
+        row.classList.remove("is-expanded");
+      });
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function buildDetailRow(row) {
+      const detailRow = document.createElement("tr");
+      detailRow.className = "library-subsegments-row";
+      const detailCell = document.createElement("td");
+      detailCell.colSpan = getDetailColspan();
+      detailCell.innerHTML = `
+        <div class="library-subsegments-panel">
+          <p class="library-subsegments-feedback">Loading subsegments...</p>
+        </div>
+      `;
+      detailRow.appendChild(detailCell);
+      row.insertAdjacentElement("afterend", detailRow);
+      row.classList.add("is-expanded");
+      activeDetailRow = detailRow;
+      activeSegmentCode = row.dataset.segmentCode || "";
+      return detailRow;
+    }
+
+    function renderSubsegmentTable(detailRow, rows, message) {
+      const panel = detailRow.querySelector(".library-subsegments-panel");
+      if (!panel) return;
+      if (!rows.length) {
+        panel.innerHTML = `<p class="library-subsegments-feedback">${escapeHtml(message || "No subsegments found.")}</p>`;
+        return;
+      }
+      panel.innerHTML = `
+        <div class="library-subsegments-head">
+          <h3>Subsegments</h3>
+          <button type="button" class="library-v2-table-note library-subsegments-delete-trigger" hidden>Delete</button>
+        </div>
+        <div class="library-subsegments-wrap">
+          <table class="library-v2-table library-subsegments-table">
+            <thead>
+              <tr>
+                <th class="library-v2-checkbox-col">
+                  <input type="checkbox" aria-label="Select all subsegments in this table">
+                </th>
+                <th class="library-v2-edit-col" aria-label="Edit subsegment"></th>
+                <th>Subsegment code</th>
+                <th>Start point</th>
+                <th>End point</th>
+                <th>Distance</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map((sub) => `
+                <tr data-subsegment-code="${escapeHtml(sub.code || "")}">
+                  <td class="library-v2-checkbox-col">
+                    <input type="checkbox" aria-label="Select subsegment ${escapeHtml(sub.code || "")}">
+                  </td>
+                  <td class="library-v2-edit-col">
+                    <button
+                      type="button"
+                      class="library-v2-edit-trigger"
+                      data-open-subsegment-editor
+                      aria-label="Edit subsegment ${escapeHtml(sub.code || "")}"
+                      title="Edit subsegment ${escapeHtml(sub.code || "")}"
+                    >
+                      &#9998;
+                    </button>
+                  </td>
+                  <td data-field="subsegment_code">${escapeHtml(sub.code || "-")}</td>
+                  <td data-field="start_point">${escapeHtml(sub.start_point || "-")}</td>
+                  <td data-field="end_point">${escapeHtml(sub.end_point || "-")}</td>
+                  <td data-field="distance">${escapeHtml(sub.distance || "-")}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+      initLibrarySubsegmentDelete(detailRow);
+    }
+
+    function renderSubsegmentError(detailRow, message) {
+      const panel = detailRow.querySelector(".library-subsegments-panel");
+      if (!panel) return;
+      panel.innerHTML = `<p class="library-subsegments-feedback is-error">${escapeHtml(message || "Could not load subsegments.")}</p>`;
+    }
+
+    async function toggleRow(row) {
+      const segmentCode = row.dataset.segmentCode || "";
+      if (!segmentCode) return;
+
+      if (activeSegmentCode && activeSegmentCode === segmentCode) {
+        closeActiveDetail();
+        return;
+      }
+
+      closeActiveDetail();
+      const detailRow = buildDetailRow(row);
+
+      try {
+        const url = new URL('{% url "road_condition_subsegments" %}', window.location.origin);
+        url.searchParams.set("segment", segmentCode);
+        const response = await fetch(url.toString(), {
+          headers: { "X-Requested-With": "XMLHttpRequest" }
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+          throw new Error((data && data.message) || "Could not load subsegments.");
+        }
+        if (activeDetailRow !== detailRow) return;
+        renderSubsegmentTable(detailRow, Array.isArray(data.rows) ? data.rows : [], data.message || "");
+      } catch (error) {
+        if (activeDetailRow !== detailRow) return;
+        renderSubsegmentError(detailRow, error.message || "Could not load subsegments.");
+      }
+    }
+
+    tableBody.querySelectorAll("tr.library-v2-row-action").forEach((row) => {
+      if (row.dataset.accordionTriggerBound === "true") return;
+      row.dataset.accordionTriggerBound = "true";
+      row.addEventListener("click", (event) => {
+        if (event.target.closest("[data-no-row-editor]")) return;
+        toggleRow(row);
+      });
+    });
+  }
+
+  function initLibrarySubsegmentDelete(detailRow) {
+    const panel = detailRow.querySelector(".library-subsegments-panel");
+    const deleteButton = panel?.querySelector(".library-subsegments-delete-trigger");
+    const headerCheckbox = panel?.querySelector('.library-subsegments-table thead .library-v2-checkbox-col input[type="checkbox"]');
+    const rowCheckboxes = Array.from(panel?.querySelectorAll('.library-subsegments-table tbody .library-v2-checkbox-col input[type="checkbox"]') || []);
+    if (!panel || !deleteButton || !headerCheckbox || !rowCheckboxes.length) return;
+    if (panel.dataset.deleteBound === "true") return;
+    panel.dataset.deleteBound = "true";
+
+    function syncSelectionUi() {
+      const checkedCount = rowCheckboxes.filter((checkbox) => checkbox.checked).length;
+      deleteButton.hidden = checkedCount === 0;
+      headerCheckbox.checked = checkedCount > 0 && checkedCount === rowCheckboxes.length;
+      headerCheckbox.indeterminate = checkedCount > 0 && checkedCount < rowCheckboxes.length;
+    }
+
+    headerCheckbox.addEventListener("change", () => {
+      rowCheckboxes.forEach((checkbox) => {
+        checkbox.checked = headerCheckbox.checked;
+      });
+      syncSelectionUi();
+    });
+
+    rowCheckboxes.forEach((checkbox) => {
+      checkbox.addEventListener("change", syncSelectionUi);
+    });
+
+    deleteButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openLibrarySubsegmentDeleteModal(detailRow);
+    });
+
+    syncSelectionUi();
+  }
+
+  function initLibrarySubsegmentBulkDelete() {
+    const modal = document.getElementById("librarySubsegmentDeleteModal");
+    const summary = document.getElementById("librarySubsegmentDeleteModalSummary");
+    const message = document.getElementById("librarySubsegmentDeleteModalMessage");
+    const confirmButton = document.getElementById("librarySubsegmentDeleteModalConfirm");
+    if (!modal || !summary || !message || !confirmButton) return;
+    if (modal.dataset.initialized === "true") return;
+    modal.dataset.initialized = "true";
+
+    let activeDetailRow = null;
+
+    function getCsrfToken() {
+      const match = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+      return match ? decodeURIComponent(match[1]) : "";
+    }
+
+    function setMessage(text, isError) {
+      if (!text) {
+        message.hidden = true;
+        message.textContent = "";
+        message.classList.remove("is-error", "is-success");
+        return;
+      }
+      message.hidden = false;
+      message.textContent = text;
+      message.classList.toggle("is-error", !!isError);
+      message.classList.toggle("is-success", !isError);
+    }
+
+    function selectedRows(detailRow) {
+      return Array.from(detailRow.querySelectorAll(".library-subsegments-table tbody tr[data-subsegment-code]"))
+        .filter((row) => row.querySelector('.library-v2-checkbox-col input[type="checkbox"]')?.checked);
+    }
+
+    function closeModal() {
+      modal.hidden = true;
+      document.body.classList.remove("modal-open");
+      activeDetailRow = null;
+      setMessage("", false);
+    }
+
+    window.openLibrarySubsegmentDeleteModal = function(detailRow) {
+      const rows = selectedRows(detailRow);
+      if (!rows.length) return;
+      activeDetailRow = detailRow;
+      summary.textContent = `You are about to delete ${rows.length} selected subsegment${rows.length === 1 ? "" : "s"}.`;
+      setMessage("", false);
+      modal.hidden = false;
+      document.body.classList.add("modal-open");
+    };
+
+    confirmButton.addEventListener("click", () => {
+      if (!activeDetailRow) {
+        closeModal();
+        return;
+      }
+      const rows = selectedRows(activeDetailRow);
+      const subsegmentCodes = rows.map((row) => row.dataset.subsegmentCode).filter(Boolean);
+      if (!subsegmentCodes.length) {
+        closeModal();
+        return;
+      }
+
+      confirmButton.disabled = true;
+      setMessage("Deleting selected subsegments...", false);
+      fetch('{% url "library_subsegments_bulk_delete" %}', {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken(),
+          "X-Requested-With": "XMLHttpRequest"
+        },
+        body: JSON.stringify({ subsegment_codes: subsegmentCodes })
+      })
+        .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => {
+          if (!ok || !data.ok) {
+            throw new Error((data && data.message) || "Could not delete selected subsegments.");
+          }
+          if (!activeDetailRow) return;
+          const currentPanel = activeDetailRow.querySelector(".library-subsegments-panel");
+          if (!currentPanel) return;
+          const currentSegmentCode = activeDetailRow.previousElementSibling?.dataset.segmentCode || "";
+          if (data.segment_code && currentSegmentCode && data.segment_code !== currentSegmentCode) {
+            throw new Error("Deleted subsegments do not match the active segment.");
+          }
+          renderSubsegmentTable(activeDetailRow, Array.isArray(data.rows) ? data.rows : [], "");
+          closeModal();
+        })
+        .catch((error) => {
+          setMessage(error.message || "Could not delete selected subsegments.", true);
+        })
+        .finally(() => {
+          confirmButton.disabled = false;
+        });
+    });
+
+    modal.querySelectorAll("[data-library-subsegment-delete-close]").forEach((trigger) => {
+      trigger.addEventListener("click", closeModal);
+    });
   }
 
   function initLibraryInventoryFilters() {
@@ -662,6 +1212,9 @@
       initLibraryDeleteVisibility();
       initLibraryBulkDelete();
       initLibraryRowPreview();
+      initLibrarySubsegmentEditor();
+      initLibrarySubsegmentBulkDelete();
+      initLibraryRowAccordion();
       initLibraryInventoryFilters();
     }
 
@@ -694,6 +1247,9 @@
   initLibraryDeleteVisibility();
   initLibraryBulkDelete();
   initLibraryRowPreview();
+  initLibrarySubsegmentEditor();
+  initLibrarySubsegmentBulkDelete();
+  initLibraryRowAccordion();
   initLibraryInventoryFilters();
 </script>
 {% endblock %}

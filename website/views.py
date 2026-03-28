@@ -467,6 +467,10 @@ def _format_segment_point_display(name, lat, lon):
     return f"{point_name} ({_format_fixed_coord(lat)}, {_format_fixed_coord(lon)})"
 
 
+def _format_subsegment_point_display(lat, lon):
+    return f"{_format_fixed_coord(lat)}, {_format_fixed_coord(lon)}"
+
+
 def _format_km_total(value):
     if value is None:
         return ""
@@ -1095,6 +1099,16 @@ def _library_segment_editor_payload(segment):
     }
 
 
+def _library_subsegment_editor_payload(subsegment):
+    code = subsegment.code or f"{subsegment.segment.code}-{subsegment.position:02d}"
+    return {
+        "subsegment_code": code,
+        "start_point": _format_subsegment_point_display(subsegment.start_lat, subsegment.start_lon),
+        "end_point": _format_subsegment_point_display(subsegment.end_lat, subsegment.end_lon),
+        "distance": str(subsegment.distance) if subsegment.distance is not None else "",
+    }
+
+
 def _resolve_library_address(name, lat, lon):
     clean_name = (name or "").strip()
     if not clean_name:
@@ -1120,6 +1134,17 @@ def _resolve_library_address(name, lat, lon):
     if fields_to_update:
         address.save(update_fields=fields_to_update)
     return address
+
+
+def _parse_library_point_input(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return None, None
+    cleaned = raw.replace("(", "").replace(")", "")
+    parts = [part.strip() for part in cleaned.split(",")]
+    if len(parts) != 2:
+        return None, None
+    return _to_decimal_or_none(parts[0]), _to_decimal_or_none(parts[1])
 
 
 def library_segment_editor(request, segment_code):
@@ -1192,6 +1217,39 @@ def library_segment_editor(request, segment_code):
     return JsonResponse({"ok": True, "segment": _library_segment_editor_payload(segment)})
 
 
+def library_subsegment_editor(request, subsegment_code):
+    subsegment = (
+        SubSegment.objects.select_related("segment")
+        .filter(code__iexact=(subsegment_code or "").strip())
+        .first()
+    )
+    if subsegment is None:
+        return JsonResponse({"ok": False, "message": "Subsegment not found."}, status=404)
+
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "message": "POST method required."}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return JsonResponse({"ok": False, "message": "Invalid request payload."}, status=400)
+
+    start_lat, start_lon = _parse_library_point_input(payload.get("start_point"))
+    end_lat, end_lon = _parse_library_point_input(payload.get("end_point"))
+    if start_lat is None or start_lon is None:
+        return JsonResponse({"ok": False, "message": 'Start point must be in "lat, lon" format.'}, status=400)
+    if end_lat is None or end_lon is None:
+        return JsonResponse({"ok": False, "message": 'End point must be in "lat, lon" format.'}, status=400)
+
+    subsegment.start_lat = start_lat
+    subsegment.start_lon = start_lon
+    subsegment.end_lat = end_lat
+    subsegment.end_lon = end_lon
+    subsegment.save()
+    subsegment.refresh_from_db()
+    return JsonResponse({"ok": True, "subsegment": _library_subsegment_editor_payload(subsegment)})
+
+
 def library_segments_bulk_delete(request):
     if request.method != "POST":
         return JsonResponse({"ok": False, "message": "POST method required."}, status=405)
@@ -1242,6 +1300,88 @@ def library_segments_bulk_delete(request):
             "ok": True,
             "deleted_codes": deleted_codes,
             "failures": failures,
+        }
+    )
+
+
+def library_subsegments_bulk_delete(request):
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "message": "POST method required."}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return JsonResponse({"ok": False, "message": "Invalid request payload."}, status=400)
+
+    raw_codes = payload.get("subsegment_codes") or []
+    subsegment_codes = []
+    for code in raw_codes:
+        cleaned = str(code or "").strip().upper()
+        if cleaned and cleaned not in subsegment_codes:
+            subsegment_codes.append(cleaned)
+
+    if not subsegment_codes:
+        return JsonResponse({"ok": False, "message": "No subsegment codes were provided."}, status=400)
+
+    selected = list(
+        SubSegment.objects.select_related("segment")
+        .filter(code__in=subsegment_codes)
+        .order_by("segment_id", "position", "id")
+    )
+    if not selected:
+        return JsonResponse({"ok": False, "message": "Selected subsegments were not found."}, status=404)
+
+    segment_ids = {row.segment_id for row in selected if row.segment_id}
+    if len(segment_ids) != 1:
+        return JsonResponse({"ok": False, "message": "Selected subsegments must belong to the same segment."}, status=400)
+
+    segment = selected[0].segment
+    delete_ids = {row.id for row in selected}
+
+    with transaction.atomic():
+        remaining = list(
+            SubSegment.objects.select_related("segment")
+            .filter(segment=segment)
+            .exclude(id__in=delete_ids)
+            .order_by("position", "id")
+        )
+        SubSegment.objects.filter(id__in=delete_ids).delete()
+
+        for offset, row in enumerate(remaining, start=1):
+            row.code = f"TMP-{row.id}"
+            row.position = 1000 + offset
+        if remaining:
+            SubSegment.objects.bulk_update(remaining, ["code", "position"], batch_size=500)
+
+        refreshed_remaining = list(
+            SubSegment.objects.select_related("segment")
+            .filter(segment=segment)
+            .order_by("position", "id")
+        )
+        for position, row in enumerate(refreshed_remaining, start=1):
+            row.position = position
+            row.code = f"{segment.code}-{position:02d}"
+            row.save(update_fields=["position", "code"])
+
+    final_rows = list(
+        apply_subsegment_code_ordering(
+            SubSegment.objects.filter(segment=segment)
+        )
+    )
+    return JsonResponse(
+        {
+            "ok": True,
+            "deleted_codes": subsegment_codes,
+            "segment_code": segment.code,
+            "rows": [
+                {
+                    "code": row.code or f"{segment.code}-{row.position:02d}",
+                    "start_point": _format_subsegment_point_display(row.start_lat, row.start_lon),
+                    "end_point": _format_subsegment_point_display(row.end_lat, row.end_lon),
+                    "distance": str(row.distance) if row.distance is not None else "",
+                }
+                for row in final_rows
+            ],
         }
     )
 
@@ -3986,6 +4126,10 @@ def road_condition_subsegments(request):
             "position": row.position,
             "start_lat": str(row.start_lat),
             "start_lon": str(row.start_lon),
+            "end_lat": str(row.end_lat),
+            "end_lon": str(row.end_lon),
+            "start_point": _format_subsegment_point_display(row.start_lat, row.start_lon),
+            "end_point": _format_subsegment_point_display(row.end_lat, row.end_lon),
             "distance": str(row.distance),
             "avg_speed": float(row.avg_speed or 0),
             "status": row.status or "666699",
