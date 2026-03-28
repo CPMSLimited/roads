@@ -1,3 +1,4 @@
+import re
 from decimal import Decimal
 
 from django.conf import settings
@@ -88,6 +89,24 @@ class Address(models.Model):
     def __str__(self):
         return self.name
 
+
+SEGMENT_CODE_TWO_DIGIT_SUFFIX_RE = re.compile(r"^(?P<prefix>.*?)(?P<suffix>\d{2})$")
+SEGMENT_CODE_ONE_DIGIT_SUFFIX_RE = re.compile(r"^(?P<prefix>.*?)(?P<suffix>\d)$")
+
+
+def normalize_segment_code(value):
+    code = str(value or "").strip().upper()
+    if not code:
+        return code
+    match = SEGMENT_CODE_ONE_DIGIT_SUFFIX_RE.match(code)
+    if match:
+        return f"{match.group('prefix')}0{match.group('suffix')}"
+    return code
+
+
+def has_two_digit_segment_suffix(value):
+    return bool(SEGMENT_CODE_TWO_DIGIT_SUFFIX_RE.match(str(value or "").strip().upper()))
+
 class Segment(models.Model):
     STATUS_CHOICES = [
         ('666699', 'No response'),
@@ -146,6 +165,31 @@ class Segment(models.Model):
 
     def __str__(self):
         return self.code
+
+    def clean(self):
+        super().clean()
+        self.code = normalize_segment_code(self.code)
+        if self.code and not has_two_digit_segment_suffix(self.code):
+            raise ValidationError({"code": "Segment code must end with exactly two digits."})
+
+    def save(self, *args, **kwargs):
+        previous_code = None
+        if self.pk:
+            previous_code = type(self).objects.filter(pk=self.pk).values_list("code", flat=True).first()
+        self.code = normalize_segment_code(self.code)
+        if self.code and not has_two_digit_segment_suffix(self.code):
+            raise ValidationError({"code": "Segment code must end with exactly two digits."})
+        if self.code and not self.index:
+            suffix_match = SEGMENT_CODE_TWO_DIGIT_SUFFIX_RE.match(self.code)
+            if suffix_match:
+                self.index = str(int(suffix_match.group("suffix")))
+        super().save(*args, **kwargs)
+        if previous_code and previous_code != self.code:
+            subsegments = list(self.subsegments.all().only("id", "position", "code"))
+            if subsegments:
+                for subsegment in subsegments:
+                    subsegment.code = f"{self.code}-{subsegment.position:02d}"
+                SubSegment.objects.bulk_update(subsegments, ["code"])
     
 class SubSegment(models.Model):
     """
@@ -196,8 +240,10 @@ class SubSegment(models.Model):
 
     def save(self, *args, **kwargs):
         self._trim_coordinate_fields()
-        if not self.code and self.segment_id and self.position:
-            self.code = f"{self.segment.code}-{self.position:02d}"
+        if self.segment_id and self.position:
+            expected_code = f"{self.segment.code}-{self.position:02d}"
+            if not self.code or self.code != expected_code:
+                self.code = expected_code
         super().save(*args, **kwargs)
 
     @property

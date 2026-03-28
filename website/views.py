@@ -23,6 +23,8 @@ from all_roads.models import (
     PhysicalInspectionAnalysis,
     PhysicalInspectionCharacteristic,
     Library,
+    has_two_digit_segment_suffix,
+    normalize_segment_code,
 )
 from all_roads.services import refresh_segment_and_subsegments, refresh_subsegments_from_google
 from all_roads.tasks import import_new_subsegments_task, refresh_segments_task
@@ -1130,7 +1132,7 @@ def library_segment_editor(request, segment_code):
         return JsonResponse({"ok": False, "message": "Invalid request payload."}, status=400)
 
     route_code = str(payload.get("route") or "").strip().upper()
-    new_segment_code = str(payload.get("segment_code") or "").strip().upper()
+    new_segment_code = normalize_segment_code(payload.get("segment_code"))
     name = str(payload.get("name") or "").strip()
     state = str(payload.get("state") or "").strip()
     start_name = str(payload.get("start_name") or "").strip()
@@ -1143,6 +1145,8 @@ def library_segment_editor(request, segment_code):
         return JsonResponse({"ok": False, "message": "Route is required."}, status=400)
     if not new_segment_code:
         return JsonResponse({"ok": False, "message": "Segment code is required."}, status=400)
+    if not has_two_digit_segment_suffix(new_segment_code):
+        return JsonResponse({"ok": False, "message": "Segment code must end with exactly two digits."}, status=400)
 
     duplicate_exists = (
         Segment.objects.exclude(pk=segment.pk)
@@ -3113,7 +3117,7 @@ def _parse_decimal_required(value, rownum, label, errors, allow_blank_default=No
 
 
 def _extract_segment_index_from_code(segment_code):
-    match = re.search(r"(\d{1,2})$", (segment_code or "").strip())
+    match = re.search(r"(\d{2})$", normalize_segment_code(segment_code))
     if not match:
         return None
     return str(int(match.group(1)))
@@ -3137,7 +3141,7 @@ def _process_new_segments_upload(fileobj):
     for row in rows:
         rownum = row.get("_rownum")
         route_code = str(row.get("ROUTE") or "").strip().upper()
-        segment_code = str(row.get("SEGMENT CODE") or "").strip().upper()
+        segment_code = normalize_segment_code(row.get("SEGMENT CODE"))
 
         if not route_code or not segment_code:
             summary["skipped"] += 1
@@ -3149,7 +3153,7 @@ def _process_new_segments_upload(fileobj):
         derived_index = _extract_segment_index_from_code(segment_code)
         if derived_index is None:
             summary["skipped"] += 1
-            reason = "Segment Code must end with one or two digits"
+            reason = "Segment Code must end with exactly two digits"
             summary["skipped_details"].append(f"Row {rownum}: {reason}.")
             summary["errors"].append(f"Row {rownum}: {reason}.")
             continue
@@ -3308,7 +3312,7 @@ def _process_edit_segments_upload(fileobj):
     for row in rows:
         rownum = row.get("_rownum")
         route_code = str(row.get("ROUTE") or "").strip().upper()
-        segment_code = str(row.get("SEGMENT CODE") or "").strip().upper()
+        segment_code = normalize_segment_code(row.get("SEGMENT CODE"))
         if not route_code or not segment_code:
             summary["skipped"] += 1
             summary["errors"].append(f"Row {rownum}: Route and Segment Code are required.")
@@ -3483,7 +3487,7 @@ def _process_edit_subsegments_upload(fileobj):
 
     for row in rows:
         rownum = row.get("_rownum")
-        segment_code = str(row.get("SEGMENT") or "").strip().upper()
+        segment_code = normalize_segment_code(row.get("SEGMENT"))
         subsegment_code = str(row.get("SUBSEGMENT_CODE") or "").strip().upper()
         if not segment_code or not subsegment_code:
             summary["skipped"] += 1

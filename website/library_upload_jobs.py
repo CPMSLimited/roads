@@ -8,7 +8,7 @@ from django.db import transaction
 from django.db.models import Max
 from django.db.models.functions import Trim, Upper
 
-from all_roads.models import Segment, SubSegment
+from all_roads.models import Segment, SubSegment, normalize_segment_code
 
 try:
     import openpyxl
@@ -249,7 +249,7 @@ def process_new_subsegments_upload(fileobj, filename, chunk_size=1000, progress_
 
     for processed_rows, row in enumerate(rows, start=1):
         rownum = row.get("_rownum")
-        segment_code = str(row.get("SEGMENT") or "").strip().upper()
+        segment_code = normalize_segment_code(row.get("SEGMENT"))
         if not segment_code:
             summary["skipped"] += 1
             summary["skipped_details"].append(f"Row {rownum}: skipped because Segment is blank.")
