@@ -12,7 +12,7 @@ from all_roads.models import (
     Segment,
     SubSegment,
     build_subsegment_repeat_signature,
-    collapse_repeated_subsegment_rows,
+    collapse_duplicate_subsegment_rows,
     normalize_segment_code,
 )
 
@@ -318,7 +318,7 @@ def process_new_subsegments_upload(fileobj, filename, chunk_size=1000, progress_
         _report_progress(processed_rows)
 
     for segment_code, prepared_rows in prepared_rows_by_segment.items():
-        deduped_rows, removed_count = collapse_repeated_subsegment_rows(
+        deduped_rows, removed_count = collapse_duplicate_subsegment_rows(
             prepared_rows,
             lambda row: build_subsegment_repeat_signature(
                 row["start_lat"],
@@ -331,7 +331,7 @@ def process_new_subsegments_upload(fileobj, filename, chunk_size=1000, progress_
         if removed_count:
             summary["skipped"] += removed_count
             summary["skipped_details"].append(
-                f"Segment {segment_code}: skipped {removed_count} repeated subsegment row(s) from the upload tail."
+                f"Segment {segment_code}: skipped {removed_count} duplicate subsegment row(s) from the upload."
             )
 
         next_position = int(segment_position_counter.get(segment_code, 0))

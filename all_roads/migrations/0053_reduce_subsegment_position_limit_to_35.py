@@ -1,5 +1,4 @@
-from django.db import migrations, models, transaction
-import django.core.validators
+from django.db import migrations, transaction
 from django.db.models import Count
 
 
@@ -16,20 +15,7 @@ def build_signature(subsegment):
     )
 
 
-def find_repeating_prefix_length(signatures, min_repeat_items=2):
-    total = len(signatures)
-    if total < 2:
-        return None
-    for prefix_len in range(1, total):
-        repeated_count = total - prefix_len
-        if repeated_count < min_repeat_items:
-            continue
-        if all(signatures[idx] == signatures[idx % prefix_len] for idx in range(prefix_len, total)):
-            return prefix_len
-    return None
-
-
-def cleanup_repeated_subsegments(apps, schema_editor):
+def cleanup_duplicate_subsegments(apps, schema_editor):
     Segment = apps.get_model("all_roads", "Segment")
     SubSegment = apps.get_model("all_roads", "SubSegment")
 
@@ -45,13 +31,20 @@ def cleanup_repeated_subsegments(apps, schema_editor):
             SubSegment.objects.select_related("segment").filter(segment_id=segment_id)
             .order_by("position", "id")
         )
-        signatures = [build_signature(subsegment) for subsegment in subsegments]
-        prefix_len = find_repeating_prefix_length(signatures)
-        if prefix_len is None:
+        seen_signatures = set()
+        keep = []
+        delete_ids = []
+        for subsegment in subsegments:
+            signature = build_signature(subsegment)
+            if signature in seen_signatures:
+                delete_ids.append(subsegment.id)
+                continue
+            seen_signatures.add(signature)
+            keep.append(subsegment)
+
+        if not delete_ids:
             continue
 
-        keep = subsegments[:prefix_len]
-        delete_ids = [subsegment.id for subsegment in subsegments[prefix_len:]]
         for position, subsegment in enumerate(keep, start=1):
             subsegment.position = position
             subsegment.code = f"{subsegment.segment.code}-{position:02d}"
@@ -71,27 +64,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(cleanup_repeated_subsegments, migrations.RunPython.noop),
-        migrations.AlterField(
-            model_name="subsegment",
-            name="position",
-            field=models.PositiveSmallIntegerField(
-                help_text="Order of this sub-segment within its parent segment (1–35).",
-                validators=[
-                    django.core.validators.MinValueValidator(1),
-                    django.core.validators.MaxValueValidator(35),
-                ],
-            ),
-        ),
-        migrations.RemoveConstraint(
-            model_name="subsegment",
-            name="ck_subsegment_position_1_100",
-        ),
-        migrations.AddConstraint(
-            model_name="subsegment",
-            constraint=models.CheckConstraint(
-                check=models.Q(position__gte=1) & models.Q(position__lte=35),
-                name="ck_subsegment_position_1_35",
-            ),
-        ),
+        migrations.RunPython(cleanup_duplicate_subsegments, migrations.RunPython.noop),
     ]

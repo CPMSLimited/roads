@@ -145,6 +145,20 @@ def collapse_repeated_subsegment_rows(rows, signature_getter, min_repeat_items=2
     return list(rows[:prefix_len]), max(0, len(rows) - prefix_len)
 
 
+def collapse_duplicate_subsegment_rows(rows, signature_getter):
+    kept_rows = []
+    seen_signatures = set()
+    removed_count = 0
+    for row in rows:
+        signature = signature_getter(row)
+        if signature in seen_signatures:
+            removed_count += 1
+            continue
+        seen_signatures.add(signature)
+        kept_rows.append(row)
+    return kept_rows, removed_count
+
+
 def apply_segment_code_ordering(queryset, *leading_fields, code_field="code", trailing_fields=None):
     trailing_fields = tuple(trailing_fields or ())
     valid_lookup = {f"{code_field}__regex": r".*\d{2}$"}
