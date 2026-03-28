@@ -66,6 +66,11 @@ a {
   padding: 0 20px;
   border-bottom: 1px solid var(--line);
   background: #f5f7f6;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
   display: grid;
   grid-template-columns: 64px 1fr auto;
   align-items: center;
@@ -149,7 +154,10 @@ a {
   top: 2px;
 }
 
-.main-content { min-height: calc(100vh - 56px); }
+.main-content {
+  min-height: calc(100vh - 56px);
+  padding-top: 56px;
+}
 
 .page-title-bar:empty {
   display: none;
@@ -596,6 +604,13 @@ a {
 .library-subsegments-table {
   min-width: 640px;
   background: #ffffff;
+}
+
+.library-subsegments-table th,
+.library-subsegments-table td,
+.library-subsegments-table .library-v2-edit-trigger,
+.library-subsegments-table input[type="checkbox"] {
+  color: rgb(230, 120, 70);
 }
 
 .library-row-modal[hidden] {
