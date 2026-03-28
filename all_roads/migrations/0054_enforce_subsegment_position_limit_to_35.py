@@ -77,7 +77,12 @@ class Migration(migrations.Migration):
             database_operations=[
                 migrations.RunSQL(DROP_OLD_CONSTRAINT_SQL, reverse_sql=ADD_OLD_CONSTRAINT_SQL),
             ],
-            state_operations=[],
+            state_operations=[
+                migrations.RemoveConstraint(
+                    model_name="subsegment",
+                    name="ck_subsegment_position_1_100",
+                ),
+            ],
         ),
         migrations.AlterField(
             model_name="subsegment",

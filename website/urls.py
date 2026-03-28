@@ -9,6 +9,11 @@ urlpatterns = [
     path("road-inventory/", views.road_inventory, name="road_inventory"),
     path("road-inventory/route-details/", views.road_inventory_route_details, name="road_inventory_route_details"),
     path("road-condition/", views.road_condition, name="road_condition"),
+    path(
+        "road-condition/export-segments-over-35/",
+        views.road_condition_export_segments_over_35,
+        name="road_condition_export_segments_over_35",
+    ),
     path("road-condition/save-draft/", views.road_condition_save_draft, name="road_condition_save_draft"),
     path("library/", views.library_landing, name="library"),
     path("library/road-inventory/", views.library_landing, name="library_road_inventory"),

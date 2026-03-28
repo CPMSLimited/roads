@@ -661,6 +661,25 @@ def road_condition(request):
     return render(request, "website/road_condition.html", context)
 
 
+def road_condition_export_segments_over_35(request):
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="road_condition_segments_over_35_subsegments.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow(["segment_code", "subsegment_count", "max_position"])
+
+    rows = (
+        Segment.objects.annotate(subsegment_count=Count("subsegments"), max_position=Max("subsegments__position"))
+        .filter(subsegment_count__gt=35)
+        .values_list("code", "subsegment_count", "max_position")
+        .order_by("code")
+    )
+    for segment_code, subsegment_count, max_position in rows:
+        writer.writerow([segment_code, subsegment_count, max_position or ""])
+
+    return response
+
+
 def road_condition_save_draft(request):
     if request.method != "POST":
         return JsonResponse({"ok": False, "message": "POST method required."}, status=405)
