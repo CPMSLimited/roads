@@ -120,7 +120,7 @@ class Segment(models.Model):
     index = models.CharField(max_length=2, blank=True)
     name = models.CharField(max_length=64, blank=True)
     state = models.CharField(max_length=30, blank=True)
-    code = models.CharField(max_length=10, unique=True)
+    code = models.CharField(max_length=16, unique=True)
     start_lat = models.DecimalField(max_digits=9, decimal_places=5, default=0.00)
     start_lon = models.DecimalField(max_digits=9, decimal_places=5, default=0.00)
     end_lat = models.DecimalField(max_digits=9, decimal_places=5, default=0.00)
