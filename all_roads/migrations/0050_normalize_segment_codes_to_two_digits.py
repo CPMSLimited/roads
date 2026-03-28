@@ -7,7 +7,7 @@ ONE_DIGIT_SUFFIX_RE = re.compile(r"^(?P<prefix>.*?)(?P<suffix>\d)$")
 
 
 def normalize_segment_code(value):
-    code = str(value or "").strip().upper()
+    code = str(value or "")
     if not code:
         return code
     match = ONE_DIGIT_SUFFIX_RE.match(code)

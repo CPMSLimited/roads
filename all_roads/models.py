@@ -95,7 +95,7 @@ SEGMENT_CODE_ONE_DIGIT_SUFFIX_RE = re.compile(r"^(?P<prefix>.*?)(?P<suffix>\d)$"
 
 
 def normalize_segment_code(value):
-    code = str(value or "").strip().upper()
+    code = str(value or "")
     if not code:
         return code
     match = SEGMENT_CODE_ONE_DIGIT_SUFFIX_RE.match(code)
@@ -105,7 +105,7 @@ def normalize_segment_code(value):
 
 
 def has_two_digit_segment_suffix(value):
-    return bool(SEGMENT_CODE_TWO_DIGIT_SUFFIX_RE.match(str(value or "").strip().upper()))
+    return bool(SEGMENT_CODE_TWO_DIGIT_SUFFIX_RE.match(str(value or "")))
 
 class Segment(models.Model):
     STATUS_CHOICES = [
