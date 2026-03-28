@@ -141,10 +141,11 @@ def trim_subsegments_to_35(apps):
         delete_ids = [subsegment.id for subsegment in subsegments[35:]]
 
         with transaction.atomic():
-            for subsegment in keep:
+            for offset, subsegment in enumerate(keep, start=1):
                 subsegment.code = f"TMP-{subsegment.id}"
+                subsegment.position = 1000 + offset
             if keep:
-                SubSegment.objects.bulk_update(keep, ["code"], batch_size=SEGMENT_CHUNK_SIZE)
+                SubSegment.objects.bulk_update(keep, ["code", "position"], batch_size=SEGMENT_CHUNK_SIZE)
 
             if delete_ids:
                 SubSegment.objects.filter(id__in=delete_ids).delete()
