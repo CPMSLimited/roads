@@ -2877,6 +2877,11 @@ body.modal-open {
   align-content: start;
   gap: 0;
   padding: 88px 16px 24px;
+  position: sticky;
+  top: 56px;
+  align-self: start;
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
 }
 
 .library-side-nav,
@@ -4015,6 +4020,10 @@ body.modal-open {
     border-bottom: 1px solid #e8eaea;
     grid-template-rows: auto auto;
     gap: 0;
+    position: static;
+    top: auto;
+    max-height: none;
+    overflow: visible;
   }
 
   .library-main,

@@ -70,6 +70,32 @@ Base prefix: `/api/` (for DRF endpoints under `all_roads/api/urls.py`)
 - Handler: `website.views.road_condition_save_draft`
 - Creates draft defects for selected sub-segments where eligible.
 
+## 8) Library segment editor
+- Method: `POST`
+- Path: `/library/road-inventory/segments/<segment_code>/`
+- Handler: `website.views.library_segment_editor`
+- Purpose: update a segment from the Library Road Inventory edit modal.
+
+## 9) Library subsegment editor
+- Method: `POST`
+- Path: `/library/road-inventory/subsegments/<subsegment_code>/`
+- Handler: `website.views.library_subsegment_editor`
+- Purpose: update Library inline sub-segment fields:
+  - `start_point`
+  - `end_point`
+
+## 10) Library segment bulk delete
+- Method: `POST`
+- Path: `/library/road-inventory/delete/`
+- Handler: `website.views.library_segments_bulk_delete`
+- Purpose: bulk delete selected segment rows from Library Road Inventory.
+
+## 11) Library subsegment bulk delete
+- Method: `POST`
+- Path: `/library/road-inventory/subsegments/delete/`
+- Handler: `website.views.library_subsegments_bulk_delete`
+- Purpose: delete selected sub-segments from an expanded Library segment row and renumber the remaining sub-segments for that parent segment.
+
 ## Auth and permissions notes
 - Some endpoints currently use `AllowAny` and should be reviewed for production hardening if public write access is not intended.
 - JWT authentication is configured globally in DRF settings, but endpoint-level permission decorators control openness.
