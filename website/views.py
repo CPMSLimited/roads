@@ -33,7 +33,7 @@ from all_roads.models import (
 from all_roads.services import refresh_segment_and_subsegments, refresh_subsegments_from_google
 from all_roads.tasks import import_new_subsegments_task, refresh_segments_task
 from collections import defaultdict
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_CEILING
 from django.contrib.auth import get_user_model
 from django.core.paginator import Paginator
 from django.db import models, transaction
@@ -480,6 +480,16 @@ def _format_km_total(value):
         return ""
 
 
+def _format_km_total_ceiling(value):
+    if value is None:
+        return ""
+    try:
+        rounded = Decimal(value).quantize(Decimal("1"), rounding=ROUND_CEILING)
+        return f"{rounded:,.0f} km"
+    except (InvalidOperation, ValueError, TypeError):
+        return ""
+
+
 def _build_inventory_context(request, active_page="inventory"):
     base_qs = Segment.objects.select_related("route", "start_point", "end_point").all()
     qs = base_qs
@@ -696,6 +706,7 @@ def _build_road_condition_context(request):
         ("failed", "Failed"),
         ("no_response", "No response"),
     ]
+    speed_label_map = dict(speed_options)
 
     ordered_qs = apply_segment_code_ordering(qs, "route__route")
     paginator = Paginator(ordered_qs, 50)
@@ -906,7 +917,7 @@ def _build_road_motorability_context(request):
 
     def _sum_length_or_dash(base_qs):
         total = base_qs.aggregate(total_length=Sum("distance")).get("total_length")
-        return _format_km_total(total) if total is not None else "-"
+        return _format_km_total_ceiling(total) if total is not None else "-"
 
     visible_status_keys = ["good", "tolerable", "intolerable", "failed"]
     kpi_raw_lengths = {
@@ -920,7 +931,8 @@ def _build_road_motorability_context(request):
         percent_value = Decimal("0.00")
         if kpi_denominator > 0:
             percent_value = (Decimal(length_value) / kpi_denominator) * Decimal("100")
-        kpi_lengths[key] = f"{_format_km_total(length_value)} / {percent_value.quantize(Decimal('0.01')):.2f}%"
+        percent_display = percent_value.quantize(Decimal("1"), rounding=ROUND_CEILING)
+        kpi_lengths[key] = f"{_format_km_total_ceiling(length_value)} / {percent_display:,.0f}%"
 
     selected_total_length = _sum_length_or_dash(qs) if has_rows else "-"
     good_total_length = (
@@ -955,6 +967,16 @@ def _build_road_motorability_context(request):
             }
         )
 
+    summary_title = "Motorability summary"
+    if filtered["selected_road"]:
+        summary_title = filtered["selected_road"]
+    elif filtered["selected_route"]:
+        summary_title = filtered["selected_route"]
+    elif filtered["selected_state"]:
+        summary_title = filtered["selected_state"]
+    elif filtered["selected_speed"]:
+        summary_title = speed_label_map.get(filtered["selected_speed"], filtered["selected_speed"])
+
     return {
         "active_page": "road_motorability",
         "segments": page_obj.object_list,
@@ -981,6 +1003,7 @@ def _build_road_motorability_context(request):
         "summary_total_length_tolerable": tolerable_total_length,
         "summary_total_length_intolerable": intolerable_total_length,
         "summary_total_length_failed": failed_total_length,
+        "summary_title": summary_title,
         "kpi_good_display": kpi_lengths["good"],
         "kpi_tolerable_display": kpi_lengths["tolerable"],
         "kpi_intolerable_display": kpi_lengths["intolerable"],
