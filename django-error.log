@@ -708,3 +708,15 @@ Internal Server Error: /road-motorability/queue-refresh/
 Internal Server Error: /road-motorability/queue-refresh/
 "POST /road-motorability/queue-refresh/ HTTP/1.1" 500 126
 "POST /road-motorability/queue-refresh/ HTTP/1.1" 500 126
+Internal Server Error: /library/uploads/dispatch/
+"POST /library/uploads/dispatch/ HTTP/1.1" 500 145
+You're accessing the development server over HTTPS, but it only supports HTTP.
+
+You're accessing the development server over HTTPS, but it only supports HTTP.
+
+You're accessing the development server over HTTPS, but it only supports HTTP.
+
+You're accessing the development server over HTTPS, but it only supports HTTP.
+
+You're accessing the development server over HTTPS, but it only supports HTTP.
+

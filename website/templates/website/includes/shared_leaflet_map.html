@@ -248,10 +248,12 @@
           if (hasFilters) {
             map.fitBounds(bounds, { padding: [20, 20] });
           } else {
-            map.fitBounds(nigeriaBounds, { padding: [20, 20] });
+            // map.fitBounds(nigeriaBounds, { padding: [20, 20] });
+            map.setView([9.082, 8.6753], 7);
           }
         } else {
-          map.fitBounds(nigeriaBounds, { padding: [20, 20] });
+          // map.fitBounds(nigeriaBounds, { padding: [20, 20] });
+          map.setView([9.082, 8.6753], 7);
         }
       } catch (error) {
       }

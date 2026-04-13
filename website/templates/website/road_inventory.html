@@ -68,28 +68,28 @@
     <aside class="new-inventory-side">
         <article class="table-card side-card route-info-card">
             <div class="route-info-card__head">
-                <h2 id="segmentSummaryTitle">{% if segment_summary.route %}Route {{ segment_summary.route }}{% endif %}</h2>
+                <h2 id="segmentSummaryTitle">{{ panel_title }}</h2>
             </div>
-            <p class="route-info-card__tooltip-inline{% if show_segment_summary %} is-hidden{% endif %}" id="segmentSummaryTooltip">Select a route - from the “Select route” filter above the map - to view its details.</p>
-            <p><strong>Segments:</strong> <span id="segmentSummaryCount">{{ segment_summary.number_of_segments }}</span></p>
-            <p><strong>Length:</strong> <span id="segmentSummaryLength">{{ segment_summary.length }}</span></p>
-            <p><strong>Start point:</strong> <span id="segmentSummaryStartPoint">{{ segment_summary.start_point }}</span></p>
-            <p><strong>End point:</strong> <span id="segmentSummaryEndPoint">{{ segment_summary.end_point }}</span></p>
-            <p><strong>Passes through:</strong> <span id="segmentSummaryPassesThrough">{{ segment_summary.passes_through }}</span></p>
-            <div class="workspace-table-wrap side-results-wrap">
-                <h3>Identity of segments</h3>
-                <table class="data-table inventory-table side-results-table">
-                    <thead>
-                        <tr>
-                            <th>Segment</th>
-                            <th>State</th>
-                            <th>Segment name</th>
-                            <th>Start point</th>
-                            <th>End point</th>
-                        </tr>
-                    </thead>
-                    <tbody id="segmentIdentityBody">
-                        {% if selected_route %}
+            {% if panel_mode == "route" %}
+                <p class="route-info-card__tooltip-inline{% if show_segment_summary %} is-hidden{% endif %}" id="segmentSummaryTooltip">Select a route - from the “Select route” filter above the map - to view its details.</p>
+                <p><strong>Segments:</strong> <span id="segmentSummaryCount">{{ segment_summary.number_of_segments }}</span></p>
+                <p><strong>Length:</strong> <span id="segmentSummaryLength">{{ segment_summary.length }}</span></p>
+                <p><strong>Start point:</strong> <span id="segmentSummaryStartPoint">{{ segment_summary.start_point }}</span></p>
+                <p><strong>End point:</strong> <span id="segmentSummaryEndPoint">{{ segment_summary.end_point }}</span></p>
+                <p><strong>Passes through:</strong> <span id="segmentSummaryPassesThrough">{{ segment_summary.passes_through }}</span></p>
+                <div class="workspace-table-wrap side-results-wrap">
+                    <h3>Identity of segments</h3>
+                    <table class="data-table inventory-table side-results-table">
+                        <thead>
+                            <tr>
+                                <th>Segment</th>
+                                <th>State</th>
+                                <th>Segment name</th>
+                                <th>Start point</th>
+                                <th>End point</th>
+                            </tr>
+                        </thead>
+                        <tbody id="segmentIdentityBody">
                             {% for seg in selected_route_segments %}
                             <tr>
                                 <td>{{ seg.code }}</td>
@@ -103,32 +103,26 @@
                                 <td colspan="5" class="is-empty">No segments found for the selected route.</td>
                             </tr>
                             {% endfor %}
-                        {% else %}
-                        <tr>
-                            <td colspan="5" class="is-empty">Select a route to view segment details.</td>
-                        </tr>
-                        {% endif %}
-                    </tbody>
-                </table>
-            </div>
-            <div class="workspace-table-wrap side-results-wrap">
-                <h3>Characteristics of segments</h3>
-                <table class="data-table inventory-table side-results-table">
-                    <thead>
-                        <tr>
-                            <th>Segment</th>
-                            <th>Length</th>
-                            <th>Settlement type</th>
-                            <th>Carriages</th>
-                            <th>Lanes</th>
-                            <th>Pavement type</th>
-                            <th>Junctions</th>
-                            <th>Culverts</th>
-                            <th>Bridges</th>
-                        </tr>
-                    </thead>
-                    <tbody id="segmentCharacteristicsBody">
-                        {% if selected_route %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="workspace-table-wrap side-results-wrap">
+                    <h3>Characteristics of segments</h3>
+                    <table class="data-table inventory-table side-results-table">
+                        <thead>
+                            <tr>
+                                <th>Segment</th>
+                                <th>Length</th>
+                                <th>Settlement type</th>
+                                <th>Carriages</th>
+                                <th>Lanes</th>
+                                <th>Pavement type</th>
+                                <th>Junctions</th>
+                                <th>Culverts</th>
+                                <th>Bridges</th>
+                            </tr>
+                        </thead>
+                        <tbody id="segmentCharacteristicsBody">
                             {% for seg in selected_route_segments %}
                             <tr>
                                 <td>{{ seg.code }}</td>
@@ -146,14 +140,33 @@
                                 <td colspan="9" class="is-empty">No segments found for the selected route.</td>
                             </tr>
                             {% endfor %}
-                        {% else %}
-                        <tr>
-                            <td colspan="9" class="is-empty">Select a route to view segment details.</td>
-                        </tr>
-                        {% endif %}
-                    </tbody>
-                </table>
-            </div>
+                        </tbody>
+                    </table>
+                </div>
+            {% elif panel_mode == "area" %}
+                <p><strong>Routes:</strong> <span>{{ area_summary.routes|default:"-" }}</span></p>
+                <p><strong>Number of routes:</strong> <span>{{ area_summary.number_of_routes }}</span></p>
+                <p><strong>Number of segments:</strong> <span>{{ area_summary.number_of_segments }}</span></p>
+                <p><strong>Total road length:</strong> <span>{{ area_summary.total_road_length }}</span></p>
+            {% elif panel_mode == "all_roads" %}
+                <p>
+                    <strong>Road types:</strong>
+                    <span>
+                        {% for item in all_roads_summary.road_type_counts %}
+                            {{ item.label }} ({{ item.count }}){% if not forloop.last %}, {% endif %}
+                        {% endfor %}
+                    </span>
+                </p>
+                <div class="workspace-table-wrap side-results-wrap">
+                    <h3>Routes</h3>
+                    {% for group in all_roads_summary.grouped_routes %}
+                    <p><strong>{{ group.label }}:</strong> <span>{{ group.routes }}</span></p>
+                    {% endfor %}
+                </div>
+                <p><strong>Number of routes:</strong> <span>{{ all_roads_summary.number_of_routes }}</span></p>
+                <p><strong>Number of segments:</strong> <span>{{ all_roads_summary.number_of_segments }}</span></p>
+                <p><strong>Total road length:</strong> <span>{{ all_roads_summary.total_road_length }}</span></p>
+            {% endif %}
         </article>
     </aside>
 </section>

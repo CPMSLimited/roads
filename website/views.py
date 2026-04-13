@@ -481,7 +481,8 @@ def _format_km_total(value):
 
 
 def _build_inventory_context(request, active_page="inventory"):
-    qs = Segment.objects.select_related("route", "start_point", "end_point").all()
+    base_qs = Segment.objects.select_related("route", "start_point", "end_point").all()
+    qs = base_qs
     selected_road = request.GET.get("road") or ""
     selected_route = request.GET.get("route") or ""
     selected_state = (request.GET.get("state") or "").strip()
@@ -569,6 +570,69 @@ def _build_inventory_context(request, active_page="inventory"):
         "passes_through": (selected_route_obj.details or "") if selected_route_obj else "",
         "number_of_segments": selected_route_segment_count if selected_route_obj else "",
     }
+    panel_mode = ""
+    panel_title = ""
+    area_summary = {
+        "routes": "",
+        "number_of_routes": "",
+        "number_of_segments": "",
+        "total_road_length": "",
+    }
+    all_roads_summary = {
+        "road_type_counts": [],
+        "grouped_routes": [],
+        "number_of_routes": "",
+        "number_of_segments": "",
+        "total_road_length": "",
+    }
+
+    if selected_route_obj:
+        panel_mode = "route"
+        panel_title = f"Route {selected_route_obj.route}"
+    elif selected_state or selected_road:
+        panel_mode = "area"
+        panel_title = (
+            f"State {selected_state}"
+            if selected_state
+            else f"Road {selected_road}"
+        )
+        distinct_routes = list(
+            qs.order_by("route__route")
+            .values_list("route__route", flat=True)
+            .distinct()
+        )
+        total_length = qs.aggregate(total_length=Sum("distance")).get("total_length")
+        area_summary = {
+            "routes": ", ".join(route for route in distinct_routes if route),
+            "number_of_routes": len(distinct_routes),
+            "number_of_segments": qs.count(),
+            "total_road_length": _format_km_total(total_length),
+        }
+    else:
+        panel_mode = "all_roads"
+        panel_title = "Summary (All Roads)"
+        route_groups = {"A roads": [], "F roads": []}
+        for road_name, route_code in (
+            base_qs.order_by("route__road__road", "route__route")
+            .values_list("route__road__road", "route__route")
+            .distinct()
+        ):
+            if road_name in route_groups and route_code:
+                route_groups[road_name].append(route_code)
+        all_total_length = base_qs.aggregate(total_length=Sum("distance")).get("total_length")
+        all_roads_summary = {
+            "road_type_counts": [
+                {"label": road_type, "count": len(route_codes)}
+                for road_type, route_codes in route_groups.items()
+            ],
+            "grouped_routes": [
+                {"label": road_type, "routes": ", ".join(route_codes) or "-"}
+                for road_type, route_codes in route_groups.items()
+            ],
+            "number_of_routes": sum(len(route_codes) for route_codes in route_groups.values()),
+            "number_of_segments": base_qs.count(),
+            "total_road_length": _format_km_total(all_total_length),
+        }
 
     return {
         "active_page": active_page,
@@ -587,6 +651,10 @@ def _build_inventory_context(request, active_page="inventory"):
         "segment_summary": segment_summary,
         "show_segment_summary": bool(selected_route_obj),
         "selected_route_segments": selected_route_segments,
+        "panel_mode": panel_mode,
+        "panel_title": panel_title,
+        "area_summary": area_summary,
+        "all_roads_summary": all_roads_summary,
         **metrics,
     }
 
