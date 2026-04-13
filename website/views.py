@@ -611,14 +611,16 @@ def _build_inventory_context(request, active_page="inventory"):
     else:
         panel_mode = "all_roads"
         panel_title = "Summary (All Roads)"
-        route_groups = {"A roads": [], "F roads": []}
+        road_type_labels = {"A": "A roads", "F": "F roads"}
+        route_groups = {label: [] for label in road_type_labels.values()}
         for road_name, route_code in (
             base_qs.order_by("route__road__road", "route__route")
             .values_list("route__road__road", "route__route")
             .distinct()
         ):
-            if road_name in route_groups and route_code:
-                route_groups[road_name].append(route_code)
+            label = road_type_labels.get((road_name or "").strip())
+            if label and route_code:
+                route_groups[label].append(route_code)
         all_total_length = base_qs.aggregate(total_length=Sum("distance")).get("total_length")
         all_roads_summary = {
             "road_type_counts": [

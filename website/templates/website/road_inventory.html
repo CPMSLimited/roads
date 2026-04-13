@@ -144,10 +144,10 @@
                     </table>
                 </div>
             {% elif panel_mode == "area" %}
-                <p><strong>Routes:</strong> <span>{{ area_summary.routes|default:"-" }}</span></p>
                 <p><strong>Number of routes:</strong> <span>{{ area_summary.number_of_routes }}</span></p>
                 <p><strong>Number of segments:</strong> <span>{{ area_summary.number_of_segments }}</span></p>
                 <p><strong>Total road length:</strong> <span>{{ area_summary.total_road_length }}</span></p>
+                <p><strong>Routes:</strong> <span>{{ area_summary.routes|default:"-" }}</span></p>
             {% elif panel_mode == "all_roads" %}
                 <p>
                     <strong>Road types:</strong>
@@ -157,15 +157,15 @@
                         {% endfor %}
                     </span>
                 </p>
+                <p><strong>Number of routes:</strong> <span>{{ all_roads_summary.number_of_routes }}</span></p>
+                <p><strong>Number of segments:</strong> <span>{{ all_roads_summary.number_of_segments }}</span></p>
+                <p><strong>Total road length:</strong> <span>{{ all_roads_summary.total_road_length }}</span></p>
                 <div class="workspace-table-wrap side-results-wrap">
                     <h3>Routes</h3>
                     {% for group in all_roads_summary.grouped_routes %}
                     <p><strong>{{ group.label }}:</strong> <span>{{ group.routes }}</span></p>
                     {% endfor %}
                 </div>
-                <p><strong>Number of routes:</strong> <span>{{ all_roads_summary.number_of_routes }}</span></p>
-                <p><strong>Number of segments:</strong> <span>{{ all_roads_summary.number_of_segments }}</span></p>
-                <p><strong>Total road length:</strong> <span>{{ all_roads_summary.total_road_length }}</span></p>
             {% endif %}
         </article>
     </aside>
