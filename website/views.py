@@ -614,7 +614,7 @@ def _build_inventory_context(request, active_page="inventory"):
         panel_title = (
             f"State {selected_state}"
             if selected_state
-            else f"Road {selected_road}"
+            else f"{selected_road} roads"
         )
         distinct_routes = list(
             qs.order_by("route__route")
@@ -727,6 +727,8 @@ def _build_road_condition_context(request):
         ("failed", "Failed"),
         ("no_response", "No response"),
     ]
+    speed_label_map = dict(speed_options)
+    speed_label_map = dict(speed_options)
     speed_label_map = dict(speed_options)
 
     ordered_qs = apply_segment_code_ordering(qs, "route__route")
@@ -914,6 +916,7 @@ def _build_road_motorability_context(request):
         ("failed", "Failed"),
         ("no_response", "No response"),
     ]
+    speed_label_map = dict(speed_options)
 
     ordered_qs = apply_segment_code_ordering(qs, "route__route")
     paginator = Paginator(ordered_qs, 50)

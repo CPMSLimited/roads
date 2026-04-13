@@ -7,39 +7,9 @@
     <div class="new-inventory-main">
         <div class="inventory-tools-row">
             <div class="inventory-tools-layout">
-                <div class="inventory-tools-left">
-                    <div class="inventory-refresh-actions">
-                        <button type="button" class="btn btn-outline inventory-refresh-btn">Refresh Motorability</button>
-                        <button type="button" class="inventory-refresh-link inventory-refresh-tooltip-trigger inventory-refresh-info-icon" aria-label="Refresh motorability instructions">
-                            <span aria-hidden="true">i</span>
-                            <span class="inventory-refresh-tooltip">Click to update segments' motorability. Only the segments in the filter results will be updated.</span>
-                        </button>
-                    </div>
-                    <nav id="inventoryInlinePager" class="pager inventory-inline-pager" aria-label="Inventory table pagination">
-                        {% if page_obj.has_previous %}
-                        <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
-                        {% else %}
-                        <span class="is-disabled">Previous</span>
-                        {% endif %}
-
-                        {% if page_obj.paginator.count == 0 %}
-                        <span>Page 0 of 0</span>
-                        {% else %}
-                        <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
-                        {% endif %}
-
-                        {% if page_obj.has_next %}
-                        <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
-                        {% else %}
-                        <span class="is-disabled">Next</span>
-                        {% endif %}
-                    </nav>
-                </div>
-
                 <form id="inventoryFiltersForm" class="toolbar-filters inventory-tools-controls" method="get">
                     {% csrf_token %}
                     <input type="hidden" name="view" id="inventoryViewInput" value="{{ current_view|default:'map' }}">
-                    <button type="button" class="btn btn-outline inventory-reset-btn" id="inventoryResetBtn" hidden>Reset</button>
                     <label class="inventory-field">
                         <span>Select road</span>
                         <select name="road" aria-label="All roads filter">
@@ -86,7 +56,37 @@
                             <path fill="currentColor" d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h16v2H4v-2Z"/>
                         </svg>
                     </button>
+                    <button type="button" class="btn btn-outline inventory-reset-btn" id="inventoryResetBtn" hidden>Reset</button>
+                    <nav id="inventoryInlinePager" class="pager inventory-inline-pager" aria-label="Inventory table pagination">
+                        {% if page_obj.has_previous %}
+                        <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
+                        {% else %}
+                        <span class="is-disabled">Previous</span>
+                        {% endif %}
+
+                        {% if page_obj.paginator.count == 0 %}
+                        <span>Page 0 of 0</span>
+                        {% else %}
+                        <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                        {% endif %}
+
+                        {% if page_obj.has_next %}
+                        <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+                        {% else %}
+                        <span class="is-disabled">Next</span>
+                        {% endif %}
+                    </nav>
                 </form>
+
+                <div class="inventory-tools-left">
+                    <div class="inventory-refresh-actions">
+                        <button type="button" class="btn btn-outline inventory-refresh-btn">Refresh Motorability</button>
+                        <button type="button" class="inventory-refresh-link inventory-refresh-tooltip-trigger inventory-refresh-info-icon" aria-label="Refresh motorability instructions">
+                            <span aria-hidden="true">i</span>
+                            <span class="inventory-refresh-tooltip">Click to update segments' motorability. Only the segments in the filter results will be updated.</span>
+                        </button>
+                    </div>
+                </div>
             </div>
             <p id="motorabilityRefreshFeedback" class="inventory-refresh-feedback" aria-live="polite"></p>
             <div id="motorabilityRefreshSummary" class="inventory-refresh-summary" aria-live="polite"></div>
@@ -477,19 +477,16 @@
       const doc = parser.parseFromString(html, "text/html");
       const nextForm = doc.getElementById("inventoryFiltersForm");
       const currentForm = document.getElementById("inventoryFiltersForm");
-      const nextPager = doc.getElementById("inventoryInlinePager");
-      const currentPager = document.getElementById("inventoryInlinePager");
       const nextTableView = doc.getElementById("inventoryTableView");
       const currentTableView = document.getElementById("inventoryTableView");
       const nextSide = doc.querySelector(".new-inventory-side");
       const currentSide = document.querySelector(".new-inventory-side");
 
-      if (!nextForm || !currentForm || !nextPager || !currentPager || !nextTableView || !currentTableView || !nextSide || !currentSide) {
+      if (!nextForm || !currentForm || !nextTableView || !currentTableView || !nextSide || !currentSide) {
         throw new Error("Could not update filtered content.");
       }
 
       currentForm.replaceWith(nextForm);
-      currentPager.replaceWith(nextPager);
       currentTableView.replaceWith(nextTableView);
       currentSide.replaceWith(nextSide);
       window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);

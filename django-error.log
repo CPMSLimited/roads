@@ -720,3 +720,147 @@ You're accessing the development server over HTTPS, but it only supports HTTP.
 
 You're accessing the development server over HTTPS, but it only supports HTTP.
 
+Internal Server Error: /road-motorability/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 1038, in road_motorability
+    context = _build_road_motorability_context(request)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 999, in _build_road_motorability_context
+    summary_title = speed_label_map.get(filtered["selected_speed"], filtered["selected_speed"])
+NameError: name 'speed_label_map' is not defined
+"GET /road-motorability/?csrfmiddlewaretoken=CBdcg2agHIbKrWeiZbrvypr3JOqBdwI7tqc24oDZ9BOysiJbFXWyMWDl1olQTXXu&view=map&road=&route=&state=&speed=tolerable HTTP/1.1" 500 75649
+Internal Server Error: /road-motorability/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 1038, in road_motorability
+    context = _build_road_motorability_context(request)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 999, in _build_road_motorability_context
+    summary_title = speed_label_map.get(filtered["selected_speed"], filtered["selected_speed"])
+NameError: name 'speed_label_map' is not defined
+"GET /road-motorability/?csrfmiddlewaretoken=CBdcg2agHIbKrWeiZbrvypr3JOqBdwI7tqc24oDZ9BOysiJbFXWyMWDl1olQTXXu&view=map&road=&route=&state=&speed=tolerable HTTP/1.1" 500 75846
+Internal Server Error: /road-motorability/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 1038, in road_motorability
+    context = _build_road_motorability_context(request)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 999, in _build_road_motorability_context
+    summary_title = speed_label_map.get(filtered["selected_speed"], filtered["selected_speed"])
+NameError: name 'speed_label_map' is not defined
+"GET /road-motorability/?csrfmiddlewaretoken=adFLdwT7nsPd4EOViZT3XUDOA6F4x9k412EB1SmQPls150jOYLo6brP6SGAjdAzr&view=map&road=&route=&state=&speed=tolerable HTTP/1.1" 500 75649
+Internal Server Error: /road-motorability/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 1038, in road_motorability
+    context = _build_road_motorability_context(request)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 999, in _build_road_motorability_context
+    summary_title = speed_label_map.get(filtered["selected_speed"], filtered["selected_speed"])
+NameError: name 'speed_label_map' is not defined
+"GET /road-motorability/?csrfmiddlewaretoken=adFLdwT7nsPd4EOViZT3XUDOA6F4x9k412EB1SmQPls150jOYLo6brP6SGAjdAzr&view=map&road=&route=&state=&speed=tolerable HTTP/1.1" 500 75846
+Internal Server Error: /road-motorability/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 1039, in road_motorability
+    context = _build_road_motorability_context(request)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 1000, in _build_road_motorability_context
+    summary_title = speed_label_map.get(filtered["selected_speed"], filtered["selected_speed"])
+NameError: name 'speed_label_map' is not defined
+"GET /road-motorability/?csrfmiddlewaretoken=Of0hHJ5E3NiN5MCP4jb0ePp4hPtCTMolF4Z7v5ynvGVB687IK5G3smBmzpoRzdDI&view=map&road=&route=&state=&speed=intolerable HTTP/1.1" 500 75820
+Internal Server Error: /road-motorability/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 1039, in road_motorability
+    context = _build_road_motorability_context(request)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 1000, in _build_road_motorability_context
+    summary_title = speed_label_map.get(filtered["selected_speed"], filtered["selected_speed"])
+NameError: name 'speed_label_map' is not defined
+"GET /road-motorability/?csrfmiddlewaretoken=Of0hHJ5E3NiN5MCP4jb0ePp4hPtCTMolF4Z7v5ynvGVB687IK5G3smBmzpoRzdDI&view=map&road=&route=&state=&speed=intolerable HTTP/1.1" 500 76017
+Internal Server Error: /road-motorability/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 1040, in road_motorability
+    context = _build_road_motorability_context(request)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 1001, in _build_road_motorability_context
+    summary_title = speed_label_map.get(filtered["selected_speed"], filtered["selected_speed"])
+NameError: name 'speed_label_map' is not defined
+"GET /road-motorability/?csrfmiddlewaretoken=j0bUBj9ZWXuvnBJoUwlUVS1sXgbsPBSraPaKpFCIoQ7joXehAiQX9pdKfQ6Hv27O&view=map&road=&route=&state=&speed=good HTTP/1.1" 500 75750
+Internal Server Error: /road-motorability/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 1040, in road_motorability
+    context = _build_road_motorability_context(request)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 1001, in _build_road_motorability_context
+    summary_title = speed_label_map.get(filtered["selected_speed"], filtered["selected_speed"])
+NameError: name 'speed_label_map' is not defined
+"GET /road-motorability/?csrfmiddlewaretoken=j0bUBj9ZWXuvnBJoUwlUVS1sXgbsPBSraPaKpFCIoQ7joXehAiQX9pdKfQ6Hv27O&view=map&road=&route=&state=&speed=good HTTP/1.1" 500 75947
+Internal Server Error: /road-motorability/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 1040, in road_motorability
+    context = _build_road_motorability_context(request)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 1001, in _build_road_motorability_context
+    summary_title = speed_label_map.get(filtered["selected_speed"], filtered["selected_speed"])
+NameError: name 'speed_label_map' is not defined
+"GET /road-motorability/?csrfmiddlewaretoken=C4RXkL0t4ASr4PY8nau5AddPiLPEjIiOtTQN87tcwtvf5bt13WZ8OKp7AlKTZ9xb&view=map&road=&route=&state=&speed=failed HTTP/1.1" 500 75770
+Internal Server Error: /road-motorability/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 1040, in road_motorability
+    context = _build_road_motorability_context(request)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 1001, in _build_road_motorability_context
+    summary_title = speed_label_map.get(filtered["selected_speed"], filtered["selected_speed"])
+NameError: name 'speed_label_map' is not defined
+"GET /road-motorability/?csrfmiddlewaretoken=C4RXkL0t4ASr4PY8nau5AddPiLPEjIiOtTQN87tcwtvf5bt13WZ8OKp7AlKTZ9xb&view=map&road=&route=&state=&speed=failed HTTP/1.1" 500 75967
+Internal Server Error: /road-motorability/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 1040, in road_motorability
+    context = _build_road_motorability_context(request)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 1001, in _build_road_motorability_context
+    summary_title = speed_label_map.get(filtered["selected_speed"], filtered["selected_speed"])
+NameError: name 'speed_label_map' is not defined
+"GET /road-motorability/?csrfmiddlewaretoken=kaIEIcuhBLs3RI9QIgYjtbRdkbtzqhhobZHuwyX03E5RS4EJo2tmHI3vCLoO6IwL&view=map&road=&route=&state=&speed=tolerable HTTP/1.1" 500 75800
+Internal Server Error: /road-motorability/
+Traceback (most recent call last):
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/Users/alkadelik/Documents/dev/leyyow/djangoEnv/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 1040, in road_motorability
+    context = _build_road_motorability_context(request)
+  File "/Users/alkadelik/Documents/dev/iThena 20/ferma_25/cpms_ferma/website/views.py", line 1001, in _build_road_motorability_context
+    summary_title = speed_label_map.get(filtered["selected_speed"], filtered["selected_speed"])
+NameError: name 'speed_label_map' is not defined
+"GET /road-motorability/?csrfmiddlewaretoken=kaIEIcuhBLs3RI9QIgYjtbRdkbtzqhhobZHuwyX03E5RS4EJo2tmHI3vCLoO6IwL&view=map&road=&route=&state=&speed=tolerable HTTP/1.1" 500 75997

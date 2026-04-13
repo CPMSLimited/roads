@@ -1972,9 +1972,10 @@ body.modal-open {
 
 .inventory-tools-layout {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: 10px;
+  overflow-x: auto;
 }
 
 .inventory-tools-row .toolbar-filters select {
@@ -1987,7 +1988,9 @@ body.modal-open {
 }
 
 .inventory-tools-controls {
-  justify-content: flex-end;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  min-width: max-content;
 }
 
 .inventory-reset-btn {
@@ -2013,7 +2016,7 @@ body.modal-open {
 }
 
 .inventory-field span {
-  font-size: 0.76rem;
+  font-size: 0.96rem;
   color: #5d6a66;
   font-weight: 600;
   padding-left: 2px;
@@ -2026,13 +2029,16 @@ body.modal-open {
 .inventory-inline-pager {
   margin-right: 6px;
   justify-content: flex-start;
+  white-space: nowrap;
 }
 
 .inventory-tools-left {
   display: flex;
   align-items: end;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
+  justify-self: end;
+  flex: 0 0 auto;
 }
 
 .inventory-refresh-actions {
