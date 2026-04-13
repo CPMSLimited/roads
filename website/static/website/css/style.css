@@ -1885,6 +1885,35 @@ body.modal-open {
   color: #334744;
 }
 
+.kpi-grid-status .kpi-good {
+  background: #05700b;
+  border-color: #05700b;
+  color: #ffffff;
+}
+
+.kpi-grid-status .kpi-tolerable {
+  background: #00cc00;
+  border-color: #00cc00;
+  color: #10320f;
+}
+
+.kpi-grid-status .kpi-intolerable {
+  background: #ff9966;
+  border-color: #ff9966;
+  color: #3b1f12;
+}
+
+.kpi-grid-status .kpi-failed {
+  background: #ff5050;
+  border-color: #ff5050;
+  color: #ffffff;
+}
+
+.kpi-grid-status .kpi-card span,
+.kpi-grid-status .kpi-card strong {
+  color: inherit;
+}
+
 .inventory-tools-row {
   position: relative;
   z-index: 8;
@@ -1915,6 +1944,19 @@ body.modal-open {
 
 .inventory-tools-controls {
   justify-content: flex-end;
+}
+
+.inventory-reset-btn {
+  flex: 0 0 auto;
+  height: 42px;
+  min-height: 42px;
+  padding: 0 14px;
+  white-space: nowrap;
+  align-self: end;
+}
+
+.inventory-reset-btn[hidden] {
+  display: none;
 }
 
 .primary-filter-fields {

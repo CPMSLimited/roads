@@ -37,7 +37,7 @@
     ];
 
     function hasActiveDataFilters(params) {
-      const filterKeys = ["road", "route", "state", "speed", "segment", "subsegment"];
+      const filterKeys = ["route", "state", "speed", "segment", "subsegment"];
       return filterKeys.some((key) => {
         const value = (params.get(key) || "").trim();
         return value !== "";

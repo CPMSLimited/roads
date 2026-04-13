@@ -27,6 +27,7 @@
         <div class="inventory-tools-row">
             <div class="inventory-tools-layout">
                 <form id="inventoryFiltersForm" class="toolbar-filters inventory-tools-controls" method="get">
+                <button type="button" class="btn btn-outline inventory-reset-btn" id="inventoryResetBtn" hidden>Reset</button>
                 <label class="inventory-field">
                     <span>Select road</span>
                     <select name="road" aria-label="All roads filter">
@@ -171,9 +172,10 @@
     </aside>
 </section>
 <script>
-  (function () {
+  function initRoadInventoryPage() {
     const form = document.getElementById("inventoryFiltersForm");
     const mapView = document.getElementById("inventoryMapView");
+    const resetBtn = document.getElementById("inventoryResetBtn");
     if (!form || !mapView) return;
 
     function applyStatusContrast() {
@@ -193,6 +195,16 @@
     const roadSelect = form.querySelector('select[name="road"]');
     const routeSelect = form.querySelector('select[name="route"]');
     const stateSelect = form.querySelector('select[name="state"]');
+    const filterSelects = [roadSelect, routeSelect, stateSelect].filter(Boolean);
+
+    function hasActiveFilters() {
+      return filterSelects.some((sel) => String(sel.value || "").trim() !== "");
+    }
+
+    function updateResetVisibility() {
+      if (!resetBtn) return;
+      resetBtn.hidden = !hasActiveFilters();
+    }
 
     function resetOtherFilters(changedSelect) {
       if (!roadSelect || !routeSelect || !stateSelect) return;
@@ -208,17 +220,71 @@
       }
     }
 
+    async function applyFiltersAjax() {
+      const action = form.getAttribute("action") || window.location.pathname;
+      const url = new URL(action, window.location.origin);
+      const params = new URLSearchParams(new FormData(form));
+      url.search = params.toString();
 
-    [roadSelect, routeSelect, stateSelect].forEach((sel) => {
+      const response = await fetch(url.toString(), {
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+        },
+      });
+      if (!response.ok) {
+        throw new Error("Could not apply filters.");
+      }
+
+      const html = await response.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+      const nextKpiGrid = doc.querySelector(".kpi-grid");
+      const currentKpiGrid = document.querySelector(".kpi-grid");
+      const nextForm = doc.getElementById("inventoryFiltersForm");
+      const currentForm = document.getElementById("inventoryFiltersForm");
+      const nextSide = doc.querySelector(".new-inventory-side");
+      const currentSide = document.querySelector(".new-inventory-side");
+      if (!nextKpiGrid || !currentKpiGrid || !nextForm || !currentForm || !nextSide || !currentSide) {
+        throw new Error("Could not update filtered content.");
+      }
+
+      currentKpiGrid.replaceWith(nextKpiGrid);
+      currentForm.replaceWith(nextForm);
+      currentSide.replaceWith(nextSide);
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      window.dispatchEvent(new CustomEvent("shared-leaflet:refresh", { detail: { id: "roadInventoryLeafletMap" } }));
+      window.initRoadInventoryPage();
+    }
+
+    filterSelects.forEach((sel) => {
       if (!sel) return;
       sel.addEventListener("change", () => {
         resetOtherFilters(sel);
-        form.submit();
+        updateResetVisibility();
+        applyFiltersAjax().catch(() => {
+          window.location.href = `${window.location.pathname}?${new URLSearchParams(new FormData(form)).toString()}`;
+        });
       });
     });
 
+    if (resetBtn) {
+      resetBtn.addEventListener("click", () => {
+        if (roadSelect) roadSelect.value = "";
+        if (routeSelect) routeSelect.value = "";
+        if (stateSelect) stateSelect.value = "";
+        updateResetVisibility();
+        applyFiltersAjax().catch(() => {
+          window.location.href = window.location.pathname;
+        });
+      });
+    }
+
     applyStatusContrast();
+    updateResetVisibility();
     window.dispatchEvent(new CustomEvent("shared-leaflet:refresh", { detail: { id: "roadInventoryLeafletMap" } }));
-  })();
+  }
+
+  window.initRoadInventoryPage = initRoadInventoryPage;
+  initRoadInventoryPage();
 </script>
 {% endblock %}

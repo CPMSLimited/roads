@@ -39,6 +39,7 @@
                 <form id="inventoryFiltersForm" class="toolbar-filters inventory-tools-controls" method="get">
                     {% csrf_token %}
                     <input type="hidden" name="view" id="inventoryViewInput" value="{{ current_view|default:'map' }}">
+                    <button type="button" class="btn btn-outline inventory-reset-btn" id="inventoryResetBtn" hidden>Reset</button>
                     <label class="inventory-field">
                         <span>Select road</span>
                         <select name="road" aria-label="All roads filter">
@@ -190,6 +191,7 @@
     const refreshBtn = document.querySelector(".inventory-refresh-btn");
     const refreshFeedback = document.getElementById("motorabilityRefreshFeedback");
     const refreshSummary = document.getElementById("motorabilityRefreshSummary");
+    const resetBtn = document.getElementById("inventoryResetBtn");
     if (!form || !viewInput || !inlinePager || !mapView || !tableView) return;
     const REFRESHED_SESSION_KEY = "motorability_refreshed_segment_codes_v1";
     const ACTIVE_TASK_SESSION_KEY = "motorability_refresh_active_task_v1";
@@ -505,6 +507,16 @@
     const routeSelect = form.querySelector('select[name="route"]');
     const stateSelect = form.querySelector('select[name="state"]');
     const speedSelect = form.querySelector('select[name="speed"]');
+    const filterSelects = [roadSelect, routeSelect, stateSelect, speedSelect].filter(Boolean);
+
+    function hasActiveFilters() {
+      return filterSelects.some((sel) => String(sel.value || "").trim() !== "");
+    }
+
+    function updateResetVisibility() {
+      if (!resetBtn) return;
+      resetBtn.hidden = !hasActiveFilters();
+    }
 
     function resetOtherFilters(changedSelect) {
       if (!roadSelect || !routeSelect || !stateSelect || !speedSelect) return;
@@ -596,10 +608,26 @@
       });
     }
 
-    [roadSelect, routeSelect, stateSelect, speedSelect].forEach((sel) => {
+    if (resetBtn) {
+      resetBtn.addEventListener("click", async () => {
+        if (roadSelect) roadSelect.value = "";
+        if (routeSelect) routeSelect.value = "";
+        if (stateSelect) stateSelect.value = "";
+        if (speedSelect) speedSelect.value = "";
+        updateResetVisibility();
+        try {
+          await applyFiltersAjax();
+        } catch (error) {
+          window.location.href = window.location.pathname;
+        }
+      });
+    }
+
+    filterSelects.forEach((sel) => {
       if (!sel) return;
       sel.addEventListener("change", async () => {
         resetOtherFilters(sel);
+        updateResetVisibility();
         try {
           await applyFiltersAjax();
         } catch (error) {
@@ -618,6 +646,7 @@
     });
 
     applyStatusContrast();
+    updateResetVisibility();
     setView(viewInput.value || "map");
     const activeTask = getActiveTask();
     if (activeTask && activeTask.task_id) {
