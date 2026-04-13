@@ -595,10 +595,20 @@ def _build_inventory_context(request, active_page="inventory"):
         "number_of_segments": "",
         "total_road_length": "",
     }
+    inventory_kpis = {
+        "routes": "",
+        "segments": "",
+        "length": "",
+    }
 
     if selected_route_obj:
         panel_mode = "route"
         panel_title = f"Route {selected_route_obj.route}"
+        inventory_kpis = {
+            "routes": 1,
+            "segments": selected_route_segment_count or 0,
+            "length": _format_km_total(selected_route_total_length),
+        }
     elif selected_state or selected_road:
         panel_mode = "area"
         panel_title = (
@@ -617,6 +627,11 @@ def _build_inventory_context(request, active_page="inventory"):
             "number_of_routes": len(distinct_routes),
             "number_of_segments": qs.count(),
             "total_road_length": _format_km_total(total_length),
+        }
+        inventory_kpis = {
+            "routes": area_summary["number_of_routes"],
+            "segments": area_summary["number_of_segments"],
+            "length": area_summary["total_road_length"],
         }
     else:
         panel_mode = "all_roads"
@@ -645,6 +660,11 @@ def _build_inventory_context(request, active_page="inventory"):
             "number_of_segments": base_qs.count(),
             "total_road_length": _format_km_total(all_total_length),
         }
+        inventory_kpis = {
+            "routes": all_roads_summary["number_of_routes"],
+            "segments": all_roads_summary["number_of_segments"],
+            "length": all_roads_summary["total_road_length"],
+        }
 
     return {
         "active_page": active_page,
@@ -667,6 +687,7 @@ def _build_inventory_context(request, active_page="inventory"):
         "panel_title": panel_title,
         "area_summary": area_summary,
         "all_roads_summary": all_roads_summary,
+        "inventory_kpis": inventory_kpis,
         **metrics,
     }
 
@@ -969,7 +990,7 @@ def _build_road_motorability_context(request):
 
     summary_title = "Motorability summary"
     if filtered["selected_road"]:
-        summary_title = filtered["selected_road"]
+        summary_title = f'{filtered["selected_road"]} roads'
     elif filtered["selected_route"]:
         summary_title = filtered["selected_route"]
     elif filtered["selected_state"]:
