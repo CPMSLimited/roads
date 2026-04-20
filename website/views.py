@@ -33,7 +33,7 @@ from all_roads.models import (
 from all_roads.services import refresh_segment_and_subsegments, refresh_subsegments_from_google
 from all_roads.tasks import import_new_subsegments_task, refresh_segments_task
 from collections import defaultdict
-from decimal import Decimal, InvalidOperation, ROUND_CEILING
+from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_HALF_UP
 from django.contrib.auth import get_user_model
 from django.core.paginator import Paginator
 from django.db import models, transaction
@@ -56,9 +56,9 @@ logger = logging.getLogger(__name__)
 # ---- Status buckets used for counts/mini-chart (hex codes) ----
 STATUS_BUCKETS = {
     "good": {"codes": ["05700B"]},                   # Good (>=80 km/h)
-    "tolerable": {"codes": ["00CC00"]},              # Tolerable (70 to <80 km/h)
-    "intolerable": {"codes": ["FF9966"]},            # Intolerable (60 to <70 km/h)
-    "failed": {"codes": ["FF5050"]},                 # Failed (<60 km/h)
+    "tolerable": {"codes": ["00CC00"]},              # Tolerable (60 to <80 km/h)
+    "intolerable": {"codes": ["FF9966"]},            # Intolerable (40 to <60 km/h)
+    "failed": {"codes": ["FF5050"]},                 # Failed (<40 km/h)
     "no_response": {"codes": ["666699"]},            # Unknown / no response
 }
 
@@ -373,9 +373,10 @@ def _get_or_create_active_defect(subsegment):
         return latest, False
     defect = Defect.objects.create(
         subsegment=subsegment,
-        workflow_status=Defect.WORKFLOW_DRAFT,
+        workflow_status=Defect.WORKFLOW_PHYSICAL_DRAFT,
         condition=_defect_condition_from_subsegment(subsegment),
     )
+    _ensure_physical_draft_for_defect(defect)
     return defect, True
 
 
@@ -383,9 +384,9 @@ def _update_defect_status_from_rca(defect, rca_status):
     if not defect or defect.workflow_status in TERMINAL_DEFECT_STATUSES:
         return
     if rca_status == RootCauseAnalysis.STATUS_COMPLETE:
-        next_status = Defect.WORKFLOW_RCA
+        next_status = Defect.WORKFLOW_RCA_COMPLETE
     else:
-        next_status = Defect.WORKFLOW_DRAFT
+        next_status = Defect.WORKFLOW_RCA_DRAFT
     if defect.workflow_status != next_status:
         defect.workflow_status = next_status
         defect.save(update_fields=["workflow_status", "modified"])
@@ -395,9 +396,9 @@ def _sync_defect_status_from_physical(defect, physical_status):
     if not defect or defect.workflow_status in TERMINAL_DEFECT_STATUSES:
         return
     if physical_status == PhysicalInspection.STATUS_COMPLETE:
-        next_status = Defect.WORKFLOW_PHYSICAL
+        next_status = Defect.WORKFLOW_RCA_DRAFT
     else:
-        next_status = Defect.WORKFLOW_RCA
+        next_status = Defect.WORKFLOW_PHYSICAL_DRAFT
     if defect.workflow_status != next_status:
         defect.workflow_status = next_status
         defect.save(update_fields=["workflow_status", "modified"])
@@ -485,6 +486,16 @@ def _format_km_total_ceiling(value):
         return ""
     try:
         rounded = Decimal(value).quantize(Decimal("1"), rounding=ROUND_CEILING)
+        return f"{rounded:,.0f} km"
+    except (InvalidOperation, ValueError, TypeError):
+        return ""
+
+
+def _format_km_total_whole(value):
+    if value is None:
+        return ""
+    try:
+        rounded = Decimal(value).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
         return f"{rounded:,.0f} km"
     except (InvalidOperation, ValueError, TypeError):
         return ""
@@ -607,7 +618,7 @@ def _build_inventory_context(request, active_page="inventory"):
         inventory_kpis = {
             "routes": 1,
             "segments": selected_route_segment_count or 0,
-            "length": _format_km_total(selected_route_total_length),
+            "length": _format_km_total_whole(selected_route_total_length),
         }
     elif selected_state or selected_road:
         panel_mode = "area"
@@ -631,7 +642,7 @@ def _build_inventory_context(request, active_page="inventory"):
         inventory_kpis = {
             "routes": area_summary["number_of_routes"],
             "segments": area_summary["number_of_segments"],
-            "length": area_summary["total_road_length"],
+            "length": _format_km_total_whole(total_length),
         }
     else:
         panel_mode = "all_roads"
@@ -663,7 +674,7 @@ def _build_inventory_context(request, active_page="inventory"):
         inventory_kpis = {
             "routes": all_roads_summary["number_of_routes"],
             "segments": all_roads_summary["number_of_segments"],
-            "length": all_roads_summary["total_road_length"],
+            "length": _format_km_total_whole(all_total_length),
         }
 
     return {
@@ -804,18 +815,11 @@ def road_condition_save_draft(request):
 
             defect = Defect.objects.create(
                 subsegment=subsegment,
-                workflow_status=Defect.WORKFLOW_DRAFT,
+                workflow_status=Defect.WORKFLOW_PHYSICAL_DRAFT,
                 condition=_defect_condition_from_subsegment(subsegment),
                 engineer=request.user if request.user.is_authenticated else None,
             )
-            RootCauseAnalysis.objects.create(
-                subsegment=subsegment,
-                defect=defect,
-                location=(subsegment.code or "Unknown")[:32],
-                description=RootCauseAnalysis.DESCRIPTION_OTHERS,
-                description_options=[RootCauseAnalysis.DESCRIPTION_OTHERS],
-                status=RootCauseAnalysis.STATUS_DRAFT,
-            )
+            _ensure_physical_draft_for_defect(defect)
             created_count += 1
 
     message = f"Created {created_count} draft defect record(s)."
@@ -1917,10 +1921,9 @@ def engineering_admin_root_cause(request):
                 if selected_defect and selected_defect.subsegment_id == selected_subsegment.id:
                     defect_for_analysis = selected_defect
                 else:
-                    try:
-                        defect_for_analysis, _ = _get_or_create_active_defect(selected_subsegment)
-                    except ValueError as exc:
-                        rca_error = str(exc)
+                    defect_for_analysis = _get_latest_defect(selected_subsegment)
+                    if not defect_for_analysis or defect_for_analysis.workflow_status in TERMINAL_DEFECT_STATUSES:
+                        rca_error = "Start with Physical Inspection before Root Cause Analysis."
                 if not rca_error:
                     with transaction.atomic():
                         location_value = (
@@ -1979,8 +1982,6 @@ def engineering_admin_root_cause(request):
                         _update_defect_status_from_rca(defect_for_analysis, status_value)
                         _touch_defect_modified(defect_for_analysis)
 
-                    if status_value == RootCauseAnalysis.STATUS_COMPLETE:
-                        _ensure_physical_draft_for_defect(defect_for_analysis)
                     return redirect(reverse("engineering_admin"))
 
     root_cause_analyses = (
@@ -1988,15 +1989,17 @@ def engineering_admin_root_cause(request):
         .prefetch_related("defect_types", "root_cause_details", "library_files")
         .order_by("-updated_at", "-id")
     )
-    rca_table_statuses = [Defect.WORKFLOW_DRAFT, Defect.WORKFLOW_RCA]
+    rca_draft_statuses = [Defect.WORKFLOW_RCA_DRAFT]
+    rca_complete_statuses = [Defect.WORKFLOW_RCA_COMPLETE]
+    rca_table_statuses = [*rca_draft_statuses, *rca_complete_statuses]
     defects_qs = (
         Defect.objects.select_related("subsegment", "subsegment__segment", "engineer")
         .filter(workflow_status__in=rca_table_statuses)
         .order_by("-modified", "-id")
     )
     root_cause_total = defects_qs.count()
-    root_cause_draft_count = defects_qs.filter(workflow_status=Defect.WORKFLOW_DRAFT).count()
-    root_cause_complete_count = defects_qs.filter(workflow_status=Defect.WORKFLOW_RCA).count()
+    root_cause_draft_count = defects_qs.filter(workflow_status__in=rca_draft_statuses).count()
+    root_cause_complete_count = defects_qs.filter(workflow_status__in=rca_complete_statuses).count()
     description_label_map = dict(description_options)
     latest_analysis_by_defect = {}
     for report in root_cause_analyses:
@@ -2038,7 +2041,7 @@ def engineering_admin_root_cause(request):
             "engineer_name": engineer_name,
             "date_text": date_text,
         }
-        if defect.workflow_status == Defect.WORKFLOW_DRAFT:
+        if defect.workflow_status in rca_draft_statuses:
             draft_rows.append(row)
         else:
             complete_rows.append(row)
@@ -2144,6 +2147,7 @@ def engineering_admin_root_cause(request):
             "root_cause_total": root_cause_total,
             "root_cause_draft_count": root_cause_draft_count,
             "root_cause_complete_count": root_cause_complete_count,
+            "disable_create_new_report": True,
             "view_defect_text": view_defect_text,
             "view_feature_values": view_feature_values,
             "supporting_documents": supporting_documents,
@@ -2410,7 +2414,9 @@ def physical_inspection(request):
         .prefetch_related("defect_types", "library_files", "analysis_rows__characteristics")
         .order_by("-id")
     )
-    physical_table_statuses = [Defect.WORKFLOW_RCA, Defect.WORKFLOW_PHYSICAL]
+    physical_draft_statuses = [Defect.WORKFLOW_PHYSICAL_DRAFT]
+    physical_complete_statuses = [Defect.WORKFLOW_RCA_DRAFT]
+    physical_table_statuses = [*physical_draft_statuses, *physical_complete_statuses]
     physical_table_defects_qs = (
         Defect.objects.select_related("subsegment", "subsegment__segment", "engineer")
         .filter(workflow_status__in=physical_table_statuses)
@@ -2419,14 +2425,14 @@ def physical_inspection(request):
     if active_physical_tab == "physical_2":
         physical_draft_defects_qs = Defect.objects.none()
         physical_complete_defects_qs = physical_table_defects_qs.filter(
-            workflow_status=Defect.WORKFLOW_PHYSICAL
+            workflow_status__in=physical_complete_statuses
         )
     else:
         physical_draft_defects_qs = physical_table_defects_qs.filter(
-            workflow_status=Defect.WORKFLOW_RCA
+            workflow_status__in=physical_draft_statuses
         )
         physical_complete_defects_qs = physical_table_defects_qs.filter(
-            workflow_status=Defect.WORKFLOW_PHYSICAL
+            workflow_status__in=physical_complete_statuses
         )
     physical_draft_count = physical_draft_defects_qs.count()
     physical_complete_count = physical_complete_defects_qs.count()
@@ -2637,7 +2643,7 @@ def engineering_admin_solution_design(request):
             defect_id = request.POST.get("defect_id")
             defect_qs = Defect.objects.filter(
                 pk=defect_id,
-                workflow_status=Defect.WORKFLOW_PHYSICAL,
+                workflow_status=Defect.WORKFLOW_RCA_COMPLETE,
             )
             if history_engineer:
                 defect_qs = defect_qs.filter(engineer=history_engineer)
@@ -2700,7 +2706,8 @@ def engineering_admin_solution_design(request):
     if history_engineer:
         solution_defects_qs = solution_defects_qs.filter(engineer=history_engineer)
     else:
-        solution_table_statuses = [Defect.WORKFLOW_PHYSICAL, Defect.WORKFLOW_SOLUTION]
+        solution_draft_statuses = [Defect.WORKFLOW_RCA_COMPLETE]
+        solution_table_statuses = [*solution_draft_statuses, Defect.WORKFLOW_SOLUTION]
         solution_defects_qs = solution_defects_qs.filter(workflow_status__in=solution_table_statuses)
     solution_defect_ids = list(solution_defects_qs.values_list("id", flat=True))
     solution_file_counts = dict(
@@ -2808,7 +2815,7 @@ def engineering_admin_solution_design(request):
             "solution_draft_count": (
                 solution_defects_qs.exclude(workflow_status=Defect.WORKFLOW_SOLUTION).count()
                 if history_engineer
-                else solution_defects_qs.filter(workflow_status=Defect.WORKFLOW_PHYSICAL).count()
+                else solution_defects_qs.filter(workflow_status__in=solution_draft_statuses).count()
             ),
             "solution_complete_count": solution_defects_qs.filter(workflow_status=Defect.WORKFLOW_SOLUTION).count(),
             "solution_draft_rows": solution_draft_rows,
@@ -2851,7 +2858,7 @@ def engineering_admin_approvals(request):
                     if getattr(request.user, "is_authenticated", False)
                     else _get_assumed_project_user()
                 )
-                defect.workflow_status = Defect.WORKFLOW_DRAFT
+                defect.workflow_status = Defect.WORKFLOW_RCA_DRAFT
                 defect.review = True
                 defect.senior_engineer = senior_engineer
                 defect.save(update_fields=["workflow_status", "review", "senior_engineer", "modified"])

@@ -218,9 +218,9 @@ def apply_subsegment_code_ordering(queryset, *leading_fields, code_field="code",
 class Segment(models.Model):
     STATUS_CHOICES = [
         ('666699', 'No response'),
-        ('FF5050', 'Failed'), # (<60 km/h)
-        ('FF9966', 'Intolerable'), # (60 to <70 km/h)
-        ('00CC00', 'Tolerable'), # (70 to <80 km/h)
+        ('FF5050', 'Failed'), # (<40 km/h)
+        ('FF9966', 'Intolerable'), # (40 to <60 km/h)
+        ('00CC00', 'Tolerable'), # (60 to <80 km/h)
         ('05700B', 'Good'), # (>=80 km/h)
     ]
 
@@ -418,9 +418,9 @@ class DefectType(models.Model):
 
 
 class Defect(models.Model):
-    WORKFLOW_DRAFT = "draft"
-    WORKFLOW_RCA = "rca"
-    WORKFLOW_PHYSICAL = "physical_inspection"
+    WORKFLOW_PHYSICAL_DRAFT = "physical_draft"
+    WORKFLOW_RCA_DRAFT = "rca_draft"
+    WORKFLOW_RCA_COMPLETE = "rca_complete"
     WORKFLOW_SOLUTION = "solution_design"
     WORKFLOW_APPROVED = "approved"
     WORKFLOW_REJECTED = "rejected"
@@ -428,9 +428,9 @@ class Defect(models.Model):
     WORKFLOW_REPAIR_COMPLETE = "repair_complete"
 
     WORKFLOW_STATUS_CHOICES = [
-        (WORKFLOW_DRAFT, "Draft"),
-        (WORKFLOW_RCA, "RCA"),
-        (WORKFLOW_PHYSICAL, "Physical Inspection"),
+        (WORKFLOW_PHYSICAL_DRAFT, "Physical Inspection Draft"),
+        (WORKFLOW_RCA_DRAFT, "Root Cause Analysis Draft"),
+        (WORKFLOW_RCA_COMPLETE, "Root Cause Analysis Complete"),
         (WORKFLOW_SOLUTION, "Solution Design"),
         (WORKFLOW_APPROVED, "Approved"),
         (WORKFLOW_REJECTED, "Rejected"),
@@ -474,7 +474,7 @@ class Defect(models.Model):
     workflow_status = models.CharField(
         max_length=32,
         choices=WORKFLOW_STATUS_CHOICES,
-        default=WORKFLOW_DRAFT,
+        default=WORKFLOW_PHYSICAL_DRAFT,
     )
     review = models.BooleanField(default=False)
     condition = models.CharField(

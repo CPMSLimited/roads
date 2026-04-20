@@ -14,30 +14,30 @@
             {% else %}
             {% include "website/includes/sg_nav_item.html" with url_name="engineering_admin_overview" icon_key="overview" label="Overview" %}
             {% endif %}
-            {% if active_library_tab == "root_cause" %}
-            {% include "website/includes/sg_nav_item.html" with url_name="engineering_admin" icon_key="root_cause" label="Root Cause Analysis" is_active=True %}
-            {% else %}
-            {% include "website/includes/sg_nav_item.html" with url_name="engineering_admin" icon_key="root_cause" label="Root Cause Analysis" %}
-            {% endif %}
             {% if active_library_tab == "physical" %}
             {% include "website/includes/sg_nav_item.html" with url_name="physical_inspection" icon_key="physical" label="Physical Inspection" is_active=True %}
             {% else %}
             {% include "website/includes/sg_nav_item.html" with url_name="physical_inspection" icon_key="physical" label="Physical Inspection" %}
+            {% endif %}
+            {% if active_library_tab == "root_cause" %}
+            {% include "website/includes/sg_nav_item.html" with url_name="engineering_admin" icon_key="root_cause" label="Root Cause Analysis" is_active=True %}
+            {% else %}
+            {% include "website/includes/sg_nav_item.html" with url_name="engineering_admin" icon_key="root_cause" label="Root Cause Analysis" %}
             {% endif %}
             {% if active_library_tab == "solution" %}
             {% include "website/includes/sg_nav_item.html" with url_name="library_solution_design" icon_key="solution" label="Solution Design" is_active=True %}
             {% else %}
             {% include "website/includes/sg_nav_item.html" with url_name="library_solution_design" icon_key="solution" label="Solution Design" %}
             {% endif %}
-            {% if active_library_tab == "history" %}
-            {% include "website/includes/sg_nav_item.html" with url_name="library_history" icon_key="solution" label="Archive" is_active=True %}
-            {% else %}
-            {% include "website/includes/sg_nav_item.html" with url_name="library_history" icon_key="solution" label="Archive" %}
-            {% endif %}
             {% if active_library_tab == "approvals" %}
             {% include "website/includes/sg_nav_item.html" with url_name="library_approvals" icon_key="approvals" label="Approvals" is_active=True %}
             {% else %}
             {% include "website/includes/sg_nav_item.html" with url_name="library_approvals" icon_key="approvals" label="Approvals" %}
+            {% endif %}
+            {% if active_library_tab == "history" %}
+            {% include "website/includes/sg_nav_item.html" with url_name="library_history" icon_key="solution" label="Archive" is_active=True %}
+            {% else %}
+            {% include "website/includes/sg_nav_item.html" with url_name="library_history" icon_key="solution" label="Archive" %}
             {% endif %}
         </nav>
 
