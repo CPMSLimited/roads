@@ -136,6 +136,8 @@ a {
   line-height: 1;
   text-decoration: none;
   position: relative;
+  border: none;
+  cursor: pointer;
 }
 
 .account-chip-icon {
@@ -152,6 +154,231 @@ a {
   font-weight: 700;
   position: relative;
   top: 2px;
+}
+
+.account-menu-shell {
+  position: relative;
+  justify-self: end;
+}
+
+.account-menu-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  min-width: 240px;
+  padding: 8px;
+  border: 1px solid #d6ddda;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 18px 38px rgba(24, 38, 33, 0.14);
+  display: grid;
+  gap: 4px;
+  z-index: 1100;
+}
+
+.account-menu-panel[hidden] {
+  display: none !important;
+}
+
+.account-menu-item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  padding: 10px 12px;
+  text-align: left;
+  color: #31413d;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+
+.account-menu-item:hover,
+.account-menu-item:focus-visible {
+  background: #eef3f1;
+  outline: none;
+}
+
+.settings-modal-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.settings-modal-layer[hidden] {
+  display: none !important;
+}
+
+.settings-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(17, 28, 24, 0.42);
+}
+
+.settings-modal {
+  position: relative;
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(720px, calc(100vh - 48px));
+  border: 1px solid #d7dfdb;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 22px 44px rgba(20, 34, 29, 0.18);
+  overflow: hidden;
+  z-index: 1;
+}
+
+.settings-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #e4e9e7;
+}
+
+.settings-modal-head p {
+  margin: 4px 0 0;
+  color: #61706b;
+}
+
+.settings-modal-close {
+  border: none;
+  background: transparent;
+  color: #596864;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.settings-modal-body {
+  padding: 18px 20px;
+  display: grid;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+.settings-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 0 20px 20px;
+}
+
+.settings-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.settings-field {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-field[hidden] {
+  display: none !important;
+}
+
+.settings-field span {
+  color: #4d5b57;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.settings-field input,
+.settings-field select {
+  width: 100%;
+  height: 42px;
+  border: 1px solid #cfd8d4;
+  border-radius: 10px;
+  background: #f7faf8;
+  padding: 0 12px;
+  color: #273531;
+}
+
+.settings-field input[readonly] {
+  color: #5f6e69;
+  background: #eef3f1;
+}
+
+.settings-summary-card {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #eef3f1;
+}
+
+.settings-summary-card span {
+  color: #61706b;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.settings-summary-card strong {
+  color: #22302c;
+  font-size: 0.96rem;
+}
+
+.settings-feedback {
+  min-height: 20px;
+  color: #61706b;
+}
+
+.settings-feedback.is-success {
+  color: #1a6a43;
+}
+
+.settings-feedback.is-error {
+  color: #b23a32;
+}
+
+.range-editor {
+  display: grid;
+  gap: 12px;
+}
+
+.range-editor-row {
+  display: grid;
+  grid-template-columns: 132px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid #dee5e2;
+  border-radius: 12px;
+  background: #f9fbfa;
+}
+
+.range-editor-label {
+  font-weight: 700;
+  color: #2d3d39;
+}
+
+.range-editor-values {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.range-editor-values input {
+  width: 88px;
+  height: 38px;
+  border: 1px solid #ccd5d1;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 0 10px;
+  font-weight: 600;
+  color: #21302c;
+}
+
+.range-token {
+  color: #5f6e69;
+  font-weight: 600;
 }
 
 .main-content {
@@ -561,6 +788,28 @@ a {
 
 .library-v2-row-action.is-expanded {
   background: #edf4f1;
+}
+
+.library-motorability-history-table {
+  min-width: 980px;
+}
+
+.library-history-cell {
+  display: grid;
+  gap: 4px;
+  white-space: normal;
+  min-width: 140px;
+}
+
+.library-history-cell strong {
+  color: #30403d;
+  font-size: 0.92rem;
+}
+
+.library-history-cell span {
+  color: #687774;
+  font-size: 0.8rem;
+  line-height: 1.35;
 }
 
 .library-subsegments-row td {

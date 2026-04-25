@@ -22,15 +22,129 @@
         <a href="{% url 'library' %}" class="{% if active_page == 'library' %}is-active{% endif %}">Library</a>
         <a href="{% url 'engineering_admin' %}" class="{% if active_page == 'engineering_admin' %}is-active{% endif %}">Engineering</a>
     </nav>
-    <a href="" class="account-chip" aria-label="User account">
-        <img src="{% static 'website/img/iconoir_user.svg' %}" alt="" class="account-chip-icon">
-        <p class="account-chip-initials">AO</p>
-    </a>
+    <div class="account-menu-shell">
+        <button type="button" class="account-chip js-account-menu-toggle" aria-label="User account menu" aria-expanded="false" aria-haspopup="menu">
+            <img src="{% static 'website/img/iconoir_user.svg' %}" alt="" class="account-chip-icon">
+            <p class="account-chip-initials">AO</p>
+        </button>
+        <div class="account-menu-panel" id="accountMenuPanel" role="menu" hidden>
+            <button type="button" class="account-menu-item js-open-motorability-schedule" role="menuitem">Motorability refresh schedule</button>
+            <button type="button" class="account-menu-item js-open-motorability-ranges" role="menuitem">Set motorability range</button>
+        </div>
+    </div>
 </header>
 <main class="main-content">
     <section class="page-title-bar">{% block page_title %}{% endblock %}</section>
     {% block content %}{% endblock %}
 </main>
+<div class="settings-modal-layer" id="settingsModalLayer" hidden>
+    <div class="settings-modal-backdrop js-settings-modal-close"></div>
+    <section class="settings-modal" id="motorabilityScheduleModal" aria-modal="true" role="dialog" aria-labelledby="motorabilityScheduleTitle" hidden>
+        <header class="settings-modal-head">
+            <div>
+                <h2 id="motorabilityScheduleTitle">Motorability Refresh Schedule</h2>
+                <p>Configure when all segments should be refreshed automatically.</p>
+            </div>
+            <button type="button" class="settings-modal-close js-settings-modal-close" aria-label="Close schedule modal">×</button>
+        </header>
+        <div class="settings-modal-body">
+            <div class="settings-feedback" id="scheduleSettingsFeedback" aria-live="polite"></div>
+            <div class="settings-form-grid">
+                <label class="settings-field">
+                    <span>Frequency</span>
+                    <select id="scheduleFrequencyInput">
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                    </select>
+                </label>
+                <label class="settings-field" id="scheduleWeekdayField">
+                    <span>Day of week</span>
+                    <select id="scheduleWeekdayInput">
+                        <option value="monday">Monday</option>
+                        <option value="tuesday">Tuesday</option>
+                        <option value="wednesday">Wednesday</option>
+                        <option value="thursday">Thursday</option>
+                        <option value="friday">Friday</option>
+                        <option value="saturday">Saturday</option>
+                        <option value="sunday">Sunday</option>
+                    </select>
+                </label>
+                <label class="settings-field" id="scheduleMonthDayField" hidden>
+                    <span>Day of month</span>
+                    <select id="scheduleMonthDayInput">
+                        <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="24">24</option><option value="25">25</option><option value="26">26</option><option value="27">27</option><option value="28">28</option>
+                    </select>
+                </label>
+                <label class="settings-field">
+                    <span>Hour</span>
+                    <select id="scheduleHourInput">
+                        <option value="0">00:00</option><option value="1">01:00</option><option value="2">02:00</option><option value="3">03:00</option><option value="4">04:00</option><option value="5">05:00</option><option value="6">06:00</option><option value="7">07:00</option><option value="8">08:00</option><option value="9">09:00</option><option value="10">10:00</option><option value="11">11:00</option><option value="12">12:00</option><option value="13">13:00</option><option value="14">14:00</option><option value="15">15:00</option><option value="16">16:00</option><option value="17">17:00</option><option value="18">18:00</option><option value="19">19:00</option><option value="20">20:00</option><option value="21">21:00</option><option value="22">22:00</option><option value="23">23:00</option>
+                    </select>
+                </label>
+            </div>
+            <div class="settings-summary-card">
+                <span>Summary</span>
+                <strong id="scheduleSummaryText">-</strong>
+            </div>
+        </div>
+        <footer class="settings-modal-foot">
+            <button type="button" class="btn btn-outline js-settings-modal-close">Cancel</button>
+            <button type="button" class="btn btn-solid" id="saveScheduleSettingsBtn">Save schedule</button>
+        </footer>
+    </section>
+    <section class="settings-modal" id="motorabilityRangeModal" aria-modal="true" role="dialog" aria-labelledby="motorabilityRangeTitle" hidden>
+        <header class="settings-modal-head">
+            <div>
+                <h2 id="motorabilityRangeTitle">Set Motorability Range</h2>
+                <p>Adjust the speed ranges used to determine segment status.</p>
+            </div>
+            <button type="button" class="settings-modal-close js-settings-modal-close" aria-label="Close range modal">×</button>
+        </header>
+        <div class="settings-modal-body">
+            <div class="settings-feedback" id="rangeSettingsFeedback" aria-live="polite"></div>
+            <div class="range-editor">
+                <article class="range-editor-row">
+                    <span class="range-editor-label">Good</span>
+                    <div class="range-editor-values">
+                        <span class="range-token">≥</span>
+                        <input id="rangeGoodMinInput" type="number" min="1" step="1">
+                        <span class="range-token">km/h</span>
+                    </div>
+                </article>
+                <article class="range-editor-row">
+                    <span class="range-editor-label">Tolerable</span>
+                    <div class="range-editor-values">
+                        <input id="rangeTolerableMinInput" type="number" min="1" step="1">
+                        <span class="range-token">to &lt;</span>
+                        <input id="rangeTolerableMaxInput" type="number" min="1" step="1">
+                        <span class="range-token">km/h</span>
+                    </div>
+                </article>
+                <article class="range-editor-row">
+                    <span class="range-editor-label">Intolerable</span>
+                    <div class="range-editor-values">
+                        <input id="rangeIntolerableMinInput" type="number" min="1" step="1">
+                        <span class="range-token">to &lt;</span>
+                        <input id="rangeIntolerableMaxInput" type="number" min="1" step="1">
+                        <span class="range-token">km/h</span>
+                    </div>
+                </article>
+                <article class="range-editor-row">
+                    <span class="range-editor-label">Failed</span>
+                    <div class="range-editor-values">
+                        <span class="range-token">&lt;</span>
+                        <input id="rangeFailedMaxInput" type="number" min="1" step="1">
+                        <span class="range-token">km/h</span>
+                    </div>
+                </article>
+            </div>
+        </div>
+        <footer class="settings-modal-foot">
+            <button type="button" class="btn btn-outline js-settings-modal-close">Cancel</button>
+            <button type="button" class="btn btn-solid" id="saveRangeSettingsBtn">Apply</button>
+        </footer>
+    </section>
+</div>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
   (function () {
@@ -103,8 +217,274 @@
         window.__topNavAjaxNavigating = false;
       }
     }
+    window.__topNavRefreshCurrentPage = function () {
+      return swapTopNavPage(window.location.href, false);
+    };
+
+    const settingsLayer = document.getElementById("settingsModalLayer");
+    const scheduleModal = document.getElementById("motorabilityScheduleModal");
+    const rangeModal = document.getElementById("motorabilityRangeModal");
+    const scheduleFeedback = document.getElementById("scheduleSettingsFeedback");
+    const rangeFeedback = document.getElementById("rangeSettingsFeedback");
+    let settingsCache = null;
+
+    function getDetectedTimezone() {
+      try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone || "Africa/Lagos";
+      } catch (err) {
+        return "Africa/Lagos";
+      }
+    }
+
+    function getCsrfToken() {
+      const cookieMatch = document.cookie.match(/csrftoken=([^;]+)/);
+      if (cookieMatch) return decodeURIComponent(cookieMatch[1]);
+      const inputToken = document.querySelector('input[name="csrfmiddlewaretoken"]');
+      return inputToken ? String(inputToken.value || "").trim() : "";
+    }
+
+    function setSettingsFeedback(node, message, tone) {
+      if (!node) return;
+      node.textContent = message || "";
+      node.classList.remove("is-success", "is-error");
+      if (tone) node.classList.add(tone);
+    }
+
+    function toggleAccountMenu(forceOpen) {
+      const accountMenuPanel = document.getElementById("accountMenuPanel");
+      const btn = document.querySelector(".js-account-menu-toggle");
+      if (!accountMenuPanel || !btn) return;
+      const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : accountMenuPanel.hasAttribute("hidden");
+      if (shouldOpen) {
+        accountMenuPanel.removeAttribute("hidden");
+        btn.setAttribute("aria-expanded", "true");
+      } else {
+        accountMenuPanel.setAttribute("hidden", "");
+        btn.setAttribute("aria-expanded", "false");
+      }
+    }
+
+    function closeSettingsModals() {
+      if (settingsLayer) settingsLayer.setAttribute("hidden", "");
+      if (scheduleModal) scheduleModal.setAttribute("hidden", "");
+      if (rangeModal) rangeModal.setAttribute("hidden", "");
+    }
+
+    function openSettingsModal(which) {
+      if (!settingsLayer) return;
+      settingsLayer.removeAttribute("hidden");
+      scheduleModal.setAttribute("hidden", "");
+      rangeModal.setAttribute("hidden", "");
+      if (which === "schedule") {
+        scheduleModal.removeAttribute("hidden");
+      } else {
+        rangeModal.removeAttribute("hidden");
+      }
+    }
+
+    function updateScheduleModeFields() {
+      const frequency = document.getElementById("scheduleFrequencyInput")?.value || "weekly";
+      const weekdayField = document.getElementById("scheduleWeekdayField");
+      const monthDayField = document.getElementById("scheduleMonthDayField");
+      if (!weekdayField || !monthDayField) return;
+      if (frequency === "monthly") {
+        weekdayField.setAttribute("hidden", "");
+        monthDayField.removeAttribute("hidden");
+      } else {
+        monthDayField.setAttribute("hidden", "");
+        weekdayField.removeAttribute("hidden");
+      }
+    }
+
+    function updateScheduleSummary() {
+      function ordinalDay(value) {
+        const number = Number(value || 0);
+        if (!Number.isFinite(number) || number <= 0) return String(value || "");
+        const mod100 = number % 100;
+        if (mod100 >= 10 && mod100 <= 20) return `${number}th`;
+        const suffix = { 1: "st", 2: "nd", 3: "rd" }[number % 10] || "th";
+        return `${number}${suffix}`;
+      }
+      const frequency = document.getElementById("scheduleFrequencyInput")?.value || "weekly";
+      const weekdayInput = document.getElementById("scheduleWeekdayInput");
+      const weekdayLabel = weekdayInput?.options[weekdayInput.selectedIndex]?.text || "Monday";
+      const monthDay = document.getElementById("scheduleMonthDayInput")?.value || "1";
+      const hour = Number(document.getElementById("scheduleHourInput")?.value || 0);
+      const summaryNode = document.getElementById("scheduleSummaryText");
+      if (!summaryNode) return;
+      const cadence = frequency === "monthly"
+        ? `Runs monthly on the ${ordinalDay(monthDay)}`
+        : `Runs weekly on ${weekdayLabel}`;
+      summaryNode.textContent = `${cadence} at ${String(hour).padStart(2, "0")}:00`;
+    }
+
+    function populateSettingsForms(payload) {
+      settingsCache = payload;
+      document.getElementById("scheduleFrequencyInput").value = payload.schedule.frequency;
+      document.getElementById("scheduleWeekdayInput").value = payload.schedule.weekday;
+      document.getElementById("scheduleMonthDayInput").value = String(payload.schedule.month_day);
+      document.getElementById("scheduleHourInput").value = String(payload.schedule.hour);
+
+      document.getElementById("rangeGoodMinInput").value = payload.ranges.good_min;
+      document.getElementById("rangeTolerableMinInput").value = payload.ranges.tolerable_min;
+      document.getElementById("rangeTolerableMaxInput").value = payload.ranges.tolerable_max;
+      document.getElementById("rangeIntolerableMinInput").value = payload.ranges.intolerable_min;
+      document.getElementById("rangeIntolerableMaxInput").value = payload.ranges.intolerable_max;
+      document.getElementById("rangeFailedMaxInput").value = payload.ranges.failed_max;
+
+      updateScheduleModeFields();
+      updateScheduleSummary();
+    }
+
+    function syncRangeBoundary(changedId) {
+      const inputs = {
+        goodMin: document.getElementById("rangeGoodMinInput"),
+        tolerableMin: document.getElementById("rangeTolerableMinInput"),
+        tolerableMax: document.getElementById("rangeTolerableMaxInput"),
+        intolerableMin: document.getElementById("rangeIntolerableMinInput"),
+        intolerableMax: document.getElementById("rangeIntolerableMaxInput"),
+        failedMax: document.getElementById("rangeFailedMaxInput"),
+      };
+      const boundaryPairs = {
+        rangeGoodMinInput: ["goodMin", "tolerableMax"],
+        rangeTolerableMaxInput: ["tolerableMax", "goodMin"],
+        rangeTolerableMinInput: ["tolerableMin", "intolerableMax"],
+        rangeIntolerableMaxInput: ["intolerableMax", "tolerableMin"],
+        rangeIntolerableMinInput: ["intolerableMin", "failedMax"],
+        rangeFailedMaxInput: ["failedMax", "intolerableMin"],
+      };
+      const pair = boundaryPairs[changedId];
+      if (!pair) return;
+      const source = inputs[pair[0]];
+      const target = inputs[pair[1]];
+      if (!source || !target) return;
+      const numericValue = String(source.value || "").replace(/[^\d]/g, "");
+      if (!numericValue) {
+        target.value = "";
+        return;
+      }
+      target.value = numericValue;
+    }
+
+    async function ensureSettingsLoaded(forceReload) {
+      if (settingsCache && !forceReload) return settingsCache;
+      const response = await fetch('{% url "motorability_settings_data" %}', { credentials: "same-origin" });
+      const payload = await response.json();
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.message || "Could not load settings.");
+      }
+      if (!payload.schedule.timezone) {
+        payload.schedule.timezone = getDetectedTimezone();
+      }
+      populateSettingsForms(payload);
+      return payload;
+    }
+
+    async function saveScheduleSettings() {
+      const payload = {
+        frequency: document.getElementById("scheduleFrequencyInput").value,
+        weekday: document.getElementById("scheduleWeekdayInput").value,
+        month_day: Number(document.getElementById("scheduleMonthDayInput").value),
+        hour: Number(document.getElementById("scheduleHourInput").value),
+        timezone: getDetectedTimezone(),
+      };
+      setSettingsFeedback(scheduleFeedback, "", "");
+      const response = await fetch('{% url "motorability_settings_schedule_save" %}', {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken(),
+        },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok) {
+        throw new Error(result.message || "Could not save schedule.");
+      }
+      populateSettingsForms(result);
+      setSettingsFeedback(scheduleFeedback, result.message || "Schedule saved.", "is-success");
+    }
+
+    async function saveRangeSettings() {
+      const payload = {
+        good_min: Number(document.getElementById("rangeGoodMinInput").value),
+        tolerable_min: Number(document.getElementById("rangeTolerableMinInput").value),
+        tolerable_max: Number(document.getElementById("rangeTolerableMaxInput").value),
+        intolerable_min: Number(document.getElementById("rangeIntolerableMinInput").value),
+        intolerable_max: Number(document.getElementById("rangeIntolerableMaxInput").value),
+        failed_max: Number(document.getElementById("rangeFailedMaxInput").value),
+      };
+      setSettingsFeedback(rangeFeedback, "", "");
+      const response = await fetch('{% url "motorability_settings_ranges_save" %}', {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken(),
+        },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok) {
+        throw new Error(result.message || "Could not save ranges.");
+      }
+      populateSettingsForms(result);
+      setSettingsFeedback(rangeFeedback, result.message || "Ranges applied.", "is-success");
+      if (typeof window.__topNavRefreshCurrentPage === "function") {
+        await window.__topNavRefreshCurrentPage();
+      }
+      closeSettingsModals();
+    }
 
     document.addEventListener("click", function (event) {
+      const accountToggle = event.target.closest(".js-account-menu-toggle");
+      if (accountToggle) {
+        event.preventDefault();
+        toggleAccountMenu();
+        return;
+      }
+
+      if (event.target.closest(".js-open-motorability-schedule")) {
+        event.preventDefault();
+        toggleAccountMenu(false);
+        ensureSettingsLoaded(false)
+          .then(function () {
+            if (settingsCache && settingsCache.schedule) {
+              settingsCache.schedule.timezone = getDetectedTimezone();
+            }
+            updateScheduleSummary();
+            openSettingsModal("schedule");
+          })
+          .catch(function (err) {
+            alert(err && err.message ? err.message : "Could not load settings.");
+          });
+        return;
+      }
+
+      if (event.target.closest(".js-open-motorability-ranges")) {
+        event.preventDefault();
+        toggleAccountMenu(false);
+        ensureSettingsLoaded(false)
+          .then(function () {
+            openSettingsModal("ranges");
+          })
+          .catch(function (err) {
+            alert(err && err.message ? err.message : "Could not load settings.");
+          });
+        return;
+      }
+
+      if (event.target.closest(".js-settings-modal-close")) {
+        event.preventDefault();
+        closeSettingsModals();
+        return;
+      }
+
+      if (!event.target.closest(".account-menu-shell")) {
+        toggleAccountMenu(false);
+      }
+
       const link = event.target.closest(".top-nav a");
       if (!link) return;
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -115,6 +495,40 @@
       swapTopNavPage(link.href, true).catch(function () {
         window.location.href = link.href;
       });
+    });
+
+    document.addEventListener("change", function (event) {
+      if (event.target.matches("#scheduleFrequencyInput")) {
+        updateScheduleModeFields();
+        updateScheduleSummary();
+        return;
+      }
+      if (event.target.matches("#scheduleWeekdayInput, #scheduleMonthDayInput, #scheduleHourInput")) {
+        updateScheduleSummary();
+        return;
+      }
+      if (event.target.matches("#rangeGoodMinInput, #rangeTolerableMinInput, #rangeTolerableMaxInput, #rangeIntolerableMinInput, #rangeIntolerableMaxInput, #rangeFailedMaxInput")) {
+        syncRangeBoundary(event.target.id);
+      }
+    });
+
+    document.addEventListener("input", function (event) {
+      if (event.target.matches("#rangeGoodMinInput, #rangeTolerableMinInput, #rangeTolerableMaxInput, #rangeIntolerableMinInput, #rangeIntolerableMaxInput, #rangeFailedMaxInput")) {
+        syncRangeBoundary(event.target.id);
+      }
+    });
+
+    document.addEventListener("click", function (event) {
+      if (event.target.id === "saveScheduleSettingsBtn") {
+        saveScheduleSettings().catch(function (err) {
+          setSettingsFeedback(scheduleFeedback, err && err.message ? err.message : "Could not save schedule.", "is-error");
+        });
+      }
+      if (event.target.id === "saveRangeSettingsBtn") {
+        saveRangeSettings().catch(function (err) {
+          setSettingsFeedback(rangeFeedback, err && err.message ? err.message : "Could not save ranges.", "is-error");
+        });
+      }
     });
 
     window.addEventListener("popstate", function () {

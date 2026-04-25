@@ -8,6 +8,7 @@
         <nav class="library-v2-nav" aria-label="Library sections">
             <a href="{% url 'library_road_inventory' %}"><span aria-hidden="true">&#128193;</span> Road inventory</a>
             <a class="is-active" href="{% url 'library_reports' %}"><span aria-hidden="true">&#128193;</span> Reports</a>
+            <a href="{% url 'library_motorability_history' %}"><span aria-hidden="true">&#128193;</span> Motorability History</a>
             <details class="library-uploads-accordion" id="libraryDocumentationAccordion" {% if selected_documentation_slug %}open{% endif %}>
                 <summary class="library-v2-upload-toggle {% if selected_documentation_slug %}is-active{% endif %}" id="libraryDocumentationToggle">
                     <span><span aria-hidden="true">&#128193;</span> Documentation</span>

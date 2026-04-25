@@ -4,6 +4,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.db.utils import OperationalError, ProgrammingError
 from django.db.models import Case, F, IntegerField, Value, When
 from django.db.models.expressions import OrderBy
 from django.db.models.functions import Cast, Length, Right, Substr
@@ -45,6 +46,18 @@ def get_default_amina_bello_user_id():
         user.set_unusable_password()
     user.save()
     return user.pk
+
+
+def ordinal_day(value):
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if 10 <= number % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(number % 10, "th")
+    return f"{number}{suffix}"
 
 
 class Road(models.Model):
@@ -1036,3 +1049,147 @@ class Library(models.Model):
         super().delete(*args, **kwargs)
         if stored_file:
             stored_file.delete(save=False)
+
+
+class MotorabilitySetting(models.Model):
+    FREQ_WEEKLY = "weekly"
+    FREQ_MONTHLY = "monthly"
+    FREQUENCY_CHOICES = [
+        (FREQ_WEEKLY, "Weekly"),
+        (FREQ_MONTHLY, "Monthly"),
+    ]
+
+    WEEKDAY_CHOICES = [
+        ("monday", "Monday"),
+        ("tuesday", "Tuesday"),
+        ("wednesday", "Wednesday"),
+        ("thursday", "Thursday"),
+        ("friday", "Friday"),
+        ("saturday", "Saturday"),
+        ("sunday", "Sunday"),
+    ]
+
+    singleton_guard = models.PositiveSmallIntegerField(default=1, unique=True, editable=False)
+    refresh_frequency = models.CharField(max_length=16, choices=FREQUENCY_CHOICES, default=FREQ_WEEKLY)
+    refresh_weekday = models.CharField(max_length=16, choices=WEEKDAY_CHOICES, default="monday")
+    refresh_month_day = models.PositiveSmallIntegerField(
+        default=1,
+        validators=[MinValueValidator(1), MaxValueValidator(28)],
+    )
+    refresh_hour = models.PositiveSmallIntegerField(
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(23)],
+    )
+    refresh_timezone = models.CharField(max_length=64, default="Africa/Lagos")
+    last_run_slot = models.CharField(max_length=64, blank=True, default="")
+
+    failed_max_speed = models.PositiveSmallIntegerField(default=40)
+    intolerable_min_speed = models.PositiveSmallIntegerField(default=40)
+    intolerable_max_speed = models.PositiveSmallIntegerField(default=60)
+    tolerable_min_speed = models.PositiveSmallIntegerField(default=60)
+    tolerable_max_speed = models.PositiveSmallIntegerField(default=80)
+    good_min_speed = models.PositiveSmallIntegerField(default=80)
+
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["id"]
+
+    @classmethod
+    def get_solo(cls):
+        try:
+            instance = cls.objects.order_by("id").first()
+        except (OperationalError, ProgrammingError):
+            instance = None
+        if instance:
+            return instance
+        try:
+            return cls.objects.create()
+        except (OperationalError, ProgrammingError):
+            return cls()
+
+    def clean(self):
+        super().clean()
+        if self.failed_max_speed <= 0:
+            raise ValidationError({"failed_max_speed": "Failed upper bound must be greater than 0."})
+        if self.intolerable_min_speed != self.failed_max_speed:
+            raise ValidationError({"intolerable_min_speed": "Intolerable minimum must match Failed upper bound."})
+        if self.intolerable_max_speed <= self.intolerable_min_speed:
+            raise ValidationError({"intolerable_max_speed": "Intolerable upper bound must be greater than its minimum."})
+        if self.tolerable_min_speed != self.intolerable_max_speed:
+            raise ValidationError({"tolerable_min_speed": "Tolerable minimum must match Intolerable upper bound."})
+        if self.tolerable_max_speed <= self.tolerable_min_speed:
+            raise ValidationError({"tolerable_max_speed": "Tolerable upper bound must be greater than its minimum."})
+        if self.good_min_speed != self.tolerable_max_speed:
+            raise ValidationError({"good_min_speed": "Good minimum must match Tolerable upper bound."})
+
+    def save(self, *args, **kwargs):
+        self.singleton_guard = 1
+        super().save(*args, **kwargs)
+        from all_roads.utils import clear_motorability_settings_cache
+
+        clear_motorability_settings_cache()
+
+    def get_refresh_frequency_display_lower(self):
+        return self.get_refresh_frequency_display().lower()
+
+    def schedule_summary(self):
+        if self.refresh_frequency == self.FREQ_WEEKLY:
+            day_label = dict(self.WEEKDAY_CHOICES).get(self.refresh_weekday, self.refresh_weekday.title())
+            cadence = f"Runs weekly on {day_label}"
+        else:
+            cadence = f"Runs monthly on the {ordinal_day(self.refresh_month_day)}"
+        return f"{cadence} at {self.refresh_hour:02d}:00"
+
+    def range_rows(self):
+        return [
+            {"key": "good", "label": "Good", "min": self.good_min_speed, "max": None},
+            {"key": "tolerable", "label": "Tolerable", "min": self.tolerable_min_speed, "max": self.tolerable_max_speed},
+            {"key": "intolerable", "label": "Intolerable", "min": self.intolerable_min_speed, "max": self.intolerable_max_speed},
+            {"key": "failed", "label": "Failed", "min": None, "max": self.failed_max_speed},
+        ]
+
+    def __str__(self):
+        return "Motorability Settings"
+
+
+class MotorabilityHistorySnapshot(models.Model):
+    STATUS_SUCCESS = "success"
+    STATUS_FAILED = "failed"
+    RUN_STATUS_CHOICES = [
+        (STATUS_SUCCESS, "Success"),
+        (STATUS_FAILED, "Failed"),
+    ]
+
+    run_status = models.CharField(max_length=16, choices=RUN_STATUS_CHOICES, default=STATUS_SUCCESS)
+    refresh_run_at = models.DateTimeField(default=timezone.now, db_index=True)
+    failure_message = models.TextField(blank=True, default="")
+
+    total_segments = models.PositiveIntegerField(default=0)
+
+    good_count = models.PositiveIntegerField(null=True, blank=True)
+    good_percentage = models.PositiveSmallIntegerField(null=True, blank=True)
+    tolerable_count = models.PositiveIntegerField(null=True, blank=True)
+    tolerable_percentage = models.PositiveSmallIntegerField(null=True, blank=True)
+    intolerable_count = models.PositiveIntegerField(null=True, blank=True)
+    intolerable_percentage = models.PositiveSmallIntegerField(null=True, blank=True)
+    failed_count = models.PositiveIntegerField(null=True, blank=True)
+    failed_percentage = models.PositiveSmallIntegerField(null=True, blank=True)
+    no_response_count = models.PositiveIntegerField(null=True, blank=True)
+    no_response_percentage = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    failed_max_speed = models.PositiveSmallIntegerField(default=40)
+    intolerable_min_speed = models.PositiveSmallIntegerField(default=40)
+    intolerable_max_speed = models.PositiveSmallIntegerField(default=60)
+    tolerable_min_speed = models.PositiveSmallIntegerField(default=60)
+    tolerable_max_speed = models.PositiveSmallIntegerField(default=80)
+    good_min_speed = models.PositiveSmallIntegerField(default=80)
+
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-refresh_run_at", "-id"]
+
+    def __str__(self):
+        return f"Motorability Snapshot {self.refresh_run_at:%Y-%m-%d %H:%M}"

@@ -7,6 +7,7 @@ import json
 import html
 import tempfile
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from all_roads.models import (
     Segment,
@@ -23,6 +24,9 @@ from all_roads.models import (
     PhysicalInspectionAnalysis,
     PhysicalInspectionCharacteristic,
     Library,
+    MotorabilitySetting,
+    MotorabilityHistorySnapshot,
+    ordinal_day,
     has_two_digit_segment_suffix,
     normalize_segment_code,
     apply_segment_code_ordering,
@@ -32,11 +36,14 @@ from all_roads.models import (
 )
 from all_roads.services import refresh_segment_and_subsegments, refresh_subsegments_from_google
 from all_roads.tasks import import_new_subsegments_task, refresh_segments_task
+from all_roads.utils import get_status_color
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_HALF_UP
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import models, transaction
+from django.db.utils import OperationalError, ProgrammingError
 from django.db.models.deletion import ProtectedError
 from django.db.models import Sum, Count, Q, IntegerField, Max
 from django.db.models.functions import Cast, Trim, Upper
@@ -499,6 +506,150 @@ def _format_km_total_whole(value):
         return f"{rounded:,.0f} km"
     except (InvalidOperation, ValueError, TypeError):
         return ""
+
+
+def _get_motorability_settings():
+    return MotorabilitySetting.get_solo()
+
+
+def _weekday_label(value):
+    return dict(MotorabilitySetting.WEEKDAY_CHOICES).get(value, str(value or "").title())
+
+
+def _motorability_settings_payload(settings_obj):
+    return {
+        "schedule": {
+            "frequency": settings_obj.refresh_frequency,
+            "weekday": settings_obj.refresh_weekday,
+            "month_day": settings_obj.refresh_month_day,
+            "hour": settings_obj.refresh_hour,
+            "timezone": settings_obj.refresh_timezone,
+            "summary": settings_obj.schedule_summary(),
+            "weekday_label": _weekday_label(settings_obj.refresh_weekday),
+        },
+        "ranges": {
+            "good_min": settings_obj.good_min_speed,
+            "tolerable_min": settings_obj.tolerable_min_speed,
+            "tolerable_max": settings_obj.tolerable_max_speed,
+            "intolerable_min": settings_obj.intolerable_min_speed,
+            "intolerable_max": settings_obj.intolerable_max_speed,
+            "failed_max": settings_obj.failed_max_speed,
+        },
+    }
+
+
+def _format_motorability_range_label(status_key, source):
+    if status_key == "good":
+        return f">= {source.good_min_speed} km/h"
+    if status_key == "tolerable":
+        return f"{source.tolerable_min_speed} to < {source.tolerable_max_speed} km/h"
+    if status_key == "intolerable":
+        return f"{source.intolerable_min_speed} to < {source.intolerable_max_speed} km/h"
+    if status_key == "failed":
+        return f"< {source.failed_max_speed} km/h"
+    return "No response"
+
+
+def _whole_percentage(value, total):
+    if not total:
+        return 0
+    return int(
+        ((Decimal(value or 0) / Decimal(total)) * Decimal("100")).quantize(
+            Decimal("1"), rounding=ROUND_HALF_UP
+        )
+    )
+
+
+def _create_motorability_history_snapshot(*, run_status, refresh_run_at=None, failure_message=""):
+    refresh_run_at = refresh_run_at or timezone.now()
+    settings_obj = _get_motorability_settings()
+    snapshot = MotorabilityHistorySnapshot(
+        run_status=run_status,
+        refresh_run_at=refresh_run_at,
+        failure_message=(failure_message or "")[:2000],
+        failed_max_speed=settings_obj.failed_max_speed,
+        intolerable_min_speed=settings_obj.intolerable_min_speed,
+        intolerable_max_speed=settings_obj.intolerable_max_speed,
+        tolerable_min_speed=settings_obj.tolerable_min_speed,
+        tolerable_max_speed=settings_obj.tolerable_max_speed,
+        good_min_speed=settings_obj.good_min_speed,
+    )
+    if run_status == MotorabilityHistorySnapshot.STATUS_SUCCESS:
+        total_segments = Segment.objects.count()
+        counts = {
+            key: Segment.objects.filter(status__in=STATUS_BUCKETS[key]["codes"]).count()
+            for key in ["good", "tolerable", "intolerable", "failed", "no_response"]
+        }
+        snapshot.total_segments = total_segments
+        snapshot.good_count = counts["good"]
+        snapshot.good_percentage = _whole_percentage(counts["good"], total_segments)
+        snapshot.tolerable_count = counts["tolerable"]
+        snapshot.tolerable_percentage = _whole_percentage(counts["tolerable"], total_segments)
+        snapshot.intolerable_count = counts["intolerable"]
+        snapshot.intolerable_percentage = _whole_percentage(counts["intolerable"], total_segments)
+        snapshot.failed_count = counts["failed"]
+        snapshot.failed_percentage = _whole_percentage(counts["failed"], total_segments)
+        snapshot.no_response_count = counts["no_response"]
+        snapshot.no_response_percentage = _whole_percentage(counts["no_response"], total_segments)
+    snapshot.save()
+    return snapshot
+
+
+def _recalculate_motorability_statuses():
+    updated_segments = 0
+    updated_subsegments = 0
+    segments_to_update = []
+    subsegments_to_update = []
+
+    for segment in Segment.objects.only("id", "avg_speed", "status").iterator(chunk_size=500):
+        next_status = get_status_color(segment.avg_speed)
+        if segment.status != next_status:
+            segment.status = next_status
+            segments_to_update.append(segment)
+    if segments_to_update:
+        Segment.objects.bulk_update(segments_to_update, ["status"])
+        updated_segments = len(segments_to_update)
+
+    for subsegment in SubSegment.objects.only("id", "avg_speed", "status").iterator(chunk_size=500):
+        next_status = get_status_color(subsegment.avg_speed)
+        if subsegment.status != next_status:
+            subsegment.status = next_status
+            subsegments_to_update.append(subsegment)
+    if subsegments_to_update:
+        SubSegment.objects.bulk_update(subsegments_to_update, ["status"])
+        updated_subsegments = len(subsegments_to_update)
+
+    return {
+        "updated_segments": updated_segments,
+        "updated_subsegments": updated_subsegments,
+    }
+
+
+def _build_schedule_slot(settings_obj, dt):
+    if settings_obj.refresh_frequency == MotorabilitySetting.FREQ_WEEKLY:
+        return f"weekly:{dt.date().isoformat()}:{settings_obj.refresh_hour:02d}"
+    return f"monthly:{dt.year:04d}-{dt.month:02d}-{settings_obj.refresh_month_day:02d}:{settings_obj.refresh_hour:02d}"
+
+
+def _is_motorability_schedule_due(settings_obj, now=None):
+    try:
+        tz = ZoneInfo(settings_obj.refresh_timezone or "Africa/Lagos")
+    except Exception:
+        tz = ZoneInfo("Africa/Lagos")
+    current = (now or timezone.now()).astimezone(tz)
+    due = False
+    if settings_obj.refresh_frequency == MotorabilitySetting.FREQ_WEEKLY:
+        due = (
+            current.strftime("%A").lower() == settings_obj.refresh_weekday
+            and current.hour == settings_obj.refresh_hour
+        )
+    else:
+        due = (
+            current.day == settings_obj.refresh_month_day
+            and current.hour == settings_obj.refresh_hour
+        )
+    slot = _build_schedule_slot(settings_obj, current)
+    return due and settings_obj.last_run_slot != slot, slot
 
 
 def _build_inventory_context(request, active_page="inventory"):
@@ -1044,6 +1195,94 @@ def _build_road_motorability_context(request):
 def road_motorability(request):
     context = _build_road_motorability_context(request)
     return render(request, "website/road_motorability.html", context)
+
+
+def motorability_settings_data(request):
+    settings_obj = _get_motorability_settings()
+    return JsonResponse({"ok": True, **_motorability_settings_payload(settings_obj)})
+
+
+def motorability_settings_schedule_save(request):
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "message": "POST method required."}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except Exception:
+        payload = {}
+
+    settings_obj = _get_motorability_settings()
+    if not settings_obj.pk:
+        return JsonResponse(
+            {"ok": False, "message": "Motorability settings are not ready yet. Run migrations first."},
+            status=503,
+        )
+    settings_obj.refresh_frequency = str(payload.get("frequency") or settings_obj.refresh_frequency).strip().lower()
+    settings_obj.refresh_weekday = str(payload.get("weekday") or settings_obj.refresh_weekday).strip().lower()
+    settings_obj.refresh_month_day = int(payload.get("month_day") or settings_obj.refresh_month_day)
+    settings_obj.refresh_hour = int(payload.get("hour") if payload.get("hour") is not None else settings_obj.refresh_hour)
+    timezone_value = str(payload.get("timezone") or settings_obj.refresh_timezone).strip()
+    if timezone_value:
+        try:
+            ZoneInfo(timezone_value)
+        except Exception:
+            return JsonResponse({"ok": False, "message": "Invalid timezone."}, status=400)
+        settings_obj.refresh_timezone = timezone_value
+
+    try:
+        settings_obj.full_clean()
+        settings_obj.save()
+    except (ValidationError, ValueError, TypeError) as exc:
+        message = exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc)
+        return JsonResponse({"ok": False, "message": message}, status=400)
+
+    return JsonResponse({"ok": True, **_motorability_settings_payload(settings_obj), "message": "Schedule saved."})
+
+
+def motorability_settings_ranges_save(request):
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "message": "POST method required."}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except Exception:
+        payload = {}
+
+    settings_obj = _get_motorability_settings()
+    if not settings_obj.pk:
+        return JsonResponse(
+            {"ok": False, "message": "Motorability settings are not ready yet. Run migrations first."},
+            status=503,
+        )
+    try:
+        settings_obj.good_min_speed = int(payload.get("good_min"))
+        settings_obj.tolerable_min_speed = int(payload.get("tolerable_min"))
+        settings_obj.tolerable_max_speed = int(payload.get("tolerable_max"))
+        settings_obj.intolerable_min_speed = int(payload.get("intolerable_min"))
+        settings_obj.intolerable_max_speed = int(payload.get("intolerable_max"))
+        settings_obj.failed_max_speed = int(payload.get("failed_max"))
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "message": "All range values must be whole numbers."}, status=400)
+
+    try:
+        settings_obj.full_clean()
+        settings_obj.save()
+    except ValidationError as exc:
+        message = exc.messages[0] if exc.messages else "Invalid motorability ranges."
+        return JsonResponse({"ok": False, "message": message}, status=400)
+
+    try:
+        recalc_result = _recalculate_motorability_statuses()
+    except (OperationalError, ProgrammingError) as exc:
+        return JsonResponse({"ok": False, "message": f"Could not recalculate statuses. ({exc})"}, status=500)
+    return JsonResponse(
+        {
+            "ok": True,
+            **_motorability_settings_payload(settings_obj),
+            "message": "Motorability ranges applied and statuses recalculated.",
+            **recalc_result,
+        }
+    )
 
 
 def road_motorability_queue_refresh(request):
@@ -1623,6 +1862,51 @@ def library_reports(request):
             "search_query": request.GET.get("q", "").strip(),
             "filters_qs": filters_qs,
             "library_content_delete_url": reverse("library_content_bulk_delete"),
+            **documentation,
+        },
+    )
+
+
+def library_motorability_history(request):
+    documentation = _load_library_documentation((request.GET.get("doc") or "").strip())
+    try:
+        snapshots = MotorabilityHistorySnapshot.objects.all()
+    except (OperationalError, ProgrammingError):
+        snapshots = []
+
+    def build_cell(snapshot, key):
+        if snapshot.run_status != MotorabilityHistorySnapshot.STATUS_SUCCESS:
+            return {
+                "primary": "Run failed",
+                "secondary": "-",
+            }
+        count = getattr(snapshot, f"{key}_count", None)
+        percentage = getattr(snapshot, f"{key}_percentage", None)
+        return {
+            "primary": f"{count} / {percentage}%",
+            "secondary": _format_motorability_range_label(key, snapshot),
+        }
+
+    history_rows = [
+        {
+            "snapshot": snapshot,
+            "good": build_cell(snapshot, "good"),
+            "tolerable": build_cell(snapshot, "tolerable"),
+            "intolerable": build_cell(snapshot, "intolerable"),
+            "failed": build_cell(snapshot, "failed"),
+            "no_response": build_cell(snapshot, "no_response"),
+        }
+        for snapshot in snapshots
+    ]
+
+    return render(
+        request,
+        "website/library_motorability_history.html",
+        {
+            "active_page": "library",
+            "active_library_section": "motorability_history",
+            "history_rows": history_rows,
+            "motorability_history_unavailable": isinstance(snapshots, list),
             **documentation,
         },
     )

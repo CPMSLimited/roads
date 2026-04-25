@@ -4,6 +4,9 @@ from . import views
 urlpatterns = [
     path("", views.landing, name="landing"),
     path("segments/map-data/", views.segments_map_data, name="segments_map_data"),
+    path("settings/motorability/", views.motorability_settings_data, name="motorability_settings_data"),
+    path("settings/motorability/schedule/", views.motorability_settings_schedule_save, name="motorability_settings_schedule_save"),
+    path("settings/motorability/ranges/", views.motorability_settings_ranges_save, name="motorability_settings_ranges_save"),
     path("road-motorability/", views.road_motorability, name="road_motorability"),
     path("road-motorability/queue-refresh/", views.road_motorability_queue_refresh, name="road_motorability_queue_refresh"),
     path("road-inventory/", views.road_inventory, name="road_inventory"),
@@ -17,6 +20,7 @@ urlpatterns = [
     path("library/road-inventory/subsegments/delete/", views.library_subsegments_bulk_delete, name="library_subsegments_bulk_delete"),
     path("library/road-inventory/delete/", views.library_segments_bulk_delete, name="library_segments_bulk_delete"),
     path("library/reports/", views.library_reports, name="library_reports"),
+    path("library/motorability-history/", views.library_motorability_history, name="library_motorability_history"),
     path("library/reports/upload/", views.library_reports_upload, name="library_reports_upload"),
     path("library/content/delete/", views.library_content_bulk_delete, name="library_content_bulk_delete"),
     path("library/guides/upload/<str:entry_type>/", views.library_guide_upload, name="library_guide_upload"),

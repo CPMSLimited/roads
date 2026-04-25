@@ -1,0 +1,117 @@
+{% extends "website/base.html" %}
+{% load static %}
+{% block body_class %}app-body{% endblock %}
+{% block page_title %}<h1>Library</h1>{% endblock %}
+{% block content %}
+<section class="library-landing-v2">
+    <aside class="library-v2-side">
+        <nav class="library-v2-nav" aria-label="Library sections">
+            <a href="{% url 'library_road_inventory' %}"><span aria-hidden="true">&#128193;</span> Road inventory</a>
+            <a href="{% url 'library_reports' %}"><span aria-hidden="true">&#128193;</span> Reports</a>
+            <a class="is-active" href="{% url 'library_motorability_history' %}"><span aria-hidden="true">&#128193;</span> Motorability History</a>
+            <details class="library-uploads-accordion" id="libraryDocumentationAccordion" {% if selected_documentation_slug %}open{% endif %}>
+                <summary class="library-v2-upload-toggle {% if selected_documentation_slug %}is-active{% endif %}" id="libraryDocumentationToggle">
+                    <span><span aria-hidden="true">&#128193;</span> Documentation</span>
+                </summary>
+                <div class="library-v2-upload-options" id="libraryDocumentationOptions">
+                    {% for item in documentation_items %}
+                    <a
+                        class="library-v2-upload-option {% if selected_documentation_slug == item.slug %}is-active{% endif %}"
+                        href="?doc={{ item.slug|urlencode }}"
+                    >{{ item.label }}</a>
+                    {% endfor %}
+                </div>
+            </details>
+            <details class="library-uploads-accordion" id="libraryUploadsAccordion">
+                <summary class="library-v2-upload-toggle" id="libraryUploadsToggle">
+                    <span><span aria-hidden="true">&#128193;</span> Uploads</span>
+                </summary>
+                <div class="library-v2-upload-options" id="libraryUploadsOptions">
+                    <button type="button" class="library-v2-upload-option" data-upload-option="new_segments">Upload new segments</button>
+                    <button type="button" class="library-v2-upload-option" data-upload-option="new_1km_subsegments">Upload new 1km subsegments</button>
+                    <button type="button" class="library-v2-upload-option" data-upload-option="edit_segments">Edit segments</button>
+                    <button type="button" class="library-v2-upload-option" data-upload-option="edit_subsegments">Edit subsegments</button>
+                </div>
+            </details>
+        </nav>
+    </aside>
+
+    <article class="library-v2-main">
+        <div class="library-v2-default-content" id="libraryDefaultContent" {% if selected_documentation_slug %}hidden{% endif %}>
+            <header class="library-v2-head">
+                <h1>Motorability History <span>({{ history_rows|length }})</span></h1>
+            </header>
+            {% if motorability_history_unavailable %}
+            <p class="library-rca-feedback library-rca-feedback-error">Motorability history is not available yet. Apply the latest database migrations to enable it.</p>
+            {% endif %}
+
+            <div class="library-v2-table-wrap">
+                <table class="library-v2-table library-motorability-history-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Good</th>
+                            <th>Tolerable</th>
+                            <th>Intolerable</th>
+                            <th>Failed</th>
+                            <th>No response</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in history_rows %}
+                        <tr>
+                            <td>{{ row.snapshot.refresh_run_at|date:"Y-m-d H:i:s" }}</td>
+                            <td>
+                                <div class="library-history-cell">
+                                    <strong>{{ row.good.primary }}</strong>
+                                    <span>{{ row.good.secondary }}</span>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="library-history-cell">
+                                    <strong>{{ row.tolerable.primary }}</strong>
+                                    <span>{{ row.tolerable.secondary }}</span>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="library-history-cell">
+                                    <strong>{{ row.intolerable.primary }}</strong>
+                                    <span>{{ row.intolerable.secondary }}</span>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="library-history-cell">
+                                    <strong>{{ row.failed.primary }}</strong>
+                                    <span>{{ row.failed.secondary }}</span>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="library-history-cell">
+                                    <strong>{{ row.no_response.primary }}</strong>
+                                    <span>{{ row.no_response.secondary }}</span>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="is-empty">No scheduled motorability history yet.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% if selected_documentation_slug %}
+        <section class="library-doc-workspace" id="libraryDocumentationWorkspace">
+            <header class="library-doc-workspace__head">
+                <h1>{{ selected_documentation_label }}</h1>
+            </header>
+            <article class="library-doc-markdown">
+                {{ selected_documentation_html }}
+            </article>
+        </section>
+        {% endif %}
+        {% include "website/includes/library_uploads_workspace.html" %}
+    </article>
+</section>
+{% endblock %}
