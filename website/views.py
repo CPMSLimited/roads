@@ -70,6 +70,27 @@ STATUS_BUCKETS = {
     "no_response": {"codes": ["666699"]},            # Unknown / no response
 }
 
+
+def _zone_state_names(zone_name):
+    if not zone_name:
+        return []
+    return list(
+        Zone.objects.filter(zone=zone_name)
+        .values_list("states__state", flat=True)
+        .order_by("states__state")
+    )
+
+
+def _filter_segments_by_zone(qs, zone_name):
+    state_names = _zone_state_names(zone_name)
+    if not state_names:
+        return qs.none()
+    state_filter = Q()
+    for state_name in state_names:
+        state_filter |= Q(state__iexact=state_name)
+    return qs.filter(state_filter)
+
+
 # ---- Pagination options (Point 5) ----
 PAGE_SIZE_DEFAULT = 25
 PAGE_SIZE_OPTIONS = [25, 50, 100]
@@ -681,8 +702,7 @@ def _build_inventory_context(request, active_page="inventory"):
         selected_road = ""
         selected_route = ""
         selected_state = ""
-        zone_states = Zone.objects.filter(zone=selected_zone).values_list("states__state", flat=True)
-        qs = qs.filter(state__in=list(zone_states))
+        qs = _filter_segments_by_zone(qs, selected_zone)
 
     roads = Road.objects.only("road").order_by("road")
     routes = Route.objects.only("route").order_by("route")
@@ -761,9 +781,12 @@ def _build_inventory_context(request, active_page="inventory"):
     area_summary = {
         "routes": "",
         "route_lengths": [],
+        "states": [],
+        "number_of_states": "",
         "number_of_routes": "",
         "number_of_segments": "",
         "total_road_length": "",
+        "total_road_length_whole": "",
     }
     all_roads_summary = {
         "road_type_counts": [],
@@ -809,13 +832,17 @@ def _build_inventory_context(request, active_page="inventory"):
                 .values("route__route")
                 .annotate(total_length=Sum("distance"))
             ]
+        zone_state_names = _zone_state_names(selected_zone) if selected_zone else []
         total_length = qs.aggregate(total_length=Sum("distance")).get("total_length")
         area_summary = {
             "routes": ", ".join(route for route in distinct_routes if route),
             "route_lengths": route_lengths,
+            "states": zone_state_names,
+            "number_of_states": len(zone_state_names) if selected_zone else "",
             "number_of_routes": len(distinct_routes),
             "number_of_segments": qs.count(),
             "total_road_length": _format_km_total(total_length),
+            "total_road_length_whole": _format_km_total_whole(total_length),
         }
         inventory_kpis = {
             "routes": area_summary["number_of_routes"],
@@ -1050,8 +1077,7 @@ def _filtered_segments_for_road_motorability(request):
         selected_route = ""
         selected_state = ""
         selected_speed = ""
-        zone_states = Zone.objects.filter(zone=selected_zone).values_list("states__state", flat=True)
-        qs = qs.filter(state__in=list(zone_states))
+        qs = _filter_segments_by_zone(qs, selected_zone)
     elif selected_speed in STATUS_BUCKETS:
         selected_road = ""
         selected_route = ""
@@ -1100,8 +1126,7 @@ def _apply_motorability_filters(qs, selected_road="", selected_route="", selecte
         selected_route = ""
         selected_state = ""
         selected_speed = ""
-        zone_states = Zone.objects.filter(zone=selected_zone).values_list("states__state", flat=True)
-        qs = qs.filter(state__in=list(zone_states))
+        qs = _filter_segments_by_zone(qs, selected_zone)
     elif selected_speed in STATUS_BUCKETS:
         selected_road = ""
         selected_route = ""

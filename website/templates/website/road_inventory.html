@@ -147,6 +147,21 @@
                 </div>
             {% elif panel_mode == "area" %}
                 {% if selected_state or selected_zone %}
+                    {% if selected_zone %}
+                    <p><strong>Number of states:</strong> <span>{{ area_summary.number_of_states }}</span></p>
+                    <p><strong>States:</strong>
+                        <span>
+                            {% for state in area_summary.states %}
+                                {{ state }}{% if not forloop.last %}, {% endif %}
+                            {% empty %}
+                                -
+                            {% endfor %}
+                        </span>
+                    </p>
+                    <p><strong>Number of routes:</strong> <span>{{ area_summary.number_of_routes }}</span></p>
+                    <p><strong>Number of segments:</strong> <span>{{ area_summary.number_of_segments }}</span></p>
+                    <p><strong>Total length:</strong> <span>{{ area_summary.total_road_length_whole|default:"-" }}</span></p>
+                    {% endif %}
                     <div class="workspace-table-wrap side-results-wrap">
                         <h3>Routes</h3>
                         {% for item in area_summary.route_lengths %}
