@@ -1,64 +1,45 @@
 {% extends "website/base.html" %}
 {% load static %}
 {% block body_class %}app-body{% endblock %}
-{% block page_title %}<h1>Road Inventory</h1>{% endblock %}
+{% block page_title %}
+<div class="inventory-title-row">
+    <h1>Road Inventory</h1>
+    <div class="inventory-tools-row">
+        <div class="inventory-tools-layout">
+            <form id="inventoryFiltersForm" class="toolbar-filters inventory-tools-controls" method="get">
+            <label class="inventory-field">
+                <select name="road" aria-label="All roads filter">
+                    <option value="">All roads</option>
+                    {% for r in roads %}
+                    <option value="{{ r.road }}" {% if selected_road == r.road %}selected{% endif %}>{{ r.road }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label class="inventory-field">
+                <select name="route" aria-label="Select route">
+                    <option value="">Select route</option>
+                    {% for r in routes %}
+                    <option value="{{ r.route }}" {% if selected_route == r.route %}selected{% endif %}>{{ r.route }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label class="inventory-field">
+                <select name="state" aria-label="Select state">
+                    <option value="">Select state</option>
+                    {% for state in states %}
+                    <option value="{{ state }}" {% if selected_state == state %}selected{% endif %}>{{ state }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <button type="button" class="btn btn-outline inventory-reset-btn" id="inventoryResetBtn" hidden>Reset</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
 {% block content %}
 <section class="new-inventory-page">
     <div class="new-inventory-main">
-        <div id="inventoryMainKpiGrid" class="kpi-grid kpi-grid-four is-hidden">
-            <article class="kpi-card">
-                <span>Total length (km)</span>
-                <strong>{{ total_length }}</strong>
-            </article>
-            <article class="kpi-card">
-                <span>Number of routes</span>
-                <strong>{{ number_routes }}</strong>
-            </article>
-            <article class="kpi-card">
-                <span>Number of segments</span>
-                <strong>{{ total_segments }}</strong>
-            </article>
-            <article class="kpi-card">
-                <span></span>
-                <strong></strong>
-            </article>
-        </div>
-
-        <div class="inventory-tools-row">
-            <div class="inventory-tools-layout">
-                <form id="inventoryFiltersForm" class="toolbar-filters inventory-tools-controls" method="get">
-                <label class="inventory-field">
-                    <span>Select road</span>
-                    <select name="road" aria-label="All roads filter">
-                        <option value="">All roads</option>
-                        {% for r in roads %}
-                        <option value="{{ r.road }}" {% if selected_road == r.road %}selected{% endif %}>{{ r.road }}</option>
-                        {% endfor %}
-                    </select>
-                </label>
-                <label class="inventory-field">
-                    <span>Select route</span>
-                    <select name="route" aria-label="Select route">
-                        <option value="">Select route</option>
-                        {% for r in routes %}
-                        <option value="{{ r.route }}" {% if selected_route == r.route %}selected{% endif %}>{{ r.route }}</option>
-                        {% endfor %}
-                    </select>
-                </label>
-                <label class="inventory-field">
-                    <span>Select state</span>
-                    <select name="state" aria-label="Select state">
-                        <option value="">Select state</option>
-                        {% for state in states %}
-                        <option value="{{ state }}" {% if selected_state == state %}selected{% endif %}>{{ state }}</option>
-                        {% endfor %}
-                    </select>
-                </label>
-                <button type="button" class="btn btn-outline inventory-reset-btn" id="inventoryResetBtn" hidden>Reset</button>
-                </form>
-            </div>
-        </div>
-
         <article class="table-card map-card">
             <div id="inventoryMapView" class="map-placeholder inventory-map" aria-label="Road inventory map">
                 {% include "website/includes/shared_leaflet_map.html" with map_dom_id="roadInventoryLeafletMap" map_data_url_name="segments_map_data" map_theme="inventory" %}
@@ -175,7 +156,6 @@
                 </div>
             {% endif %}
         </article>
-        <button type="button" class="inventory-panel-toggle" id="inventoryPanelToggleBtn">Show summary cards</button>
     </aside>
 </section>
 <script>
@@ -183,10 +163,7 @@
     const form = document.getElementById("inventoryFiltersForm");
     const mapView = document.getElementById("inventoryMapView");
     const resetBtn = document.getElementById("inventoryResetBtn");
-    const mainKpiGrid = document.getElementById("inventoryMainKpiGrid");
-    const panelToggleBtn = document.getElementById("inventoryPanelToggleBtn");
     if (!form || !mapView) return;
-    const KPI_VISIBILITY_KEY = "road_inventory_main_kpis_visible_v1";
 
     function applyStatusContrast() {
       const cells = document.querySelectorAll(".inventory-status-cell");
@@ -214,28 +191,6 @@
     function updateResetVisibility() {
       if (!resetBtn) return;
       resetBtn.hidden = !hasActiveFilters();
-    }
-
-    function getMainKpiVisibility() {
-      try {
-        return window.sessionStorage.getItem(KPI_VISIBILITY_KEY) === "true";
-      } catch (error) {
-        return false;
-      }
-    }
-
-    function setMainKpiVisibility(isVisible) {
-      if (mainKpiGrid) {
-        mainKpiGrid.classList.toggle("is-hidden", !isVisible);
-      }
-      if (panelToggleBtn) {
-        panelToggleBtn.textContent = isVisible ? "Hide summary cards" : "Show summary cards";
-        panelToggleBtn.setAttribute("aria-expanded", isVisible ? "true" : "false");
-      }
-      try {
-        window.sessionStorage.setItem(KPI_VISIBILITY_KEY, isVisible ? "true" : "false");
-      } catch (error) {
-      }
     }
 
     function resetOtherFilters(changedSelect) {
@@ -270,17 +225,14 @@
       const html = await response.text();
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, "text/html");
-      const nextKpiGrid = doc.getElementById("inventoryMainKpiGrid");
-      const currentKpiGrid = document.getElementById("inventoryMainKpiGrid");
       const nextForm = doc.getElementById("inventoryFiltersForm");
       const currentForm = document.getElementById("inventoryFiltersForm");
       const nextSide = doc.querySelector(".new-inventory-side");
       const currentSide = document.querySelector(".new-inventory-side");
-      if (!nextKpiGrid || !currentKpiGrid || !nextForm || !currentForm || !nextSide || !currentSide) {
+      if (!nextForm || !currentForm || !nextSide || !currentSide) {
         throw new Error("Could not update filtered content.");
       }
 
-      currentKpiGrid.replaceWith(nextKpiGrid);
       currentForm.replaceWith(nextForm);
       currentSide.replaceWith(nextSide);
       window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
@@ -311,15 +263,8 @@
       });
     }
 
-    if (panelToggleBtn) {
-      panelToggleBtn.addEventListener("click", () => {
-        setMainKpiVisibility(mainKpiGrid ? mainKpiGrid.classList.contains("is-hidden") : true);
-      });
-    }
-
     applyStatusContrast();
     updateResetVisibility();
-    setMainKpiVisibility(getMainKpiVisibility());
     window.dispatchEvent(new CustomEvent("shared-leaflet:refresh", { detail: { id: "roadInventoryLeafletMap" } }));
   }
 

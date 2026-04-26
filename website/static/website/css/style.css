@@ -402,6 +402,58 @@ a {
   color: #2a3734;
 }
 
+.inventory-title-row {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: start;
+  column-gap: 96px;
+  row-gap: 12px;
+}
+
+.inventory-title-row .inventory-tools-row {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  gap: 0;
+  padding: 0;
+}
+
+.inventory-title-row .inventory-tools-layout {
+  grid-template-columns: minmax(0, 1fr) auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.inventory-title-row .inventory-tools-controls {
+  min-width: 0;
+}
+
+.inventory-title-row .inventory-field {
+  min-width: 0;
+}
+
+.inventory-title-row--motorability {
+  grid-template-columns: max-content minmax(0, 1fr);
+}
+
+.inventory-title-row--motorability .inventory-tools-layout {
+  overflow-x: hidden;
+}
+
+.inventory-title-row--motorability .inventory-tools-controls {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.inventory-title-row--motorability .inventory-inline-pager.is-invisible {
+  display: none;
+}
+
+.inventory-title-row .inventory-refresh-feedback:empty,
+.inventory-title-row .inventory-refresh-summary:empty {
+  display: none;
+}
+
 .library-landing {
   padding: 28px;
   display: grid;
@@ -3075,6 +3127,12 @@ body.modal-open {
   .panel-toolbar { grid-template-columns: 1fr; }
 
   .app-sidebar { min-height: auto; }
+
+  .inventory-title-row,
+  .inventory-title-row--motorability {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
 
   .main-nav {
     justify-content: flex-end;

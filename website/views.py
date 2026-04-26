@@ -1156,6 +1156,19 @@ def _build_road_motorability_context(request):
     elif filtered["selected_speed"]:
         summary_title = speed_label_map.get(filtered["selected_speed"], filtered["selected_speed"])
 
+    latest_successful_snapshot = (
+        MotorabilityHistorySnapshot.objects
+        .filter(run_status=MotorabilityHistorySnapshot.STATUS_SUCCESS)
+        .order_by("-created", "-id")
+        .only("created")
+        .first()
+    )
+    if latest_successful_snapshot and latest_successful_snapshot.created:
+        last_refreshed_at = timezone.localtime(latest_successful_snapshot.created)
+        last_refreshed_display = f"{last_refreshed_at:%B} {last_refreshed_at.day}, {last_refreshed_at:%Y}"
+    else:
+        last_refreshed_display = "-"
+
     return {
         "active_page": "road_motorability",
         "segments": page_obj.object_list,
@@ -1183,6 +1196,7 @@ def _build_road_motorability_context(request):
         "summary_total_length_intolerable": intolerable_total_length,
         "summary_total_length_failed": failed_total_length,
         "summary_title": summary_title,
+        "last_scheduled_motorability_refresh_display": last_refreshed_display,
         "kpi_good_display": kpi_lengths["good"],
         "kpi_tolerable_display": kpi_lengths["tolerable"],
         "kpi_intolerable_display": kpi_lengths["intolerable"],

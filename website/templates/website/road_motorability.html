@@ -1,96 +1,96 @@
 {% extends "website/base.html" %}
 {% load static %}
 {% block body_class %}app-body{% endblock %}
-{% block page_title %}<h1>Road Motorability</h1>{% endblock %}
+{% block page_title %}
+<div class="inventory-title-row inventory-title-row--motorability">
+    <h1>Road Motorability</h1>
+    <div class="inventory-tools-row">
+        <div class="inventory-tools-layout">
+            <form id="inventoryFiltersForm" class="toolbar-filters inventory-tools-controls" method="get">
+                {% csrf_token %}
+                <input type="hidden" name="view" id="inventoryViewInput" value="{{ current_view|default:'map' }}">
+                <label class="inventory-field">
+                    <select name="road" aria-label="All roads filter">
+                        <option value="">All roads</option>
+                        {% for r in roads %}
+                        <option value="{{ r.road }}" {% if selected_road == r.road %}selected{% endif %}>{{ r.road }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label class="inventory-field">
+                    <select name="route" aria-label="Select route">
+                        <option value="">Select route</option>
+                        {% for r in routes %}
+                        <option value="{{ r.route }}" {% if selected_route == r.route %}selected{% endif %}>{{ r.route }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label class="inventory-field">
+                    <select name="state" aria-label="Select state">
+                        <option value="">Select state</option>
+                        {% for state in states %}
+                        <option value="{{ state }}" {% if selected_state == state %}selected{% endif %}>{{ state }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label class="inventory-field">
+                    <select name="speed" aria-label="Select condition">
+                        <option value="">Select condition</option>
+                        {% for value, label in speed_options %}
+                        <option value="{{ value }}" {% if selected_speed == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <button class="btn btn-ghost inventory-view-btn is-active" type="button" data-view-target="map" aria-label="Map view" aria-pressed="true">
+                    <svg viewBox="0 0 24 24" width="16" height="16" role="img" focusable="false">
+                        <path fill="currentColor" d="M3 6.4 8 4l8 2.4L21 4v13.2l-5 2.4-8-2.4-5 2.4V6.4Zm6 .5v9.4l6 1.8V8.7L9 6.9Z"/>
+                    </svg>
+                </button>
+                <button class="btn btn-ghost inventory-view-btn" type="button" data-view-target="table" aria-label="Table view" aria-pressed="false">
+                    <svg viewBox="0 0 24 24" width="16" height="16" role="img" focusable="false">
+                        <path fill="currentColor" d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h16v2H4v-2Z"/>
+                    </svg>
+                </button>
+                <button type="button" class="btn btn-outline inventory-reset-btn" id="inventoryResetBtn" hidden>Reset</button>
+                <nav id="inventoryInlinePager" class="pager inventory-inline-pager" aria-label="Inventory table pagination">
+                    {% if page_obj.has_previous %}
+                    <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
+                    {% else %}
+                    <span class="is-disabled">Previous</span>
+                    {% endif %}
+
+                    {% if page_obj.paginator.count == 0 %}
+                    <span>Page 0 of 0</span>
+                    {% else %}
+                    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                    {% endif %}
+
+                    {% if page_obj.has_next %}
+                    <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+                    {% else %}
+                    <span class="is-disabled">Next</span>
+                    {% endif %}
+                </nav>
+            </form>
+
+            <div class="inventory-tools-left">
+                <div class="inventory-refresh-actions">
+                    <button type="button" class="btn btn-outline inventory-refresh-btn">Refresh Motorability</button>
+                    <button type="button" class="inventory-refresh-link inventory-refresh-tooltip-trigger inventory-refresh-info-icon" aria-label="Refresh motorability instructions">
+                        <span aria-hidden="true">i</span>
+                        <span class="inventory-refresh-tooltip">Click to update segments' motorability. Only the segments in the filter results will be updated.</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <p id="motorabilityRefreshFeedback" class="inventory-refresh-feedback" aria-live="polite"></p>
+        <div id="motorabilityRefreshSummary" class="inventory-refresh-summary" aria-live="polite"></div>
+    </div>
+</div>
+{% endblock %}
 {% block content %}
 <section class="new-inventory-page">
     <div class="new-inventory-main">
-        <div class="inventory-tools-row">
-            <div class="inventory-tools-layout">
-                <form id="inventoryFiltersForm" class="toolbar-filters inventory-tools-controls" method="get">
-                    {% csrf_token %}
-                    <input type="hidden" name="view" id="inventoryViewInput" value="{{ current_view|default:'map' }}">
-                    <label class="inventory-field">
-                        <span>Select road</span>
-                        <select name="road" aria-label="All roads filter">
-                            <option value="">All roads</option>
-                            {% for r in roads %}
-                            <option value="{{ r.road }}" {% if selected_road == r.road %}selected{% endif %}>{{ r.road }}</option>
-                            {% endfor %}
-                        </select>
-                    </label>
-                    <label class="inventory-field">
-                        <span>Select route</span>
-                        <select name="route" aria-label="Select route">
-                            <option value="">Select route</option>
-                            {% for r in routes %}
-                            <option value="{{ r.route }}" {% if selected_route == r.route %}selected{% endif %}>{{ r.route }}</option>
-                            {% endfor %}
-                        </select>
-                    </label>
-                    <label class="inventory-field">
-                        <span>Select state</span>
-                        <select name="state" aria-label="Select state">
-                            <option value="">Select state</option>
-                            {% for state in states %}
-                            <option value="{{ state }}" {% if selected_state == state %}selected{% endif %}>{{ state }}</option>
-                            {% endfor %}
-                        </select>
-                    </label>
-                    <label class="inventory-field">
-                        <span>Select condition</span>
-                        <select name="speed" aria-label="Select condition">
-                            <option value="">Select condition</option>
-                            {% for value, label in speed_options %}
-                            <option value="{{ value }}" {% if selected_speed == value %}selected{% endif %}>{{ label }}</option>
-                            {% endfor %}
-                        </select>
-                    </label>
-                    <button class="btn btn-ghost inventory-view-btn is-active" type="button" data-view-target="map" aria-label="Map view" aria-pressed="true">
-                        <svg viewBox="0 0 24 24" width="16" height="16" role="img" focusable="false">
-                            <path fill="currentColor" d="M3 6.4 8 4l8 2.4L21 4v13.2l-5 2.4-8-2.4-5 2.4V6.4Zm6 .5v9.4l6 1.8V8.7L9 6.9Z"/>
-                        </svg>
-                    </button>
-                    <button class="btn btn-ghost inventory-view-btn" type="button" data-view-target="table" aria-label="Table view" aria-pressed="false">
-                        <svg viewBox="0 0 24 24" width="16" height="16" role="img" focusable="false">
-                            <path fill="currentColor" d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h16v2H4v-2Z"/>
-                        </svg>
-                    </button>
-                    <button type="button" class="btn btn-outline inventory-reset-btn" id="inventoryResetBtn" hidden>Reset</button>
-                    <nav id="inventoryInlinePager" class="pager inventory-inline-pager" aria-label="Inventory table pagination">
-                        {% if page_obj.has_previous %}
-                        <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
-                        {% else %}
-                        <span class="is-disabled">Previous</span>
-                        {% endif %}
-
-                        {% if page_obj.paginator.count == 0 %}
-                        <span>Page 0 of 0</span>
-                        {% else %}
-                        <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
-                        {% endif %}
-
-                        {% if page_obj.has_next %}
-                        <a href="?{% if filters_qs %}{{ filters_qs }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
-                        {% else %}
-                        <span class="is-disabled">Next</span>
-                        {% endif %}
-                    </nav>
-                </form>
-
-                <div class="inventory-tools-left">
-                    <div class="inventory-refresh-actions">
-                        <button type="button" class="btn btn-outline inventory-refresh-btn">Refresh Motorability</button>
-                        <button type="button" class="inventory-refresh-link inventory-refresh-tooltip-trigger inventory-refresh-info-icon" aria-label="Refresh motorability instructions">
-                            <span aria-hidden="true">i</span>
-                            <span class="inventory-refresh-tooltip">Click to update segments' motorability. Only the segments in the filter results will be updated.</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <p id="motorabilityRefreshFeedback" class="inventory-refresh-feedback" aria-live="polite"></p>
-            <div id="motorabilityRefreshSummary" class="inventory-refresh-summary" aria-live="polite"></div>
-        </div>
 
         <article class="table-card map-card">
             <div id="inventoryMapView" class="map-placeholder inventory-map" aria-label="Road inventory map">
@@ -150,6 +150,7 @@
                 <article class="kpi-card kpi-intolerable"><span>Intolerable</span><strong>{{ kpi_intolerable_display }}</strong></article>
                 <article class="kpi-card kpi-failed"><span>Failed</span><strong>{{ kpi_failed_display }}</strong></article>
             </div>
+            <p><strong>Last refreshed:</strong> {{ last_scheduled_motorability_refresh_display }}</p>
             <p><strong>Total length:</strong> {{ summary_total_length_selected }}</p>
             <p><strong>Number of routes:</strong> {{ summary_number_routes }}</p>
             <p><strong>Number of segments:</strong> {{ summary_number_segments }}</p>
