@@ -95,6 +95,13 @@ class State(models.Model):
     def __str__(self):
         return self.state
 
+class Zone(models.Model):
+    zone = models.CharField(max_length=32, unique=True)
+    states = models.ManyToManyField(State, related_name="zones", blank=True)
+
+    def __str__(self):
+        return self.zone
+
 class Address(models.Model):
     id = models.AutoField(primary_key=True)
     address = models.CharField(max_length=256, unique=True)

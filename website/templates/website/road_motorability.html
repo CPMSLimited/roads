@@ -34,6 +34,14 @@
                     </select>
                 </label>
                 <label class="inventory-field">
+                    <select name="zone" aria-label="Select zone">
+                        <option value="">Select zone</option>
+                        {% for zone in zones %}
+                        <option value="{{ zone.zone }}" {% if selected_zone == zone.zone %}selected{% endif %}>{{ zone.zone }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label class="inventory-field">
                     <select name="speed" aria-label="Select condition">
                         <option value="">Select condition</option>
                         {% for value, label in speed_options %}
@@ -154,6 +162,16 @@
             <p><strong>Total length:</strong> {{ summary_total_length_selected }}</p>
             <p><strong>Number of routes:</strong> {{ summary_number_routes }}</p>
             <p><strong>Number of segments:</strong> {{ summary_number_segments }}</p>
+            {% if selected_zone %}
+            <p><strong>Number of states:</strong> {{ selected_zone_state_count }}</p>
+            <p><strong>States:</strong>
+                {% for state in selected_zone_states %}
+                    {{ state }}{% if not forloop.last %}, {% endif %}
+                {% empty %}
+                    -
+                {% endfor %}
+            </p>
+            {% endif %}
         </article>
 
         <article class="table-card side-card route-info-card">
@@ -504,8 +522,9 @@
     const roadSelect = form.querySelector('select[name="road"]');
     const routeSelect = form.querySelector('select[name="route"]');
     const stateSelect = form.querySelector('select[name="state"]');
+    const zoneSelect = form.querySelector('select[name="zone"]');
     const speedSelect = form.querySelector('select[name="speed"]');
-    const filterSelects = [roadSelect, routeSelect, stateSelect, speedSelect].filter(Boolean);
+    const filterSelects = [roadSelect, routeSelect, stateSelect, zoneSelect, speedSelect].filter(Boolean);
 
     function hasActiveFilters() {
       return filterSelects.some((sel) => String(sel.value || "").trim() !== "");
@@ -517,23 +536,32 @@
     }
 
     function resetOtherFilters(changedSelect) {
-      if (!roadSelect || !routeSelect || !stateSelect || !speedSelect) return;
+      if (!roadSelect || !routeSelect || !stateSelect || !zoneSelect || !speedSelect) return;
       if (changedSelect === roadSelect) {
         routeSelect.value = "";
         stateSelect.value = "";
+        zoneSelect.value = "";
         speedSelect.value = "";
       } else if (changedSelect === routeSelect) {
         roadSelect.value = "";
         stateSelect.value = "";
+        zoneSelect.value = "";
         speedSelect.value = "";
       } else if (changedSelect === stateSelect) {
         roadSelect.value = "";
         routeSelect.value = "";
+        zoneSelect.value = "";
+        speedSelect.value = "";
+      } else if (changedSelect === zoneSelect) {
+        roadSelect.value = "";
+        routeSelect.value = "";
+        stateSelect.value = "";
         speedSelect.value = "";
       } else if (changedSelect === speedSelect) {
         roadSelect.value = "";
         routeSelect.value = "";
         stateSelect.value = "";
+        zoneSelect.value = "";
       }
     }
 
@@ -543,6 +571,7 @@
         const road = (roadSelect && roadSelect.value) || "";
         const route = (routeSelect && routeSelect.value) || "";
         const state = (stateSelect && stateSelect.value) || "";
+        const zone = (zoneSelect && zoneSelect.value) || "";
         const speed = (speedSelect && speedSelect.value) || "";
         const refreshedCodes = getRefreshedCodes();
 
@@ -561,6 +590,7 @@
               road,
               route,
               state,
+              zone,
               speed,
               refreshed_codes: refreshedCodes,
             }),
@@ -611,6 +641,7 @@
         if (roadSelect) roadSelect.value = "";
         if (routeSelect) routeSelect.value = "";
         if (stateSelect) stateSelect.value = "";
+        if (zoneSelect) zoneSelect.value = "";
         if (speedSelect) speedSelect.value = "";
         updateResetVisibility();
         try {

@@ -31,6 +31,14 @@
                     {% endfor %}
                 </select>
             </label>
+            <label class="inventory-field">
+                <select name="zone" aria-label="Select zone">
+                    <option value="">Select zone</option>
+                    {% for zone in zones %}
+                    <option value="{{ zone.zone }}" {% if selected_zone == zone.zone %}selected{% endif %}>{{ zone.zone }}</option>
+                    {% endfor %}
+                </select>
+            </label>
             <button type="button" class="btn btn-outline inventory-reset-btn" id="inventoryResetBtn" hidden>Reset</button>
             </form>
         </div>
@@ -138,7 +146,18 @@
                     </table>
                 </div>
             {% elif panel_mode == "area" %}
-                <p><strong>Routes:</strong> <span>{{ area_summary.routes|default:"-" }}</span></p>
+                {% if selected_state or selected_zone %}
+                    <div class="workspace-table-wrap side-results-wrap">
+                        <h3>Routes</h3>
+                        {% for item in area_summary.route_lengths %}
+                        <p><strong>{{ item.route }}</strong> <span>- {{ item.length|cut:" " }}</span></p>
+                        {% empty %}
+                        <p><strong>Routes:</strong> <span>-</span></p>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p><strong>Routes:</strong> <span>{{ area_summary.routes|default:"-" }}</span></p>
+                {% endif %}
             {% elif panel_mode == "all_roads" %}
                 <p>
                     <strong>Road types:</strong>
@@ -182,7 +201,8 @@
     const roadSelect = form.querySelector('select[name="road"]');
     const routeSelect = form.querySelector('select[name="route"]');
     const stateSelect = form.querySelector('select[name="state"]');
-    const filterSelects = [roadSelect, routeSelect, stateSelect].filter(Boolean);
+    const zoneSelect = form.querySelector('select[name="zone"]');
+    const filterSelects = [roadSelect, routeSelect, stateSelect, zoneSelect].filter(Boolean);
 
     function hasActiveFilters() {
       return filterSelects.some((sel) => String(sel.value || "").trim() !== "");
@@ -194,16 +214,23 @@
     }
 
     function resetOtherFilters(changedSelect) {
-      if (!roadSelect || !routeSelect || !stateSelect) return;
+      if (!roadSelect || !routeSelect || !stateSelect || !zoneSelect) return;
       if (changedSelect === roadSelect) {
         routeSelect.value = "";
         stateSelect.value = "";
+        zoneSelect.value = "";
       } else if (changedSelect === routeSelect) {
         roadSelect.value = "";
         stateSelect.value = "";
+        zoneSelect.value = "";
       } else if (changedSelect === stateSelect) {
         roadSelect.value = "";
         routeSelect.value = "";
+        zoneSelect.value = "";
+      } else if (changedSelect === zoneSelect) {
+        roadSelect.value = "";
+        routeSelect.value = "";
+        stateSelect.value = "";
       }
     }
 
@@ -256,6 +283,7 @@
         if (roadSelect) roadSelect.value = "";
         if (routeSelect) routeSelect.value = "";
         if (stateSelect) stateSelect.value = "";
+        if (zoneSelect) zoneSelect.value = "";
         updateResetVisibility();
         applyFiltersAjax().catch(() => {
           window.location.href = window.location.pathname;

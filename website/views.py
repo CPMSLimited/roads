@@ -15,6 +15,7 @@ from all_roads.models import (
     Road,
     Address,
     State,
+    Zone,
     SubSegment,
     Defect,
     DefectType,
@@ -658,24 +659,35 @@ def _build_inventory_context(request, active_page="inventory"):
     selected_road = request.GET.get("road") or ""
     selected_route = request.GET.get("route") or ""
     selected_state = (request.GET.get("state") or "").strip()
+    selected_zone = (request.GET.get("zone") or "").strip()
 
     # Keep one active filter at a time.
     if selected_road:
         selected_route = ""
         selected_state = ""
+        selected_zone = ""
         qs = qs.filter(route__road__road=selected_road)
     elif selected_route:
         selected_road = ""
         selected_state = ""
+        selected_zone = ""
         qs = qs.filter(route__route=selected_route)
     elif selected_state:
         selected_road = ""
         selected_route = ""
+        selected_zone = ""
         qs = qs.filter(state__iexact=selected_state)
+    elif selected_zone:
+        selected_road = ""
+        selected_route = ""
+        selected_state = ""
+        zone_states = Zone.objects.filter(zone=selected_zone).values_list("states__state", flat=True)
+        qs = qs.filter(state__in=list(zone_states))
 
     roads = Road.objects.only("road").order_by("road")
     routes = Route.objects.only("route").order_by("route")
     states = State.objects.only("state").order_by("state").values_list("state", flat=True)
+    zones = Zone.objects.only("zone").order_by("zone")
 
     filters = {}
     if selected_road:
@@ -684,6 +696,8 @@ def _build_inventory_context(request, active_page="inventory"):
         filters["route"] = selected_route
     if selected_state:
         filters["state"] = selected_state
+    if selected_zone:
+        filters["zone"] = selected_zone
 
     metrics = _overview_metrics(qs)
     ordered_qs = apply_segment_code_ordering(qs, "route__route")
@@ -746,6 +760,7 @@ def _build_inventory_context(request, active_page="inventory"):
     panel_title = ""
     area_summary = {
         "routes": "",
+        "route_lengths": [],
         "number_of_routes": "",
         "number_of_segments": "",
         "total_road_length": "",
@@ -771,21 +786,33 @@ def _build_inventory_context(request, active_page="inventory"):
             "segments": selected_route_segment_count or 0,
             "length": _format_km_total_whole(selected_route_total_length),
         }
-    elif selected_state or selected_road:
+    elif selected_state or selected_road or selected_zone:
         panel_mode = "area"
         panel_title = (
             f"State {selected_state}"
             if selected_state
-            else f"{selected_road} roads"
+            else (f"{selected_road} roads" if selected_road else f"{selected_zone} zone")
         )
         distinct_routes = list(
             qs.order_by("route__route")
             .values_list("route__route", flat=True)
             .distinct()
         )
+        route_lengths = []
+        if selected_state or selected_zone:
+            route_lengths = [
+                {
+                    "route": row["route__route"] or "-",
+                    "length": _format_km_total_whole(row["total_length"]),
+                }
+                for row in qs.order_by("route__route")
+                .values("route__route")
+                .annotate(total_length=Sum("distance"))
+            ]
         total_length = qs.aggregate(total_length=Sum("distance")).get("total_length")
         area_summary = {
             "routes": ", ".join(route for route in distinct_routes if route),
+            "route_lengths": route_lengths,
             "number_of_routes": len(distinct_routes),
             "number_of_segments": qs.count(),
             "total_road_length": _format_km_total(total_length),
@@ -834,9 +861,11 @@ def _build_inventory_context(request, active_page="inventory"):
         "roads": roads,
         "routes": routes,
         "states": list(states),
+        "zones": zones,
         "selected_road": selected_road,
         "selected_route": selected_route,
         "selected_state": selected_state,
+        "selected_zone": selected_zone,
         "filters_qs": urlencode(filters),
         "number_routes": unique_route_count,
         "segment_length_total": "----",
@@ -995,27 +1024,39 @@ def _filtered_segments_for_road_motorability(request):
     selected_road = request.GET.get("road") or ""
     selected_route = request.GET.get("route") or ""
     selected_state = (request.GET.get("state") or "").strip()
+    selected_zone = (request.GET.get("zone") or "").strip()
     selected_speed = (request.GET.get("speed") or "").strip().lower()
 
     if selected_road:
         selected_route = ""
         selected_state = ""
+        selected_zone = ""
         selected_speed = ""
         qs = qs.filter(route__road__road=selected_road)
     elif selected_route:
         selected_road = ""
         selected_state = ""
+        selected_zone = ""
         selected_speed = ""
         qs = qs.filter(route__route=selected_route)
     elif selected_state:
         selected_road = ""
         selected_route = ""
+        selected_zone = ""
         selected_speed = ""
         qs = qs.filter(state__iexact=selected_state)
+    elif selected_zone:
+        selected_road = ""
+        selected_route = ""
+        selected_state = ""
+        selected_speed = ""
+        zone_states = Zone.objects.filter(zone=selected_zone).values_list("states__state", flat=True)
+        qs = qs.filter(state__in=list(zone_states))
     elif selected_speed in STATUS_BUCKETS:
         selected_road = ""
         selected_route = ""
         selected_state = ""
+        selected_zone = ""
         qs = qs.filter(status__in=STATUS_BUCKETS[selected_speed]["codes"])
 
     return {
@@ -1024,38 +1065,51 @@ def _filtered_segments_for_road_motorability(request):
         "selected_road": selected_road,
         "selected_route": selected_route,
         "selected_state": selected_state,
+        "selected_zone": selected_zone,
         "selected_speed": selected_speed,
     }
 
 
-def _apply_motorability_filters(qs, selected_road="", selected_route="", selected_state="", selected_speed=""):
+def _apply_motorability_filters(qs, selected_road="", selected_route="", selected_state="", selected_zone="", selected_speed=""):
     selected_road = selected_road or ""
     selected_route = selected_route or ""
     selected_state = (selected_state or "").strip()
+    selected_zone = (selected_zone or "").strip()
     selected_speed = (selected_speed or "").strip().lower()
 
     if selected_road:
         selected_route = ""
         selected_state = ""
+        selected_zone = ""
         selected_speed = ""
         qs = qs.filter(route__road__road=selected_road)
     elif selected_route:
         selected_road = ""
         selected_state = ""
+        selected_zone = ""
         selected_speed = ""
         qs = qs.filter(route__route=selected_route)
     elif selected_state:
         selected_road = ""
         selected_route = ""
+        selected_zone = ""
         selected_speed = ""
         qs = qs.filter(state__iexact=selected_state)
+    elif selected_zone:
+        selected_road = ""
+        selected_route = ""
+        selected_state = ""
+        selected_speed = ""
+        zone_states = Zone.objects.filter(zone=selected_zone).values_list("states__state", flat=True)
+        qs = qs.filter(state__in=list(zone_states))
     elif selected_speed in STATUS_BUCKETS:
         selected_road = ""
         selected_route = ""
         selected_state = ""
+        selected_zone = ""
         qs = qs.filter(status__in=STATUS_BUCKETS[selected_speed]["codes"])
 
-    return qs, selected_road, selected_route, selected_state, selected_speed
+    return qs, selected_road, selected_route, selected_state, selected_zone, selected_speed
 
 
 def _build_road_motorability_context(request):
@@ -1064,6 +1118,7 @@ def _build_road_motorability_context(request):
     roads = Road.objects.only("road").order_by("road")
     routes = Route.objects.only("route").order_by("route")
     states = State.objects.only("state").order_by("state").values_list("state", flat=True)
+    zones = Zone.objects.only("zone").order_by("zone")
     speed_options = [
         ("good", "Good"),
         ("tolerable", "Tolerable"),
@@ -1085,6 +1140,8 @@ def _build_road_motorability_context(request):
         filters["route"] = filtered["selected_route"]
     if filtered["selected_state"]:
         filters["state"] = filtered["selected_state"]
+    if filtered["selected_zone"]:
+        filters["zone"] = filtered["selected_zone"]
     if filtered["selected_speed"]:
         filters["speed"] = filtered["selected_speed"]
 
@@ -1147,12 +1204,20 @@ def _build_road_motorability_context(request):
         )
 
     summary_title = "Motorability summary"
+    selected_zone_states = []
     if filtered["selected_road"]:
         summary_title = f'{filtered["selected_road"]} roads'
     elif filtered["selected_route"]:
         summary_title = filtered["selected_route"]
     elif filtered["selected_state"]:
         summary_title = filtered["selected_state"]
+    elif filtered["selected_zone"]:
+        summary_title = f'{filtered["selected_zone"]} zone'
+        selected_zone_states = list(
+            Zone.objects.filter(zone=filtered["selected_zone"])
+            .values_list("states__state", flat=True)
+            .order_by("states__state")
+        )
     elif filtered["selected_speed"]:
         summary_title = speed_label_map.get(filtered["selected_speed"], filtered["selected_speed"])
 
@@ -1176,10 +1241,12 @@ def _build_road_motorability_context(request):
         "roads": roads,
         "routes": routes,
         "states": list(states),
+        "zones": zones,
         "speed_options": speed_options,
         "selected_road": filtered["selected_road"],
         "selected_route": filtered["selected_route"],
         "selected_state": filtered["selected_state"],
+        "selected_zone": filtered["selected_zone"],
         "selected_speed": filtered["selected_speed"],
         "current_view": filtered["current_view"],
         "filters_qs": urlencode(filters),
@@ -1196,6 +1263,8 @@ def _build_road_motorability_context(request):
         "summary_total_length_intolerable": intolerable_total_length,
         "summary_total_length_failed": failed_total_length,
         "summary_title": summary_title,
+        "selected_zone_states": selected_zone_states,
+        "selected_zone_state_count": len(selected_zone_states),
         "last_scheduled_motorability_refresh_display": last_refreshed_display,
         "kpi_good_display": kpi_lengths["good"],
         "kpi_tolerable_display": kpi_lengths["tolerable"],
@@ -1311,6 +1380,7 @@ def road_motorability_queue_refresh(request):
     selected_road = (payload.get("road") or "").strip()
     selected_route = (payload.get("route") or "").strip()
     selected_state = (payload.get("state") or "").strip()
+    selected_zone = (payload.get("zone") or "").strip()
     selected_speed = (payload.get("speed") or "").strip().lower()
     refreshed_codes = payload.get("refreshed_codes") or []
     if not isinstance(refreshed_codes, list):
@@ -1318,11 +1388,12 @@ def road_motorability_queue_refresh(request):
     refreshed_set = {str(code).strip().upper() for code in refreshed_codes if str(code).strip()}
 
     base_qs = Segment.objects.all()
-    filtered_qs, _, _, _, _ = _apply_motorability_filters(
+    filtered_qs, _, _, _, _, _ = _apply_motorability_filters(
         base_qs,
         selected_road=selected_road,
         selected_route=selected_route,
         selected_state=selected_state,
+        selected_zone=selected_zone,
         selected_speed=selected_speed,
     )
     all_codes = [str(code).strip().upper() for code in filtered_qs.values_list("code", flat=True) if str(code).strip()]
