@@ -37,7 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'all_roads',
+    'all_roads.apps.AllRoadsConfig',
     'website',
     'corsheaders',
     'rest_framework',
