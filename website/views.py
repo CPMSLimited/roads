@@ -365,8 +365,18 @@ def _get_assumed_project_user():
 
 
 TERMINAL_DEFECT_STATUSES = {
-    Defect.WORKFLOW_REPAIR_ONGOING,
+    Defect.WORKFLOW_REJECTED,
     Defect.WORKFLOW_REPAIR_COMPLETE,
+}
+
+
+ACTIVE_DEFECT_STATUSES = {
+    Defect.WORKFLOW_PHYSICAL_DRAFT,
+    Defect.WORKFLOW_RCA_DRAFT,
+    Defect.WORKFLOW_RCA_COMPLETE,
+    Defect.WORKFLOW_SOLUTION,
+    Defect.WORKFLOW_APPROVED,
+    Defect.WORKFLOW_REPAIR_ONGOING,
 }
 
 
@@ -398,7 +408,7 @@ def _get_or_create_active_defect(subsegment):
     if not _subsegment_allows_defect_creation(subsegment):
         raise ValueError("Cannot create a defect for a sub-segment with No response status.")
     latest = _get_latest_defect(subsegment)
-    if latest and latest.workflow_status not in TERMINAL_DEFECT_STATUSES:
+    if latest and latest.workflow_status in ACTIVE_DEFECT_STATUSES:
         return latest, False
     defect = Defect.objects.create(
         subsegment=subsegment,
@@ -1016,7 +1026,7 @@ def road_condition_save_draft(request):
                 continue
 
             latest_defect = _get_latest_defect(subsegment)
-            if latest_defect and latest_defect.workflow_status not in TERMINAL_DEFECT_STATUSES:
+            if latest_defect and latest_defect.workflow_status in ACTIVE_DEFECT_STATUSES:
                 blocked_codes.append(subsegment.code)
                 continue
 
@@ -3032,19 +3042,38 @@ def engineering_admin_solution_design(request):
             selected_defect_qs = selected_defect_qs.filter(engineer=history_engineer)
         selected_defect = selected_defect_qs.first()
 
+    def _save_solution_files(files, defect):
+        uploaded_by = _get_assumed_project_user()
+        created_count = 0
+        for uploaded_file in files:
+            if not uploaded_file:
+                continue
+            Library.objects.create(
+                entry_type=Library.TYPE_SOLUTION_DESIGN,
+                file_type=_library_file_type_from_name(uploaded_file.name),
+                name=os.path.basename(uploaded_file.name),
+                file=uploaded_file,
+                defect=defect,
+                uploaded_by=uploaded_by,
+            )
+            created_count += 1
+        return created_count
+
     if request.method == "POST":
         if request.POST.get("command") == "mark_solution_done":
             defect_id = request.POST.get("defect_id")
             defect_qs = Defect.objects.filter(
                 pk=defect_id,
-                workflow_status=Defect.WORKFLOW_RCA_COMPLETE,
+                workflow_status__in=[Defect.WORKFLOW_RCA_COMPLETE, Defect.WORKFLOW_SOLUTION],
             )
             if history_engineer:
                 defect_qs = defect_qs.filter(engineer=history_engineer)
             defect = defect_qs.first()
             if defect:
-                defect.workflow_status = Defect.WORKFLOW_SOLUTION
-                defect.save(update_fields=["workflow_status", "modified"])
+                _save_solution_files(request.FILES.getlist("solution_files"), defect)
+                if defect.workflow_status != Defect.WORKFLOW_SOLUTION:
+                    defect.workflow_status = Defect.WORKFLOW_SOLUTION
+                    defect.save(update_fields=["workflow_status", "modified"])
                 redirect_url = f"{reverse(active_solution_route)}?sd_done=1"
                 if defect_id:
                     redirect_url += f"&mode=view&defect={defect_id}"
@@ -3059,7 +3088,6 @@ def engineering_admin_solution_design(request):
             return redirect(redirect_url)
 
         files = request.FILES.getlist("solution_files")
-        uploaded_by = _get_assumed_project_user()
         defect_for_upload = None
         defect_id = request.POST.get("defect_id")
         if defect_id:
@@ -3067,19 +3095,7 @@ def engineering_admin_solution_design(request):
             if history_engineer:
                 defect_for_upload_qs = defect_for_upload_qs.filter(engineer=history_engineer)
             defect_for_upload = defect_for_upload_qs.first()
-        created_count = 0
-        for uploaded_file in files:
-            if not uploaded_file:
-                continue
-            Library.objects.create(
-                entry_type=Library.TYPE_SOLUTION_DESIGN,
-                file_type=_library_file_type_from_name(uploaded_file.name),
-                name=os.path.basename(uploaded_file.name),
-                file=uploaded_file,
-                defect=defect_for_upload,
-                uploaded_by=uploaded_by,
-            )
-            created_count += 1
+        created_count = _save_solution_files(files, defect_for_upload)
         if created_count:
             redirect_url = f"{reverse(active_solution_route)}?uploaded={created_count}"
             if defect_for_upload:
@@ -3185,6 +3201,7 @@ def engineering_admin_solution_design(request):
                     "name": filename,
                     "ext": ext[:6],
                     "icon_path": icon_path,
+                    "is_image": item.file_type == Library.FILE_TYPE_IMAGE,
                     "date_text": item.created.strftime("%m/%d/%Y"),
                     "size_text": item.file.size if item.file else 0,
                 }

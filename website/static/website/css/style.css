@@ -2233,8 +2233,9 @@ body.modal-open {
   gap: 2px;
   padding-top: 0;
   padding-bottom: 0;
-  background: linear-gradient(180deg, #f9fbfa 0%, #edf3f1 100%);
-  border-color: #d6dfdb;
+  background: #05700b;
+  border-color: #05700b;
+  color: #ffffff;
   text-align: center;
 }
 
@@ -2243,7 +2244,7 @@ body.modal-open {
   font-size: 0.78rem;
   font-weight: 700;
   line-height: 1.1;
-  color: #586763;
+  color: #ffffff;
   margin-bottom: 0;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -2254,9 +2255,20 @@ body.modal-open {
   width: 100%;
   font-size: 1.05rem;
   line-height: 1.1;
-  color: #243330;
+  color: #ffffff;
   white-space: nowrap;
   text-align: center;
+}
+
+.route-info-card .inventory-panel-kpi-card {
+  background: #05700b !important;
+  border-color: #05700b !important;
+  color: #ffffff !important;
+}
+
+.route-info-card .inventory-panel-kpi-card span,
+.route-info-card .inventory-panel-kpi-card strong {
+  color: #ffffff !important;
 }
 
 .inventory-tools-row {

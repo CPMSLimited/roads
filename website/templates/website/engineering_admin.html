@@ -94,6 +94,13 @@
       });
     }
 
+    document.addEventListener("change", function (event) {
+      const input = event.target.closest("#solution-supporting-files");
+      if (!input || !input.files || input.files.length === 0) return;
+      const form = input.closest("form");
+      if (form) form.submit();
+    });
+
     function updateApprovalKpis(counts) {
       if (!counts) return;
       const values = document.querySelectorAll(".approvals-kpis .library-kpi-card strong");
