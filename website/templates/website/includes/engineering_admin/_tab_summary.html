@@ -292,7 +292,10 @@
                             <span>view details</span>
                         </a>
                         {% else %}
-                        <span class="library-row-action">no RCA yet</span>
+                        <a class="library-row-action" href="{{ library_form_href }}&subsegment={{ row.defect.subsegment_id }}&defect={{ row.defect.id }}">
+                            <img src="{% static 'website/styleguide/icons/iconoir_eye.svg' %}" alt="" role="presentation">
+                            <span>view details</span>
+                        </a>
                         {% endif %}
                     </td>
                 </tr>
@@ -336,7 +339,10 @@
                             <span>view details</span>
                         </a>
                         {% else %}
-                        <span class="library-row-action">no RCA yet</span>
+                        <a class="library-row-action" href="{{ library_form_href }}&subsegment={{ row.defect.subsegment_id }}&defect={{ row.defect.id }}">
+                            <img src="{% static 'website/styleguide/icons/iconoir_eye.svg' %}" alt="" role="presentation">
+                            <span>view details</span>
+                        </a>
                         {% endif %}
                     </td>
                 </tr>
