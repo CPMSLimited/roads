@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="{% static 'website/css/style.css' %}">
 </head>
 <body class="{% block body_class %}{% endblock %}">
+<div class="csrf-token-anchor" hidden>{% csrf_token %}</div>
 <header class="top-nav">
     <a href="{% url 'landing' %}" class="brand-mark" aria-label="FERMA home">
         <img src="{% static 'website/img/ferma_logo.png' %}" alt="FERMA logo" class="brand-mark-logo">
