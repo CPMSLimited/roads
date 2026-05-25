@@ -4,29 +4,42 @@
 {% block content %}
 <section class="landing-hero" style="--hero-image:url('{% static 'website/img/hero-road.jpg' %}');">
     <div class="hero-copy">
-        <h1>FERMA Preventive Road Maintenance Systems.</h1>
+        <h1>
+            <img src="{% static 'website/img/landing_header_text.svg' %}" alt="FERMA Preventive Road Maintenance Systems" class="hero-header-text">
+        </h1>
+        <p>Data-Driven Solutions for Safer Nigerian Roads</p>
+        <a href="{% url 'road_inventory' %}" class="hero-dashboard-link" aria-label="Launch dashboard">
+            <img src="{% static 'website/img/launch_dashboard_btn.svg' %}" alt="Launch dashboard">
+        </a>
     </div>
 </section>
 
 <section class="landing-section assets-block">
-    <h2>Manage road assets.</h2>
-    <p class="section-subtitle">Our platform prioritizes road efficiency and timely monitoring.</p>
-    <div class="feature-grid">
-        <article class="feature-card">
-            <div class="feature-media" aria-hidden="true"></div>
-            <h3><span>Comprehensive Road Inventory</span><em>&rarr;</em></h3>
-            <p>Access detailed data on road conditions, surface quality, and infrastructure.</p>
-        </article>
-        <article class="feature-card">
-            <div class="feature-media" aria-hidden="true"></div>
-            <h3><span>Real-Time Road Condition Reports</span><em>&rarr;</em></h3>
-            <p>Monitor travel safety and accessibility with up-to-date condition assessments.</p>
-        </article>
-        <article class="feature-card">
-            <div class="feature-media" aria-hidden="true"></div>
-            <h3><span>Predictive Maintenance Planning</span><em>&rarr;</em></h3>
-            <p>Prioritize repairs using analytics to maximize budget efficiency and road lifespan.</p>
-        </article>
+    <div class="how-carousel" data-how-carousel>
+        <div class="how-carousel-viewport">
+            <div class="how-carousel-track">
+                <div class="how-carousel-slide">
+                    <img src="{% static 'website/img/how_it_works_1.svg' %}" alt="How it works step 1">
+                </div>
+                <div class="how-carousel-slide">
+                    <img src="{% static 'website/img/how_it_works_2.svg' %}" alt="How it works step 2">
+                </div>
+                <div class="how-carousel-slide">
+                    <img src="{% static 'website/img/how_it_works_3.svg' %}" alt="How it works step 3">
+                </div>
+                <div class="how-carousel-slide">
+                    <img src="{% static 'website/img/how_it_works_4.svg' %}" alt="How it works step 4">
+                </div>
+            </div>
+        </div>
+        <button type="button" class="how-carousel-control how-carousel-prev" aria-label="Previous slide">&larr;</button>
+        <button type="button" class="how-carousel-control how-carousel-next" aria-label="Next slide">&rarr;</button>
+        <div class="how-carousel-dots" aria-label="Carousel slides">
+            <button type="button" class="is-active" aria-label="Show slide 1" aria-current="true"></button>
+            <button type="button" aria-label="Show slide 2"></button>
+            <button type="button" aria-label="Show slide 3"></button>
+            <button type="button" aria-label="Show slide 4"></button>
+        </div>
     </div>
 </section>
 
@@ -80,4 +93,75 @@
         <span>Whatsapp: 08181994447</span>
     </div>
 </footer>
+<script>
+  (function () {
+    const carousel = document.querySelector("[data-how-carousel]");
+    if (!carousel) return;
+
+    const track = carousel.querySelector(".how-carousel-track");
+    const slides = Array.from(carousel.querySelectorAll(".how-carousel-slide"));
+    const dots = Array.from(carousel.querySelectorAll(".how-carousel-dots button"));
+    const previousButton = carousel.querySelector(".how-carousel-prev");
+    const nextButton = carousel.querySelector(".how-carousel-next");
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let currentIndex = 0;
+    let timerId = null;
+
+    function setSlide(index) {
+      currentIndex = (index + slides.length) % slides.length;
+      track.style.transform = `translateX(-${currentIndex * 100}%)`;
+      dots.forEach((dot, dotIndex) => {
+        const isActive = dotIndex === currentIndex;
+        dot.classList.toggle("is-active", isActive);
+        dot.setAttribute("aria-current", isActive ? "true" : "false");
+      });
+    }
+
+    function stopAutoSlide() {
+      if (timerId) {
+        window.clearInterval(timerId);
+        timerId = null;
+      }
+    }
+
+    function startAutoSlide() {
+      stopAutoSlide();
+      timerId = window.setInterval(function () {
+        if (!carousel.isConnected) {
+          stopAutoSlide();
+          return;
+        }
+        setSlide(currentIndex + 1);
+      }, 5000);
+    }
+
+    previousButton.addEventListener("click", function () {
+      setSlide(currentIndex - 1);
+      startAutoSlide();
+    });
+
+    nextButton.addEventListener("click", function () {
+      setSlide(currentIndex + 1);
+      startAutoSlide();
+    });
+
+    dots.forEach((dot, index) => {
+      dot.addEventListener("click", function () {
+        setSlide(index);
+        startAutoSlide();
+      });
+    });
+
+    carousel.addEventListener("mouseenter", stopAutoSlide);
+    carousel.addEventListener("mouseleave", startAutoSlide);
+    carousel.addEventListener("focusin", stopAutoSlide);
+    carousel.addEventListener("focusout", startAutoSlide);
+
+    if (reduceMotion) {
+      track.classList.add("reduce-motion");
+    }
+    setSlide(0);
+    startAutoSlide();
+  })();
+</script>
 {% endblock %}

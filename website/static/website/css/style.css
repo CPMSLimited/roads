@@ -1487,7 +1487,6 @@ body.modal-open {
 }
 
 .hero-copy {
-  max-width: 760px;
   text-align: center;
   position: relative;
   z-index: 1;
@@ -1502,20 +1501,31 @@ body.modal-open {
   color: #4a5a56;
 }
 
-.hero-copy h1 {
-  margin: 22px 0 12px;
-  font-size: clamp(2rem, 4.1vw, 3.35rem);
-  line-height: 1.12;
-  letter-spacing: -0.03em;
+.hero-header-text {
+  display: block;
+  width: min(100%, 640px);
+  height: auto;
+  margin: 0 auto;
 }
-
 
 .hero-copy p {
   margin: 0 auto 24px;
   max-width: 620px;
-  font-size: 0.92rem;
+  font-size: 1.3rem;
   color: #5d6865;
   line-height: 1.55;
+}
+
+.hero-dashboard-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero-dashboard-link img {
+  display: block;
+  max-width: min(100%, 360px);
+  height: auto;
 }
 
 .landing-body .hero-copy .btn-solid {
@@ -1540,20 +1550,21 @@ body.modal-open {
 .landing-section {
   max-width: 1220px;
   margin: 0 auto;
-  padding: 72px 20px;
+  padding: 0 20px 72px;
 }
 
-.assets-block {
+.landing-section.assets-block {
   background: #e8edeb;
   max-width: none;
-  padding-left: max(20px, calc((100vw - 1220px) / 2 + 20px));
-  padding-right: max(20px, calc((100vw - 1220px) / 2 + 20px));
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .assets-block h2,
 .offer-text h2 {
-  font-size: 2.5rem;
-  letter-spacing: -0.03em;
+  font-size: 2rem;
+  letter-spacing: 0;
+  color: #506560;
 }
 
 .assets-block h2 {
@@ -1566,6 +1577,102 @@ body.modal-open {
   text-align: center;
   color: #68736f;
   font-size: 0.86rem;
+}
+
+.how-carousel {
+  position: relative;
+  width: 100%;
+  margin: 0;
+}
+
+.how-carousel-viewport {
+  overflow: hidden;
+  border-radius: 0;
+  background: #f7f9f8;
+  border-top: 1px solid #dce5e1;
+  border-bottom: 1px solid #dce5e1;
+}
+
+.how-carousel-track {
+  display: flex;
+  transition: transform 560ms ease;
+  will-change: transform;
+}
+
+.how-carousel-track.reduce-motion {
+  transition: none;
+}
+
+.how-carousel-slide {
+  flex: 0 0 100%;
+  display: grid;
+  place-items: center;
+}
+
+.how-carousel-slide img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.how-carousel-control {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 42px;
+  height: 42px;
+  border: 1px solid #d6dfdb;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  color: #506560;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  box-shadow: 0 10px 24px rgba(24, 40, 34, 0.12);
+}
+
+.how-carousel-control:hover,
+.how-carousel-control:focus-visible {
+  background: #ffffff;
+  border-color: #506560;
+}
+
+.how-carousel-prev {
+  left: 14px;
+}
+
+.how-carousel-next {
+  right: 14px;
+}
+
+.how-carousel-dots {
+  margin-top: 14px;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.how-carousel-dots button {
+  width: 9px;
+  height: 9px;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: #a7b5b0;
+  cursor: pointer;
+}
+
+.how-carousel-dots button.is-active {
+  background: #506560;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .how-carousel-track {
+    transition: none;
+  }
 }
 
 .feature-grid {
@@ -3266,6 +3373,16 @@ body.modal-open {
 
   .feature-grid {
     grid-template-columns: 1fr;
+  }
+
+  .how-carousel-slide {
+    height: 320px;
+    padding: 10px;
+  }
+
+  .how-carousel-control {
+    width: 36px;
+    height: 36px;
   }
 
   .kpi-grid-four,
