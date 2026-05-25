@@ -1626,7 +1626,7 @@ body.modal-open {
 
 .offer-block {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 672px);
   gap: 56px;
   align-items: center;
 }
@@ -1673,9 +1673,10 @@ body.modal-open {
 }
 
 .offer-image {
-  min-height: 560px;
+  height: 540px;
+  max-height: 540px;
   border-radius: 14px;
-  background: url("../img/what-we-offer-right.png") center / cover no-repeat;
+  background: url("../img/road_construction.webp") center / cover no-repeat;
 }
 
 .landing-cta {
